@@ -38,6 +38,29 @@ from src.core.constants import (
 )
 from src.core.interfaces import OOFResult
 
+
+def compute_vote_agreement(votes: np.ndarray, missing: int | None = None) -> np.ndarray:
+    """
+    Fraction of models agreeing with each sample's majority vote.
+
+    Vectorized via one-hot vote counts: ``votes`` is (n_samples, n_models)
+    of class values; entries equal to ``missing`` are ignored. Rows with no
+    valid vote get NaN.
+
+    Returns:
+        Array of shape (n_samples, 1), float32.
+    """
+    votes = np.asarray(votes)
+    valid = np.ones(votes.shape, dtype=bool) if missing is None else votes != missing
+    classes = np.unique(votes[valid])
+    counts = (votes[:, :, None] == classes[None, None, :]) & valid[:, :, None]
+    n_valid = valid.sum(axis=1)
+    top = counts.sum(axis=1).max(axis=1, initial=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        agreement = np.where(n_valid > 0, top / n_valid, np.nan)
+    return agreement.astype(np.float32).reshape(-1, 1)
+
+
 # =============================================================================
 # ALIGNED OOF RESULT
 # =============================================================================
@@ -124,21 +147,7 @@ class AlignedOOFResult:
         Returns:
             Array of shape (n_common, 1) with agreement ratios.
         """
-        agreement = np.zeros((self.n_common, 1), dtype=np.float32)
-
-        for i in range(self.n_common):
-            preds = self.predictions[i]
-            # Filter out missing predictions
-            valid = preds[preds != self.MISSING_PREDICTION]
-
-            if len(valid) > 0:
-                unique, counts = np.unique(valid, return_counts=True)
-                agreement[i] = counts.max() / len(valid)
-            else:
-                # No valid predictions - set to NaN
-                agreement[i] = np.nan
-
-        return agreement
+        return compute_vote_agreement(self.predictions, missing=self.MISSING_PREDICTION)
 
     def get_feature_names(self) -> list[str]:
         """
@@ -601,6 +610,7 @@ __all__ = [
     "AlignedOOFResult",
     "OOFAligner",
     # Convenience functions
+    "compute_vote_agreement",
     "align_oof_predictions",
     "compute_coverage_stats",
     "validate_oof_results",

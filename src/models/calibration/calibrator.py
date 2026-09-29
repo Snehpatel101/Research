@@ -27,6 +27,7 @@ from src.models.calibration.metrics import (
     compute_ece,
     compute_reliability_bins,
 )
+from src.models.common.label_mapping import map_labels_to_classes
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,9 @@ class CalibrationConfig:
     """Configuration for probability calibration."""
 
     method: Literal["isotonic", "sigmoid", "auto"] = "auto"
-    min_samples_per_class: int = 100  # Minimum samples for isotonic
+    # "auto" uses isotonic only when every class has at least this many
+    # samples; isotonic regression overfits (step functions) below ~1000.
+    min_samples_per_class: int = 1000
     clip_probabilities: bool = True  # Clip to [epsilon, 1-epsilon]
     epsilon: float = 1e-7
 
@@ -129,11 +132,14 @@ class ProbabilityCalibrator:
         leakage. Do not fit on the same data used for model training.
 
         Args:
-            y_true: True labels, shape (n_samples,)
+            y_true: Trading labels, shape (n_samples,): {-1,0,1} (3-class)
+                or {0,1} (binary). The class count is probabilities.shape[1].
             probabilities: Uncalibrated probabilities, shape (n_samples, n_classes)
 
         Returns:
-            CalibrationMetrics with before/after quality scores
+            CalibrationMetrics with before/after quality scores. The "after"
+            values are IN-SAMPLE (same rows the calibrator was fit on); use
+            estimate_holdout_improvement() for an out-of-sample estimate.
 
         Raises:
             ValueError: If input shapes are invalid
@@ -152,8 +158,8 @@ class ProbabilityCalibrator:
         n_samples, n_classes = probabilities.shape
         self._n_classes = n_classes
 
-        # Normalize labels to 0-indexed (handle -1,0,1 format)
-        y_normalized = self._normalize_labels(y_true, n_classes)
+        # Trading labels -> class indices ({-1,0,1} -> {0,1,2}; binary identity)
+        y_normalized = map_labels_to_classes(y_true, n_classes)
 
         # Compute pre-calibration metrics
         brier_before = compute_brier_score(y_true, probabilities)
@@ -330,37 +336,14 @@ class ProbabilityCalibrator:
         logger.debug(f"Loaded calibrator from {path}")
         return calibrator
 
-    def _normalize_labels(self, y_true: np.ndarray, n_classes: int) -> np.ndarray:
-        """
-        Normalize labels to 0-indexed format.
-
-        Handles labels in {-1, 0, 1} format (trading signals) by mapping to {0, 1, 2}.
-
-        Args:
-            y_true: True class labels (may be -1, 0, 1 or 0, 1, 2)
-            n_classes: Number of classes
-
-        Returns:
-            Labels normalized to {0, 1, ..., n_classes-1}
-        """
-        y_int = y_true.astype(int)
-
-        # Check if labels contain negative values (trading signal format)
-        if y_int.min() < 0:
-            # Map -1 -> 0, 0 -> 1, 1 -> 2
-            y_int = y_int + 1
-
-        return y_int
-
     def _select_method(self, y_true: np.ndarray, n_classes: int) -> str:
         """Select calibration method based on config and data."""
         if self.config.method != "auto":
             return self.config.method
 
-        # Check minimum samples per class for isotonic
-        # y_true should already be normalized at this point
-        unique_classes, class_counts = np.unique(y_true.astype(int), return_counts=True)
-        min_class_count = class_counts.min() if len(class_counts) > 0 else 0
+        # Isotonic needs enough samples in EVERY class (absent classes count 0)
+        class_counts = np.bincount(y_true.astype(int), minlength=n_classes)
+        min_class_count = int(class_counts.min()) if len(class_counts) > 0 else 0
 
         if min_class_count >= self.config.min_samples_per_class:
             return "isotonic"
@@ -372,8 +355,50 @@ class ProbabilityCalibrator:
             return "sigmoid"
 
 
+def estimate_holdout_improvement(
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    config: CalibrationConfig,
+    holdout_fraction: float = 0.3,
+) -> dict[str, float] | None:
+    """
+    Out-of-sample Brier/ECE change from calibration.
+
+    Fits a calibrator on the leading (1 - holdout_fraction) of the rows and
+    scores the trailing holdout rows before and after calibration, so the
+    reported gain is not measured on the rows the calibrator was fit on.
+
+    Returns:
+        Dict with brier_before/after, ece_before/after, and relative
+        improvements on the holdout, or None when either part is too small.
+    """
+    y_true = np.asarray(y_true).ravel()
+    probabilities = np.asarray(probabilities)
+    n_fit = int(len(y_true) * (1.0 - holdout_fraction))
+    if n_fit < 2 or len(y_true) - n_fit < 2:
+        return None
+    calibrator = ProbabilityCalibrator(config)
+    calibrator.fit(y_true[:n_fit], probabilities[:n_fit])
+    y_hold, p_hold = y_true[n_fit:], probabilities[n_fit:]
+    calibrated = calibrator.calibrate(p_hold)
+    brier_before = compute_brier_score(y_hold, p_hold)
+    brier_after = compute_brier_score(y_hold, calibrated)
+    ece_before = compute_ece(y_hold, p_hold)
+    ece_after = compute_ece(y_hold, calibrated)
+    return {
+        "brier_before": brier_before,
+        "brier_after": brier_after,
+        "ece_before": ece_before,
+        "ece_after": ece_after,
+        "brier_improvement": ((brier_before - brier_after) / brier_before if brier_before else 0.0),
+        "ece_improvement": (ece_before - ece_after) / ece_before if ece_before else 0.0,
+        "n_holdout": float(len(y_hold)),
+    }
+
+
 __all__ = [
     "CalibrationConfig",
     "CalibrationMetrics",
     "ProbabilityCalibrator",
+    "estimate_holdout_improvement",
 ]

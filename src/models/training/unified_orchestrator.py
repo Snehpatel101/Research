@@ -101,6 +101,8 @@ class ModelTrainingResult:
     #   regime: regime_trainers, detector_config, default_regime
     #   meta_labeling: primary_model, meta_model, meta_model_name, threshold
     mode_artifacts: dict[str, Any] = field(default_factory=dict)
+    # Non-metric context (ensemble: base_model_holdout_metrics)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -546,6 +548,7 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
                 metrics=ensemble_metrics,
                 trainer=result.meta_learner,
                 training_time_seconds=result.training_time_seconds,
+                metadata={"base_model_holdout_metrics": result.base_model_holdout_metrics},
             )
 
         return result.aligned_oof, result.stacking_dataset, ensemble_result

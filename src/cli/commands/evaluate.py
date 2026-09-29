@@ -269,6 +269,7 @@ def _run_walk_forward_for_model(
     """Run walk-forward evaluation for a single model."""
     from src.models.base import PredictionResult
     from src.models.registry import ModelRegistry
+    from src.validation.cv.early_stopping_split import carve_early_stopping_split
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
     from src.validation.cv.walk_forward import (
         WalkForwardEvaluator,
@@ -306,17 +307,26 @@ def _run_walk_forward_for_model(
 
         logger.debug(f"  Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}")
 
+        # Early stopping selects on a purged tail of the window's train rows,
+        # never on the test window being evaluated
+        es_split = carve_early_stopping_split(train_idx, config.gap_bars)
+        train_idx, es_idx = es_split.fit_idx, es_split.es_idx
+
         # Extract window data
         X_train_raw = X.iloc[train_idx]
         X_test_raw = X.iloc[test_idx]
         y_train = y.iloc[train_idx]
+        y_es = y.iloc[es_idx]
         y_test = y.iloc[test_idx]
 
-        # Fold-aware scaling
+        # Fold-aware scaling (fit on the fit rows only)
         scaler = FoldAwareScaler(method=scaling_method)
-        scaling_result = scaler.fit_transform_fold(X_train_raw.values, X_test_raw.values)
+        scaling_result = scaler.fit_transform_fold(
+            X_train_raw.values, np.vstack([X.iloc[es_idx].values, X_test_raw.values])
+        )
         X_train_scaled = scaling_result.X_train_scaled
-        X_test_scaled = scaling_result.X_val_scaled
+        X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
+        X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
         # Handle sample weights
         w_train = None
@@ -328,8 +338,8 @@ def _run_walk_forward_for_model(
         model.fit(
             X_train=X_train_scaled,
             y_train=y_train.values,
-            X_val=X_test_scaled,
-            y_val=y_test.values,
+            X_val=X_es_scaled,
+            y_val=y_es.values,
             sample_weights=w_train,
         )
 
@@ -586,6 +596,7 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
     from src.models.base import PredictionResult
     from src.models.registry import ModelRegistry
     from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVPathResult, CPCVResult
+    from src.validation.cv.early_stopping_split import carve_early_stopping_split
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 
     logger = logging.getLogger(__name__)
@@ -595,6 +606,8 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
 
     cpcv = CombinatorialPurgedCV(cpcv_config)
     path_results: list = []
+    # CPCV purges a fraction of the data; use the same gap for early stopping
+    purge_bars = int(len(X) * cpcv_config.purge_pct)
 
     # Get scaling method for model
     scaling_method = get_scaling_method_for_model(model_name)
@@ -604,6 +617,11 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
     for train_idx, test_idx, path_id in cpcv.split(X, y, label_end_times=label_end_times):
         logger.debug(f"  Path {path_id}: train={len(train_idx)}, test={len(test_idx)}")
 
+        # Early stopping selects on a purged tail of the path's train rows,
+        # never on the test groups being evaluated
+        es_split = carve_early_stopping_split(train_idx, purge_bars)
+        train_idx, es_idx = es_split.fit_idx, es_split.es_idx
+
         # Extract path data
         X_train_raw = X.iloc[train_idx]
         X_test_raw = X.iloc[test_idx]
@@ -611,22 +629,25 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
         y_test = y.iloc[test_idx]
         w_train = weights.iloc[train_idx].values
 
-        # Fold-aware scaling
+        # Fold-aware scaling (fit on the fit rows only)
         scaler = FoldAwareScaler(method=scaling_method)
-        scaling_result = scaler.fit_transform_fold(X_train_raw.values, X_test_raw.values)
+        scaling_result = scaler.fit_transform_fold(
+            X_train_raw.values, np.vstack([X.iloc[es_idx].values, X_test_raw.values])
+        )
+        X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
         # Create and train model
         model = ModelRegistry.create(model_name)
         model.fit(
             X_train=scaling_result.X_train_scaled,
             y_train=y_train.values,
-            X_val=scaling_result.X_val_scaled,
-            y_val=y_test.values,
+            X_val=scaling_result.X_val_scaled[: len(es_idx)],
+            y_val=y.iloc[es_idx].values,
             sample_weights=w_train,
         )
 
         # Generate predictions
-        prediction_output: PredictionResult = model.predict(scaling_result.X_val_scaled)
+        prediction_output: PredictionResult = model.predict(X_test_scaled)
 
         # Compute metrics
         accuracy = float(accuracy_score(y_test.values, prediction_output.class_predictions))

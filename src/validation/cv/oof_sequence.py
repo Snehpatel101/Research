@@ -16,8 +16,9 @@ import pandas as pd  # type: ignore[import-untyped]
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 
+from .early_stopping_split import carve_early_stopping_split
 from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from .oof_core import OOFPrediction, _get_prob_column_names
+from .oof_core import OOFPrediction, _get_prob_column_names, held_out_fold_metrics
 from .purged_kfold import PurgedKFold
 from .sequence_cv import SequenceCVBuilder
 
@@ -145,8 +146,13 @@ class SequenceOOFGenerator:
         for fold_idx, (train_idx, val_idx) in enumerate(
             self.cv.split(X, y, label_end_times=label_end_times)
         ):
+            # Early stopping selects on a purged tail of the TRAIN rows —
+            # never on the held-out fold these predictions are made for.
+            es_split = carve_early_stopping_split(train_idx, self.cv.config.purge_bars)
+            fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
+
             # -----------------------------------------------------------------
-            # STEP 1: Scale raw 2D data at fold level (fit on train rows only)
+            # STEP 1: Scale raw 2D data at fold level (fit on fit rows only)
             # -----------------------------------------------------------------
             # This avoids building a giant 3D array, flattening, scaling, and
             # reshaping.  Instead we scale the compact 2D data ONCE, then build
@@ -155,7 +161,7 @@ class SequenceOOFGenerator:
             # Restore raw features from backup (in-place, no new allocation)
             np.copyto(seq_builder._X, raw_X_backup)
             raw_X = seq_builder._X  # (n_samples, n_features)
-            X_train_raw = raw_X[train_idx]
+            X_train_raw = raw_X[fit_idx]
 
             # For transformation we scale ALL rows so that lookback windows
             # that reach into data outside the fold are also correctly scaled.
@@ -167,63 +173,51 @@ class SequenceOOFGenerator:
             scaled_builder = seq_builder.with_scaled_data(scaling_result.X_val_scaled)
 
             # -----------------------------------------------------------------
-            # STEP 2: Build train sequences (all-at-once — needed for model.fit)
+            # STEP 2: Build fit + early-stopping sequences (needed for model.fit)
             # -----------------------------------------------------------------
-            train_result = scaled_builder.build_fold_sequences(
-                train_idx, allow_lookback_outside=True
-            )
+            train_result = scaled_builder.build_fold_sequences(fit_idx, allow_lookback_outside=True)
 
             if train_result.n_sequences == 0:
                 logger.warning(
                     f"  Fold {fold_idx + 1}: Skipping - no train sequences "
-                    f"(from {len(train_idx)} samples)"
+                    f"(from {len(fit_idx)} samples)"
                 )
                 continue
 
-            # -----------------------------------------------------------------
-            # STEP 3: Build a small validation sample for model.fit's val_*
-            # arguments (needed for early stopping / metric logging).
-            # We take the first chunk only; this avoids materialising every
-            # validation sequence just to pass to .fit().
-            # -----------------------------------------------------------------
-            first_val_chunk = next(
-                scaled_builder.build_fold_sequences_chunked(
-                    val_idx,
-                    chunk_size=val_chunk_size,
-                    allow_lookback_outside=True,
-                ),
-                None,
-            )
-
-            if first_val_chunk is None or first_val_chunk.n_sequences == 0:
+            es_result = scaled_builder.build_fold_sequences(es_idx, allow_lookback_outside=True)
+            if es_result.n_sequences == 0:
+                # Boundaries swallowed the tail: fall back to a fixed-length
+                # fit validated on the fit sequences themselves.
                 logger.warning(
-                    f"  Fold {fold_idx + 1}: Skipping - no val sequences "
-                    f"(from {len(val_idx)} samples)"
+                    f"  Fold {fold_idx + 1}: no early-stopping sequences from "
+                    f"{len(es_idx)} tail rows; fitting fixed-length"
                 )
-                continue
+                es_result = train_result
 
             logger.debug(
-                f"  Fold {fold_idx + 1}: train_seq={train_result.n_sequences} "
-                f"(from {len(train_idx)}), val_idx_count={len(val_idx)}"
+                f"  Fold {fold_idx + 1}: fit_seq={train_result.n_sequences}, "
+                f"early_stop_seq={es_result.n_sequences}, held_out_rows={len(val_idx)}"
             )
 
             # -----------------------------------------------------------------
-            # STEP 4: Train the model
+            # STEP 3: Train the model
             # -----------------------------------------------------------------
             model = ModelRegistry.create(model_name, config=config)
 
-            training_metrics = model.fit(
+            model.fit(
                 X_train=train_result.X_sequences,
                 y_train=train_result.y,
-                X_val=first_val_chunk.X_sequences,
-                y_val=first_val_chunk.y,
+                X_val=es_result.X_sequences,
+                y_val=es_result.y,
                 sample_weights=train_result.weights,
             )
 
             # -----------------------------------------------------------------
-            # STEP 5: Predict on validation sequences IN CHUNKS
+            # STEP 4: Predict the untouched held-out fold IN CHUNKS
             # -----------------------------------------------------------------
             val_sequences_total = 0
+            fold_y: list[np.ndarray] = []
+            fold_pred: list[np.ndarray] = []
 
             for chunk_idx, val_chunk in enumerate(
                 scaled_builder.build_fold_sequences_chunked(
@@ -238,11 +232,13 @@ class SequenceOOFGenerator:
                 prediction_output: PredictionResult = model.predict(val_chunk.X_sequences)
 
                 # Map predictions back to original indices
-                for seq_idx, original_idx in enumerate(val_chunk.target_indices):
-                    oof_probs[original_idx] = prediction_output.class_probabilities[seq_idx]
-                    oof_preds[original_idx] = prediction_output.class_predictions[seq_idx]
-                    oof_confidence[original_idx] = prediction_output.confidence[seq_idx]
-                    oof_fold_ids[original_idx] = fold_idx
+                targets = np.asarray(val_chunk.target_indices)
+                oof_probs[targets] = prediction_output.class_probabilities
+                oof_preds[targets] = prediction_output.class_predictions
+                oof_confidence[targets] = prediction_output.confidence
+                oof_fold_ids[targets] = fold_idx
+                fold_y.append(np.asarray(val_chunk.y))
+                fold_pred.append(np.asarray(prediction_output.class_predictions))
 
                 val_sequences_total += val_chunk.n_sequences
                 logger.debug(
@@ -260,18 +256,22 @@ class SequenceOOFGenerator:
             fold_info.append(
                 {
                     "fold": fold_idx,
-                    "train_size": len(train_idx),
+                    "train_size": len(fit_idx),
+                    "early_stopping_size": len(es_idx),
+                    "early_stopping_held_out": es_split.held_out,
                     "val_size": len(val_idx),
                     "train_sequences": train_result.n_sequences,
                     "val_sequences": val_sequences_total,
-                    "val_accuracy": training_metrics.val_accuracy,
-                    "val_f1": training_metrics.val_f1,
+                    **held_out_fold_metrics(
+                        np.concatenate(fold_y) if fold_y else np.empty(0),
+                        np.concatenate(fold_pred) if fold_pred else np.empty(0),
+                    ),
                 }
             )
 
             # Free memory between folds to prevent OOM on large datasets
             # train_result holds 3D sequences (~18 GB per fold for 1.6M rows)
-            del model, train_result, first_val_chunk
+            del model, train_result, es_result
             del scaling_result, scaled_builder, X_train_raw
             from src.models.device import release_gpu_memory
 

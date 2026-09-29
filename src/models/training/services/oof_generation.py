@@ -13,7 +13,12 @@ from src.data.adapters import PreparedData
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
-from src.validation.cv.oof_core import _get_prob_column_names, reindex_oof_to_rows
+from src.validation.cv.early_stopping_split import carve_early_stopping_split
+from src.validation.cv.oof_core import (
+    _get_prob_column_names,
+    held_out_fold_metrics,
+    reindex_oof_to_rows,
+)
 from src.validation.cv.oof_validation import OOFValidator
 
 logger = logging.getLogger(__name__)
@@ -29,7 +34,6 @@ class OOFRequest:
     n_splits: int = 5
     purge_bars: int = 10
     embargo_bars: int = 5
-    fold_models: list[Any] | None = None  # Pre-trained fold models for 4D caching
     model_config: dict[str, Any] | None = None  # Model config (seq_length, hidden_size, etc.)
     n_classes: int = 3  # Number of output classes (2 for binary, 3 for short/neutral/long)
 
@@ -264,55 +268,44 @@ class OOFGenerationService:
             logger.debug(f"  Fold {fold_idx + 1}: train={len(train_idx)}, val={len(val_idx)}")
             all_fold_indices.append((train_idx, val_idx))
 
-            # Slice 4D arrays directly by sample index
-            # Fancy indexing already returns a new array (copy); .copy() is redundant
-            X_train_fold = X_4d[train_idx]
+            # Early stopping selects on a purged tail of the TRAIN samples —
+            # never on the held-out fold these predictions are made for.
+            es_split = carve_early_stopping_split(train_idx, request.purge_bars)
+            fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
+
+            # Slice windowed arrays directly by sample index. Fancy indexing
+            # already returns new arrays, so .copy() is redundant and the
+            # in-place scaling below cannot touch prepared.X_train.
+            X_fit_fold = X_4d[fit_idx]
+            X_es_fold = X_4d[es_idx]
             X_val_fold = X_4d[val_idx]
-            y_train_fold = y[train_idx]
-            y_val_fold = y[val_idx]
 
-            # Per-fold scaling: reshape to 2D, scale in-place, reshape back
-            orig_train_shape = X_train_fold.shape
-            orig_val_shape = X_val_fold.shape
-            X_train_2d = X_train_fold.reshape(-1, orig_train_shape[-1])
-            X_val_2d = X_val_fold.reshape(-1, orig_val_shape[-1])
-
-            median = np.median(X_train_2d, axis=0).astype(np.float32)
-            q75 = np.percentile(X_train_2d, 75, axis=0).astype(np.float32)
-            q25 = np.percentile(X_train_2d, 25, axis=0).astype(np.float32)
+            # Per-fold robust scaling fit on the fit samples only
+            n_feat = X_fit_fold.shape[-1]
+            fit_2d = X_fit_fold.reshape(-1, n_feat)
+            median = np.median(fit_2d, axis=0).astype(np.float32)
+            q75 = np.percentile(fit_2d, 75, axis=0).astype(np.float32)
+            q25 = np.percentile(fit_2d, 25, axis=0).astype(np.float32)
             iqr = np.where((q75 - q25) > 1e-8, q75 - q25, np.float32(1.0))
+            for block in (X_fit_fold, X_es_fold, X_val_fold):
+                block -= median
+                block /= iqr
+            del fit_2d, median, q75, q25, iqr
 
-            X_train_2d -= median
-            X_train_2d /= iqr
-            X_val_2d -= median
-            X_val_2d /= iqr
-
-            X_train_fold = X_train_2d.reshape(orig_train_shape)
-            X_val_fold = X_val_2d.reshape(orig_val_shape)
-            del X_train_2d, X_val_2d, median, q75, q25, iqr
-
-            # Handle sample weights
-            w_train = None
+            w_fit = None
             if prepared.train_weights is not None:
-                w_train = prepared.train_weights[train_idx]
+                w_fit = prepared.train_weights[fit_idx]
 
-            if request.fold_models and fold_idx < len(request.fold_models):
-                # Use pre-trained fold model (cached from training CV)
-                model = request.fold_models[fold_idx]
-                training_metrics = None
-                logger.debug(f"  Using cached fold model for fold {fold_idx + 1}")
-            else:
-                # Fallback: train from scratch (no cached models available)
-                model = ModelRegistry.create(model_name, config=self._model_config(request))
-                training_metrics = model.fit(
-                    X_train=X_train_fold,
-                    y_train=y_train_fold,
-                    X_val=X_val_fold,
-                    y_val=y_val_fold,
-                    sample_weights=w_train,
-                )
+            model = ModelRegistry.create(model_name, config=self._model_config(request))
+            model.fit(
+                X_train=X_fit_fold,
+                y_train=y[fit_idx],
+                X_val=X_es_fold,
+                y_val=y[es_idx],
+                sample_weights=w_fit,
+            )
 
-            # Generate predictions for validation fold
+            # Predict the untouched held-out fold
             prediction_output: PredictionResult = model.predict(X_val_fold)
 
             # Store OOF predictions at original indices
@@ -324,17 +317,16 @@ class OOFGenerationService:
             fold_info.append(
                 {
                     "fold": fold_idx,
-                    "train_size": len(train_idx),
+                    "train_size": len(fit_idx),
+                    "early_stopping_size": len(es_idx),
+                    "early_stopping_held_out": es_split.held_out,
                     "val_size": len(val_idx),
-                    "val_accuracy": training_metrics.val_accuracy if training_metrics else None,
-                    "val_f1": training_metrics.val_f1 if training_metrics else None,
+                    **held_out_fold_metrics(y[val_idx], prediction_output.class_predictions),
                 }
             )
 
             # Free fold model and data to prevent memory accumulation
-            if not (request.fold_models and fold_idx < len(request.fold_models)):
-                del model  # Only delete if we created it (not cached fold models)
-            del X_train_fold, X_val_fold, y_train_fold, y_val_fold, prediction_output
+            del model, X_fit_fold, X_es_fold, X_val_fold, prediction_output
             gc.collect()
 
         # Post-training fold leakage verification (C4 audit fix)

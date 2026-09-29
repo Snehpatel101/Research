@@ -10,7 +10,7 @@ used in stacking ensembles. It integrates with PipelineConfig for seamless
 configuration-driven creation.
 
 Supported Meta-Learners:
-- ridge_meta: L2-regularized linear meta-learner (fast, interpretable)
+- ridge_meta: L2-regularized logistic (ridge) meta-learner (fast, interpretable)
 - mlp_meta: 2-layer neural network (captures non-linear interactions)
 - xgboost_meta: XGBoost with optional calibration (strong for diverse bases)
 - calibrated_meta: Isotonic/Platt calibration wrapper (probability calibration)
@@ -234,7 +234,7 @@ class MetaLearnerFactory:
         )
 
         # Create different meta-learner than config default
-        ridge_meta = factory.create("ridge_meta", alpha=0.5)
+        ridge_meta = factory.create("ridge_meta", C=0.5)
     """
 
     def __init__(self, config: PipelineConfig | None = None) -> None:
@@ -346,9 +346,9 @@ class MetaLearnerFactory:
         """
         defaults = {
             "ridge_meta": {
-                "alpha": 1.0,
+                "C": 1.0,  # inverse L2 strength
                 "fit_intercept": True,
-                "class_weight": "balanced",
+                "class_weight": None,  # keep class priors in the probabilities
                 "scale_features": True,
             },
             "mlp_meta": {
@@ -356,8 +356,7 @@ class MetaLearnerFactory:
                 "alpha": 0.01,  # L2 regularization
                 "learning_rate_init": 0.001,
                 "max_iter": 500,
-                "early_stopping": True,
-                "validation_fraction": 0.1,
+                "early_stopping": True,  # temporal, on X_val
                 "n_iter_no_change": 10,
                 "activation": "relu",
                 "solver": "adam",
@@ -374,6 +373,7 @@ class MetaLearnerFactory:
                 "reg_alpha": 0.1,
                 "reg_lambda": 1.0,
                 "early_stopping_rounds": 20,
+                "class_weight": None,  # "balanced" to reweight classes
             },
             "calibrated_meta": {
                 "base_estimator": "logistic",
@@ -420,8 +420,8 @@ class MetaLearnerFactory:
         # Descriptions for each meta-learner
         descriptions = {
             "ridge_meta": (
-                "L2-regularized linear meta-learner. "
-                "Fast training with closed-form solution. "
+                "L2-regularized logistic (ridge) meta-learner. "
+                "Multinomial logistic regression: outputs proper probabilities. "
                 "Interpretable weights show relative model contribution. "
                 "Best for well-calibrated base models."
             ),
@@ -453,8 +453,8 @@ class MetaLearnerFactory:
         # Default parameters for each meta-learner
         default_params = {
             "ridge_meta": {
-                "alpha": 1.0,
-                "class_weight": "balanced",
+                "C": 1.0,
+                "class_weight": None,
             },
             "mlp_meta": {
                 "hidden_layer_sizes": (64, 32),

@@ -18,6 +18,7 @@ from src.models.base import PredictionResult
 from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
 from src.models.registry import ModelRegistry
 
+from .early_stopping_split import carve_early_stopping_split
 from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from .purged_kfold import PurgedKFold
 
@@ -38,6 +39,20 @@ def _get_prob_column_names(model_name: str, n_classes: int) -> list[str]:
             f"{model_name}_prob_long",
         ]
     return [f"{model_name}_prob_{i}" for i in range(n_classes)]
+
+
+def held_out_fold_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    """Accuracy and macro-F1 of a fold model on its held-out fold."""
+    from sklearn.metrics import accuracy_score, f1_score
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    if len(y_true) == 0:
+        return {"val_accuracy": float("nan"), "val_f1": float("nan")}
+    return {
+        "val_accuracy": float(accuracy_score(y_true, y_pred)),
+        "val_f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+    }
 
 
 # =============================================================================
@@ -328,36 +343,37 @@ class CoreOOFGenerator:
         for fold_idx, (train_idx, val_idx) in enumerate(
             self.cv.split(X, y, label_end_times=label_end_times)
         ):
-            logger.debug(f"  Fold {fold_idx + 1}: train={len(train_idx)}, val={len(val_idx)}")
-
-            # Extract fold data (raw, unscaled)
-            X_train_raw, X_val_raw = X.iloc[train_idx], X.iloc[val_idx]
-            y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
-
-            # FOLD-AWARE SCALING: fit scaler on train-only, transform both
-            scaling_result = fold_scaler.fit_transform_fold(X_train_raw.values, X_val_raw.values)
-            X_train_scaled = scaling_result.X_train_scaled
-            X_val_scaled = scaling_result.X_val_scaled
-
-            # Handle sample weights
-            if sample_weights is not None:  # noqa: SIM108
-                w_train = sample_weights.iloc[train_idx].values
-            else:
-                w_train = None
-
-            # Create and train model
-            model = ModelRegistry.create(model_name, config=config)
-
-            # Use model's fit interface with scaled data
-            training_metrics = model.fit(
-                X_train=X_train_scaled,
-                y_train=y_train.values,
-                X_val=X_val_scaled,
-                y_val=y_val.values,
-                sample_weights=w_train,
+            # Early stopping selects on a purged tail of the TRAIN rows —
+            # never on the held-out fold these predictions are made for.
+            es_split = carve_early_stopping_split(train_idx, self.cv.config.purge_bars)
+            fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
+            logger.debug(
+                f"  Fold {fold_idx + 1}: fit={len(fit_idx)}, early_stop={len(es_idx)}, "
+                f"held_out={len(val_idx)}"
             )
 
-            # Generate predictions for validation fold (using scaled data)
+            # FOLD-AWARE SCALING: fit on the fit rows only, transform the
+            # early-stopping and held-out rows with the same statistics.
+            X_fit_raw = X.iloc[fit_idx].values
+            scaling_result = fold_scaler.fit_transform_fold(
+                X_fit_raw, np.vstack([X.iloc[es_idx].values, X.iloc[val_idx].values])
+            )
+            X_fit_scaled = scaling_result.X_train_scaled
+            X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
+            X_val_scaled = scaling_result.X_val_scaled[len(es_idx) :]
+
+            w_fit = sample_weights.iloc[fit_idx].values if sample_weights is not None else None
+
+            model = ModelRegistry.create(model_name, config=config)
+            model.fit(
+                X_train=X_fit_scaled,
+                y_train=y.iloc[fit_idx].values,
+                X_val=X_es_scaled,
+                y_val=y.iloc[es_idx].values,
+                sample_weights=w_fit,
+            )
+
+            # Predict the untouched held-out fold
             prediction_output: PredictionResult = model.predict(X_val_scaled)
 
             # Store OOF predictions
@@ -366,19 +382,21 @@ class CoreOOFGenerator:
             oof_confidence[val_idx] = prediction_output.confidence
             oof_fold_ids[val_idx] = fold_idx
 
-            # Track fold info
             fold_info.append(
                 {
                     "fold": fold_idx,
-                    "train_size": len(train_idx),
+                    "train_size": len(fit_idx),
+                    "early_stopping_size": len(es_idx),
+                    "early_stopping_held_out": es_split.held_out,
                     "val_size": len(val_idx),
-                    "val_accuracy": training_metrics.val_accuracy,
-                    "val_f1": training_metrics.val_f1,
+                    **held_out_fold_metrics(
+                        y.iloc[val_idx].values, prediction_output.class_predictions
+                    ),
                 }
             )
 
             # Free memory between folds
-            del model, X_train_scaled, X_val_scaled, X_train_raw, X_val_raw
+            del model, X_fit_scaled, X_es_scaled, X_val_scaled, X_fit_raw
             del scaling_result, prediction_output
             gc.collect()
 

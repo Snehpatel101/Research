@@ -296,7 +296,11 @@ class PipelineConfig:
     # "auto" selects isotonic for boosting, sigmoid for linear models
 
     calibration_min_samples: int = 100
-    # Minimum samples required per class for calibration
+    # Minimum validation samples required to fit a calibrator at all
+
+    calibration_isotonic_min_samples: int = 1000
+    # "auto" method: isotonic only when every class has at least this many
+    # validation samples, sigmoid (Platt) otherwise — isotonic overfits below
 
     # =========================================================================
     # BET SIZING CONFIGURATION (Phase 4G)

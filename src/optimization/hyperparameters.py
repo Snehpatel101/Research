@@ -306,10 +306,9 @@ HYPERPARAMETER_SPACES: dict[str, SearchSpaceType] = {
     # META-LEARNERS (4)
     # =========================================================================
     "ridge_meta": {
-        "alpha": ("log_float", 1e-4, 100.0),
+        "C": ("log_float", 1e-3, 100.0),
         "fit_intercept": ("categorical", [True, False]),
-        "normalize": ("categorical", [True, False]),
-        "solver": ("categorical", ["auto", "svd", "cholesky", "lsqr", "sparse_cg"]),
+        "class_weight": ("categorical", [None, "balanced"]),
     },
     "mlp_meta": {
         "hidden_layer_sizes": ("categorical", [(64,), (128,), (64, 32), (128, 64), (128, 64, 32)]),
@@ -319,7 +318,6 @@ HYPERPARAMETER_SPACES: dict[str, SearchSpaceType] = {
         "learning_rate_init": ("log_float", 1e-5, 1e-2),
         "batch_size": ("categorical", [32, 64, 128, 256]),
         "early_stopping": ("categorical", [True]),
-        "validation_fraction": ("float", 0.1, 0.2),
     },
     "xgboost_meta": {
         "n_estimators": ("int", 50, 300),

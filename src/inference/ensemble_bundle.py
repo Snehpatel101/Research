@@ -51,6 +51,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.data.adapters.alignment import compute_vote_agreement
+
 if TYPE_CHECKING:
     from src.core import PipelineConfig
     from src.core.interfaces import PredictionResult
@@ -767,51 +769,27 @@ class EnsembleBundle:
         """
         Stack base predictions into meta-learner input.
 
-        Uses OOFAligner for proper alignment of heterogeneous model predictions.
+        Every base model must cover the SAME rows in the same order.
+        Positional re-alignment of unequal-length outputs would silently
+        pair different bars, so callers align first (predict_from_raw
+        intersects base-model timestamps before stacking).
 
         Args:
             base_predictions: Dict mapping model_name -> probability array
 
         Returns:
             Stacked feature array ready for meta-learner
+
+        Raises:
+            ValueError: If base predictions have different lengths
         """
-        from src.core import OOFResult
-        from src.data.adapters import OOFAligner
-
-        # If predictions are already aligned (same length), simple stack
-        lengths = [arr.shape[0] for arr in base_predictions.values()]
-        if len(set(lengths)) == 1:
-            # All same length - simple concatenation
-            return self._simple_stack(base_predictions)
-
-        # Different lengths - need alignment via OOFAligner
-        oof_results: list[OOFResult] = []
-
-        for model_name, probs in base_predictions.items():
-            n_samples = probs.shape[0]
-            indices = np.arange(n_samples)
-
-            # Convert probabilities to class predictions
-            predictions = np.argmax(probs, axis=1) - 1  # 0,1,2 -> -1,0,1
-
-            oof_result = OOFResult(
-                predictions=predictions,
-                probabilities=probs,
-                indices=indices,
-                fold_ids=np.zeros(n_samples, dtype=int),
-                model_name=model_name,
-                coverage=1.0,
+        lengths = {name: int(arr.shape[0]) for name, arr in base_predictions.items()}
+        if len(set(lengths.values())) > 1:
+            raise ValueError(
+                f"Base predictions cover different numbers of rows {lengths}; align them "
+                "on timestamps before stacking (see EnsembleBundle.predict_from_raw)."
             )
-            oof_results.append(oof_result)
-
-        # Align predictions
-        aligner = OOFAligner(n_classes=self.alignment_config.n_classes)
-        aligned = aligner.align(
-            oof_results,
-            strategy=self.alignment_config.strategy,
-        )
-
-        return aligned.stacking_features
+        return self._simple_stack(base_predictions)
 
     def _simple_stack(
         self,
@@ -855,13 +833,8 @@ class EnsembleBundle:
         confidences = np.max(probs_reshaped, axis=2)  # (n_samples, n_models)
         mean_confidence = np.mean(confidences, axis=1, keepdims=True)
 
-        # Prediction agreement
-        predictions = np.argmax(probs_reshaped, axis=2)  # (n_samples, n_models)
-        agreement = np.zeros((n_samples, 1), dtype=np.float32)
-
-        for i in range(n_samples):
-            unique, counts = np.unique(predictions[i], return_counts=True)
-            agreement[i] = counts.max() / n_models
+        # Prediction agreement (same statistic as AlignedOOFResult at training)
+        agreement = compute_vote_agreement(np.argmax(probs_reshaped, axis=2))
 
         # Prediction entropy of averaged probabilities
         mean_probs = np.mean(probs_reshaped, axis=1)  # (n_samples, n_classes)
