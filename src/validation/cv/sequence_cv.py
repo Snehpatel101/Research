@@ -243,12 +243,6 @@ class SequenceCVBuilder:
         else:
             logger.debug(f"No significant time gaps detected (resolution: {median_diff})")
 
-    def _get_symbol_at(self, idx: int) -> int:
-        """Get symbol ID at given index (-1 if no symbol info)."""
-        if self._symbol_ids is None:
-            return -1
-        return int(self._symbol_ids[idx])
-
     def _sequence_crosses_boundary(self, start_idx: int, end_idx: int) -> bool:
         """Check if sequence [start_idx, end_idx] crosses a symbol boundary."""
         if self._symbol_boundaries is None or len(self._symbol_boundaries) == 0:
@@ -521,31 +515,6 @@ class SequenceCVBuilder:
                 target_indices=np.array([], dtype=np.int64),
                 n_dropped=n_dropped,
             )
-
-    def get_fold_coverage(
-        self,
-        fold_indices: np.ndarray,
-        allow_lookback_outside: bool = True,
-    ) -> float:
-        """
-        Calculate what fraction of fold samples can produce valid sequences.
-
-        Args:
-            fold_indices: Array of sample indices for this fold
-            allow_lookback_outside: Whether lookback can use outside samples
-
-        Returns:
-            Coverage ratio (0.0 to 1.0)
-        """
-        if len(fold_indices) == 0:
-            return 0.0
-
-        result = self.build_fold_sequences(
-            fold_indices,
-            allow_lookback_outside=allow_lookback_outside,
-        )
-
-        return result.n_sequences / len(fold_indices)
 
 
 def build_sequences_for_cv_fold(

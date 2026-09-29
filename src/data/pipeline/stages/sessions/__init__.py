@@ -1,11 +1,10 @@
 """
-Session Normalization System for Trading Sessions
+Session handling for trading sessions
 
 This package provides comprehensive session handling for CME futures trading data:
 - Session classification and filtering
 - CME holiday calendar integration
 - DST (Daylight Saving Time) handling
-- Session-specific volatility normalization
 
 Sessions:
 - New York: 14:30-21:00 UTC (09:30-16:00 ET)
@@ -27,17 +26,9 @@ Usage:
     # Add session features
     df = filter.add_session_features(df)
 
-    # Filter by session
-    df = filter.filter_by_session(df)
-
     # Filter holidays
     calendar = CMECalendar()
     df = calendar.filter_holidays(df)
-
-    # Normalize by session volatility
-    from stages.sessions import SessionNormalizer
-    normalizer = SessionNormalizer(config)
-    df = normalizer.fit_transform(df, feature_cols)
 
 Author: ML Pipeline
 Created: 2025-12-22
@@ -72,15 +63,6 @@ from .filter import (
     create_session_filter,
 )
 
-# Normalizer
-from .normalizer import (
-    NormalizationReport,
-    SessionNormalizer,
-    SessionVolatilityStats,
-    get_session_volatility_ratios,
-    normalize_by_session,
-)
-
 __all__ = [
     # Config
     "SessionName",
@@ -103,10 +85,4 @@ __all__ = [
     "CMECalendar",
     "DSTHandler",
     "get_calendar",
-    # Normalizer
-    "SessionVolatilityStats",
-    "NormalizationReport",
-    "SessionNormalizer",
-    "normalize_by_session",
-    "get_session_volatility_ratios",
 ]

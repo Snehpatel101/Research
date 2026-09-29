@@ -110,9 +110,6 @@ class CheckpointManager:
             ckpt_mgr.maybe_save_checkpoint(
                 model, optimizer, scheduler, epoch, metrics
             )
-
-        # Get best checkpoint path
-        best_path = ckpt_mgr.get_best_checkpoint()
     """
 
     def __init__(self, config: CheckpointConfig | None = None) -> None:
@@ -285,82 +282,6 @@ class CheckpointManager:
             )
         return None
 
-    def load_checkpoint(
-        self,
-        path: Path | str,
-        model: nn.Module,
-        optimizer: torch.optim.Optimizer | None = None,
-        scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
-        device: torch.device | str = "cpu",
-    ) -> dict[str, Any]:
-        """
-        Load a checkpoint.
-
-        Args:
-            path: Path to checkpoint file
-            model: Model to load state into
-            optimizer: Optimizer to load state into (optional)
-            scheduler: Scheduler to load state into (optional)
-            device: Device to load tensors to
-
-        Returns:
-            Dictionary with checkpoint metadata (epoch, metrics, etc.)
-        """
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {path}")
-
-        checkpoint = torch.load(
-            path, map_location=device, weights_only=False
-        )  # nosec: loads state_dicts + metadata dict from trusted internal checkpoints
-
-        # Load model state
-        model.load_state_dict(checkpoint["model_state_dict"])
-
-        # Load optimizer state if available
-        if optimizer is not None and "optimizer_state_dict" in checkpoint:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-
-        # Load scheduler state if available
-        if scheduler is not None and "scheduler_state_dict" in checkpoint:
-            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-
-        logger.info(
-            f"Loaded checkpoint from epoch {checkpoint['epoch']} "
-            f"(metrics: {checkpoint.get('metrics', {})})"
-        )
-
-        return {
-            "epoch": checkpoint["epoch"],
-            "metrics": checkpoint.get("metrics", {}),
-            "model_config": checkpoint.get("model_config", {}),
-            "extra_state": checkpoint.get("extra_state", {}),
-        }
-
-    def get_best_checkpoint(self) -> Path | None:
-        """
-        Get path to best checkpoint.
-
-        Returns:
-            Path to best checkpoint, or None if no checkpoints saved
-        """
-        best_path = self.config.checkpoint_dir / "best.pt"
-        if best_path.exists():
-            return best_path
-        return self._best_checkpoint_path
-
-    def get_latest_checkpoint(self) -> Path | None:
-        """
-        Get path to latest checkpoint.
-
-        Returns:
-            Path to latest checkpoint, or None if no checkpoints saved
-        """
-        if not self._checkpoints:
-            return None
-        latest = max(self._checkpoints, key=lambda c: c.epoch)
-        return Path(latest.checkpoint_path)
-
     def _prune_old_checkpoints(self) -> None:
         """Remove old checkpoints, keeping only the N best."""
         if len(self._checkpoints) <= self.config.keep_n_best:
@@ -391,19 +312,10 @@ class CheckpointManager:
 
         self._checkpoints = [c for c in self._checkpoints if c.checkpoint_path in to_keep]
 
-    def list_checkpoints(self) -> list[CheckpointMetadata]:
-        """List all available checkpoints."""
-        return self._checkpoints.copy()
-
     @property
     def best_metric(self) -> float | None:
         """Get the best metric value seen."""
         return self._best_metric
-
-    @property
-    def num_checkpoints(self) -> int:
-        """Get number of saved checkpoints."""
-        return len(self._checkpoints)
 
 
 __all__ = [

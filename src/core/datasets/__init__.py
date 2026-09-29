@@ -14,7 +14,6 @@ from src.core.datasets.sequences import (
     SequenceConfig,
     SequenceDataset,
     build_sequence_indices,
-    create_sequence_dataset,
     find_symbol_boundaries,
 )
 
@@ -22,6 +21,5 @@ __all__ = [
     "SequenceConfig",
     "SequenceDataset",
     "build_sequence_indices",
-    "create_sequence_dataset",
     "find_symbol_boundaries",
 ]

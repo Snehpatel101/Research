@@ -3,7 +3,6 @@ Fitness functions for GA optimization.
 
 Contains:
     - calculate_fitness: Main fitness function for label quality evaluation
-    - evaluate_individual: Evaluate a GA individual (parameter set)
 """
 
 import numpy as np
@@ -11,7 +10,6 @@ import numpy as np
 from src.data.pipeline.config import LABEL_BALANCE_CONSTRAINTS, TICK_VALUES, get_total_trade_cost
 
 # Import labeling function and config
-from src.data.pipeline.stages.labeling import triple_barrier_numba
 
 
 def calculate_fitness(
@@ -277,109 +275,3 @@ def calculate_fitness(
     )
 
     return float(fitness)
-
-
-def evaluate_individual(
-    individual: list[float],
-    close: np.ndarray,
-    high: np.ndarray,
-    low: np.ndarray,
-    open_prices: np.ndarray,
-    atr: np.ndarray,
-    horizon: int,
-    symbol: str = "MES",
-    regime: str = "low_vol",
-    include_slippage: bool = True,
-) -> tuple[float]:
-    """
-    Evaluate a GA individual (parameter set).
-
-    Parameters:
-    -----------
-    individual : [k_up, k_down, max_bars_multiplier]
-    close, high, low, open_prices, atr : price/indicator arrays
-    horizon : horizon value
-    symbol : 'MES' or 'MGC' for symbol-specific constraints
-    regime : str, optional
-        Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
-    include_slippage : bool, optional
-        Whether to include slippage in cost calculation (default: True)
-
-    Returns:
-    --------
-    (fitness,) : tuple with single fitness value (DEAP convention)
-    """
-    k_up, k_down, max_bars_mult = individual
-
-    # ==========================================================================
-    # SYMBOL-SPECIFIC ASYMMETRY CONSTRAINT
-    #
-    # CORRECTED (2025-12): Fixed asymmetry direction for MES
-    #
-    # MES (S&P 500 E-mini): Has ~7% annual equity drift (long bias).
-    #   - MES naturally drifts UP, making UPPER barrier easier to hit
-    #   - To counteract this drift, we WANT k_up > k_down
-    #   - This makes the upper barrier HARDER to hit, reducing long signals
-    #   - Target asymmetry: k_up ~1.5x k_down (e.g., k_up=1.5, k_down=1.0)
-    #
-    # MGC (Micro Gold): Mean-reverting, no directional drift.
-    #   - Symmetric barriers are appropriate (k_down ≈ k_up)
-    #   - Penalize any significant asymmetry
-    # ==========================================================================
-    avg_k = (k_up + k_down) / 2.0
-
-    if symbol == "MGC":
-        # MGC: Strict symmetry - penalize asymmetry > 10%
-        if abs(k_up - k_down) > avg_k * 0.10:
-            # Cap penalty at -5.0 to prevent extreme values
-            asymmetry_bonus = max(-5.0, -abs(k_up - k_down) * 5.0)
-        else:
-            asymmetry_bonus = 0.5  # Small reward for good symmetry
-    else:
-        # MES: REWARD k_up > k_down to counteract equity drift (CORRECTED)
-        # Upper barrier should be HARDER (larger k_up) to balance upward drift
-        if k_up > k_down:
-            # Correct configuration - reward the asymmetry
-            # Bonus scales with asymmetry magnitude (capped at reasonable levels)
-            asymmetry_ratio = k_up / k_down if k_down > 0 else 1.0
-            if 1.2 <= asymmetry_ratio <= 1.8:
-                # Ideal range: k_up is 20-80% larger than k_down
-                asymmetry_bonus = min(3.0, (k_up - k_down) * 2.0)
-            elif asymmetry_ratio > 1.8:
-                # Too extreme - still positive but reduced
-                asymmetry_bonus = min(1.5, (k_up - k_down) * 0.5)
-            else:
-                # Slight asymmetry (ratio < 1.2) - small reward
-                asymmetry_bonus = min(2.0, (k_up - k_down) * 1.0)
-        else:
-            # WRONG direction: k_down > k_up amplifies long bias
-            # This makes shorts harder when market already drifts up - penalize
-            # Cap penalty at -5.0 to prevent extreme values
-            asymmetry_bonus = max(-5.0, -(k_down - k_up) * 3.0)
-
-    # Decode max_bars
-    max_bars = int(horizon * max_bars_mult)
-    max_bars = max(horizon * 2, min(max_bars, horizon * 3))
-
-    labels, bars_to_hit, mae, mfe, _ = triple_barrier_numba(
-        close, high, low, atr, k_up, k_down, max_bars
-    )
-
-    atr_mean = np.mean(atr[atr > 0]) if np.any(atr > 0) else 1.0
-
-    fitness = calculate_fitness(
-        labels,
-        bars_to_hit,
-        mae,
-        mfe,
-        horizon,
-        atr_mean=atr_mean,
-        symbol=symbol,
-        k_up=k_up,
-        k_down=k_down,
-        regime=regime,
-        include_slippage=include_slippage,
-    )
-    fitness += asymmetry_bonus
-
-    return (fitness,)

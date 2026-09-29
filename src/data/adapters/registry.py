@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.core.contracts import ModelContract
+    pass
 
 from .base import BaseAdapter
 
@@ -110,29 +110,6 @@ class AdapterRegistry:
 
         contract = get_model_contract(model_name)
         return cls.create(contract.adapter_id, **kwargs)
-
-    @classmethod
-    def get_for_contract(
-        cls,
-        contract: ModelContract,
-        **kwargs: Any,
-    ) -> BaseAdapter:
-        """
-        Get adapter for a model contract.
-
-        Args:
-            contract: ModelContract instance
-            **kwargs: Arguments to pass to adapter constructor
-
-        Returns:
-            Adapter instance appropriate for the contract
-        """
-        return cls.create(contract.adapter_id, **kwargs)
-
-    @classmethod
-    def list_adapters(cls) -> list[str]:
-        """List all registered adapter IDs."""
-        return sorted(cls._adapters.keys())
 
     @classmethod
     def is_registered(cls, adapter_id: str) -> bool:

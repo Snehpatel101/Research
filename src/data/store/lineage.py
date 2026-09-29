@@ -316,17 +316,6 @@ class FeatureLineage:
             lineage.transformations.append(Transformation.from_dict(t_dict))
         return lineage
 
-    def get_transformation_chain(self) -> list[str]:
-        """Get ordered list of transformation names."""
-        return [t.name for t in self.transformations]
-
-    def get_all_output_columns(self) -> set[str]:
-        """Get all columns produced by all transformations."""
-        columns = set()
-        for t in self.transformations:
-            columns.update(t.output_columns)
-        return columns
-
 
 class LineageTracker:
     """
@@ -426,46 +415,6 @@ class LineageTracker:
         logger.info(f"Created lineage {lineage.lineage_id} for {feature_set}:{version}:{symbol}")
         return lineage
 
-    def get_lineage(self, lineage_id: str) -> FeatureLineage | None:
-        """
-        Get lineage by ID.
-
-        Parameters
-        ----------
-        lineage_id : str
-            Lineage ID to retrieve
-
-        Returns
-        -------
-        FeatureLineage or None
-            Lineage if found
-        """
-        return self._lineages.get(lineage_id)
-
-    def get_lineage_for_feature_set(
-        self, feature_set: str, version: str, symbol: str
-    ) -> FeatureLineage | None:
-        """
-        Get lineage for a specific feature set version and symbol.
-
-        Parameters
-        ----------
-        feature_set : str
-            Feature set name
-        version : str
-            Version string
-        symbol : str
-            Symbol name
-
-        Returns
-        -------
-        FeatureLineage or None
-            Matching lineage if found
-        """
-        key = f"{feature_set}:{version}:{symbol}"
-        lineage_id = hashlib.sha256(key.encode()).hexdigest()[:16]
-        return self._lineages.get(lineage_id)
-
     def save_lineage(self, lineage: FeatureLineage) -> Path | None:
         """
         Save lineage to storage.
@@ -491,85 +440,6 @@ class LineageTracker:
 
         logger.debug(f"Saved lineage {lineage.lineage_id} to {file_path}")
         return file_path
-
-    def find_lineages(
-        self,
-        feature_set: str | None = None,
-        symbol: str | None = None,
-        version: str | None = None,
-    ) -> list[FeatureLineage]:
-        """
-        Find lineages matching criteria.
-
-        Parameters
-        ----------
-        feature_set : str, optional
-            Filter by feature set name
-        symbol : str, optional
-            Filter by symbol
-        version : str, optional
-            Filter by version
-
-        Returns
-        -------
-        list[FeatureLineage]
-            Matching lineages
-        """
-        results = []
-        for lineage in self._lineages.values():
-            if feature_set and lineage.feature_set != feature_set:
-                continue
-            if symbol and lineage.symbol != symbol:
-                continue
-            if version and lineage.version != version:
-                continue
-            results.append(lineage)
-        return results
-
-    def get_downstream_lineages(self, lineage_id: str) -> list[FeatureLineage]:
-        """
-        Get all lineages that depend on the given lineage.
-
-        Parameters
-        ----------
-        lineage_id : str
-            Parent lineage ID
-
-        Returns
-        -------
-        list[FeatureLineage]
-            Lineages that have this as a parent
-        """
-        downstream = []
-        for lineage in self._lineages.values():
-            if lineage_id in lineage.parent_lineages:
-                downstream.append(lineage)
-        return downstream
-
-    def get_upstream_lineages(self, lineage_id: str) -> list[FeatureLineage]:
-        """
-        Get all lineages that the given lineage depends on.
-
-        Parameters
-        ----------
-        lineage_id : str
-            Child lineage ID
-
-        Returns
-        -------
-        list[FeatureLineage]
-            Parent lineages
-        """
-        lineage = self._lineages.get(lineage_id)
-        if lineage is None:
-            return []
-
-        upstream = []
-        for parent_id in lineage.parent_lineages:
-            parent = self._lineages.get(parent_id)
-            if parent:
-                upstream.append(parent)
-        return upstream
 
     def __iter__(self) -> Iterator[FeatureLineage]:
         """Iterate over all lineages."""

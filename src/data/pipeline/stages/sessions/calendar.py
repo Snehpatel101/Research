@@ -25,10 +25,9 @@ Created: 2025-12-22
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import StrEnum
 
-import numpy as np
 import pandas as pd
 
 try:
@@ -224,53 +223,6 @@ class CMECalendar:
             return TradingDayType.EARLY_CLOSE
         return TradingDayType.REGULAR
 
-    def is_trading_day(self, dt: date) -> bool:
-        """
-        Check if a date is a trading day (not holiday or weekend).
-
-        Args:
-            dt: Date to check
-
-        Returns:
-            True if trading is expected on this day
-        """
-        day_type = self.get_trading_day_type(dt)
-        return day_type in (TradingDayType.REGULAR, TradingDayType.EARLY_CLOSE)
-
-    def get_holidays_in_range(self, start: date, end: date) -> list[date]:
-        """
-        Get all CME holidays in a date range.
-
-        Args:
-            start: Start date (inclusive)
-            end: End date (inclusive)
-
-        Returns:
-            List of holiday dates in the range
-        """
-        return sorted([h for h in self._holiday_set if start <= h <= end])
-
-    def get_trading_days_in_range(self, start: date, end: date) -> list[date]:
-        """
-        Get all trading days in a date range.
-
-        Args:
-            start: Start date (inclusive)
-            end: End date (inclusive)
-
-        Returns:
-            List of trading day dates
-        """
-        current = start
-        trading_days = []
-
-        while current <= end:
-            if self.is_trading_day(current):
-                trading_days.append(current)
-            current += timedelta(days=1)
-
-        return trading_days
-
     def filter_holidays(self, df: pd.DataFrame, datetime_column: str = "datetime") -> pd.DataFrame:
         """
         Filter out rows that fall on CME holidays.
@@ -297,37 +249,6 @@ class CMECalendar:
         )
 
         return result
-
-    def add_trading_day_features(
-        self,
-        df: pd.DataFrame,
-        datetime_column: str = "datetime",
-        feature_metadata: dict[str, str] | None = None,
-    ) -> pd.DataFrame:
-        """
-        Add trading day type features to DataFrame.
-
-        Args:
-            df: Input DataFrame
-            datetime_column: Name of datetime column
-            feature_metadata: Optional dict to store feature descriptions
-
-        Returns:
-            DataFrame with trading day features added
-        """
-        if datetime_column not in df.columns:
-            raise ValueError(f"Column '{datetime_column}' not found in DataFrame")
-
-        df = df.copy()
-        dates = df[datetime_column].dt.date
-
-        # Add is_early_close flag
-        df["is_early_close"] = dates.isin(self._early_close_set).astype(int)
-
-        if feature_metadata is not None:
-            feature_metadata["is_early_close"] = "CME early close trading day flag"
-
-        return df
 
 
 class DSTHandler:
@@ -366,66 +287,6 @@ class DSTHandler:
                 "Neither zoneinfo nor pytz is available. " "Install pytz or upgrade to Python 3.9+."
             )
 
-    def is_dst(self, dt: datetime) -> bool:
-        """
-        Check if DST is in effect for a datetime.
-
-        Args:
-            dt: Datetime to check (timezone-naive assumed UTC)
-
-        Returns:
-            True if DST is in effect
-        """
-        if dt.tzinfo is None:
-            # Assume UTC, convert to local
-            if ZONEINFO_AVAILABLE:
-                dt_utc = dt.replace(tzinfo=UTC)
-                dt_local = dt_utc.astimezone(self._tz)
-            elif PYTZ_AVAILABLE:
-                dt_utc = pytz.UTC.localize(dt)
-                dt_local = dt_utc.astimezone(self._tz)
-            else:
-                return False
-        else:
-            dt_local = dt.astimezone(self._tz)
-
-        # Check if DST is active
-        if PYTZ_AVAILABLE and hasattr(dt_local, "dst"):
-            dst_offset = dt_local.dst()
-            return dst_offset is not None and dst_offset.total_seconds() > 0
-
-        # For zoneinfo, check the tzname
-        tzname = dt_local.strftime("%Z")
-        # EDT, BST, etc. indicate DST
-        return tzname in ("EDT", "BST", "CEST", "CDT", "PDT", "MDT")
-
-    def get_utc_offset_hours(self, dt: datetime) -> float:
-        """
-        Get the UTC offset in hours for a datetime.
-
-        Args:
-            dt: Datetime to check (timezone-naive assumed UTC)
-
-        Returns:
-            UTC offset in hours (e.g., -4 for EDT, -5 for EST)
-        """
-        if dt.tzinfo is None:
-            if ZONEINFO_AVAILABLE:
-                dt_utc = dt.replace(tzinfo=UTC)
-                dt_local = dt_utc.astimezone(self._tz)
-            elif PYTZ_AVAILABLE:
-                dt_utc = pytz.UTC.localize(dt)
-                dt_local = dt_utc.astimezone(self._tz)
-            else:
-                return 0.0
-        else:
-            dt_local = dt.astimezone(self._tz)
-
-        offset = dt_local.utcoffset()
-        if offset is None:
-            return 0.0
-        return offset.total_seconds() / 3600
-
     def get_dst_transition_dates(self, year: int) -> tuple[date | None, date | None]:
         """
         Get DST transition dates for a given year.
@@ -456,85 +317,6 @@ class DSTHandler:
         fall_back = nov_first + timedelta(days=days_until_sunday)
 
         return (spring_forward, fall_back)
-
-    def is_dst_transition_date(self, dt: date) -> bool:
-        """
-        Check if a date is a DST transition date.
-
-        Args:
-            dt: Date to check
-
-        Returns:
-            True if this is a DST transition date
-        """
-        if isinstance(dt, datetime):
-            dt = dt.date()
-
-        spring, fall = self.get_dst_transition_dates(dt.year)
-
-        return dt in (spring, fall)
-
-    def adjust_session_times_for_dst(
-        self, base_start_utc: tuple[int, int], base_end_utc: tuple[int, int], dt: datetime
-    ) -> tuple[tuple[int, int], tuple[int, int]]:
-        """
-        Adjust session times for DST.
-
-        If DST is in effect, session times shift by 1 hour earlier in UTC.
-
-        Args:
-            base_start_utc: Base session start (hour, minute) in UTC (winter time)
-            base_end_utc: Base session end (hour, minute) in UTC (winter time)
-            dt: Datetime to check DST status
-
-        Returns:
-            Adjusted (start_utc, end_utc) tuple
-        """
-        if not self.is_dst(dt):
-            return (base_start_utc, base_end_utc)
-
-        # DST is active - shift 1 hour earlier
-        adj_start = ((base_start_utc[0] - 1) % 24, base_start_utc[1])
-        adj_end = ((base_end_utc[0] - 1) % 24, base_end_utc[1])
-
-        return (adj_start, adj_end)
-
-    def add_dst_features(
-        self,
-        df: pd.DataFrame,
-        datetime_column: str = "datetime",
-        feature_metadata: dict[str, str] | None = None,
-    ) -> pd.DataFrame:
-        """
-        Add DST-related features to DataFrame.
-
-        Args:
-            df: Input DataFrame
-            datetime_column: Name of datetime column
-            feature_metadata: Optional dict to store feature descriptions
-
-        Returns:
-            DataFrame with DST features added
-        """
-        if datetime_column not in df.columns:
-            raise ValueError(f"Column '{datetime_column}' not found in DataFrame")
-
-        df = df.copy()
-
-        # Vectorized DST detection
-        is_dst_list = [self.is_dst(dt) for dt in df[datetime_column]]
-        df["is_dst"] = np.array(is_dst_list, dtype=int)
-
-        # DST transition detection
-        dates = df[datetime_column].dt.date
-        is_transition = [self.is_dst_transition_date(d) for d in dates]
-        df["is_dst_transition"] = np.array(is_transition, dtype=int)
-
-        if feature_metadata is not None:
-            feature_metadata["is_dst"] = f"Daylight Saving Time active ({self.timezone_str})"
-            feature_metadata["is_dst_transition"] = "DST transition date flag"
-
-        return df
 
 
 # Module-level calendar instance for convenience

@@ -878,24 +878,6 @@ class ModelBundle:
             "metadata": self.metadata.to_dict(),
         }
 
-    def set_feature_spec(self, feature_spec: Any) -> None:
-        """
-        Set or update the feature spec.
-
-        The FeatureSpec captures all 5 optimization dimensions used during training,
-        ensuring inference parity with the exact same configuration.
-
-        Args:
-            feature_spec: FeatureSpec instance from src.core.contracts
-        """
-        self.feature_spec = feature_spec
-
-        # Update metadata
-        self.metadata.has_feature_spec = True
-        self.metadata.feature_spec_hash = getattr(feature_spec, "schema_hash", "")
-
-        logger.info(f"Set feature spec (hash: {self.metadata.feature_spec_hash})")
-
     def set_preprocessing_graph(self, graph: Any) -> None:
         """
         Set or update the preprocessing graph.

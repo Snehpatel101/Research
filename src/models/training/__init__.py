@@ -36,8 +36,6 @@ from .meta_labeling import (
     BetSizingConfig,
     BetSizingStrategy,
     compute_bet_sizes,
-    get_strategy_description,
-    predict_with_sizing,
 )
 
 # PHASE_3: Regime-aware training components
@@ -97,6 +95,4 @@ __all__ = [
     "BetSizingStrategy",
     "BetSizingConfig",
     "compute_bet_sizes",
-    "predict_with_sizing",
-    "get_strategy_description",
 ]

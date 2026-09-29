@@ -10,7 +10,6 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -167,8 +166,6 @@ class AdapterResult:
         Returns:
             (is_valid, list_of_issues)
 
-        Note: This method returns a tuple for backward compatibility.
-        For exception-based validation, call validate_strict() instead.
         """
         issues: list[str] = []
 
@@ -198,24 +195,6 @@ class AdapterResult:
             issues.append(f"X contains {n_inf} Inf values")
 
         return len(issues) == 0, issues
-
-    def validate_strict(self) -> None:
-        """
-        Validate the adapter result (exception-based).
-
-        Raises:
-            ValueError: If validation fails
-
-        This method provides compatibility with the interfaces.py validate() API.
-        """
-        if self.X.size == 0:
-            raise ValueError("AdapterResult data is empty")
-        if len(self.y) != self.n_samples:
-            raise ValueError(f"Labels length ({len(self.y)}) != n_samples ({self.n_samples})")
-        if self.original_indices is not None and len(self.original_indices) != self.n_samples:
-            raise ValueError("original_indices length != n_samples")
-        if np.isnan(self.X).any():
-            raise ValueError("AdapterResult data contains NaN values")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize metadata to dictionary (excludes arrays)."""
@@ -383,54 +362,6 @@ class BaseAdapter(ABC):
 
         return [col for col in df.columns if is_feature_col(col)]
 
-    @classmethod
-    def from_manifest(
-        cls,
-        manifest_path: Path | str,
-        label_column: str | None = None,
-        weight_column: str | None = None,
-        **kwargs,
-    ) -> BaseAdapter:
-        """Create adapter with feature columns from a manifest file.
-
-        Phase 7D: Factory method that loads feature columns from a manifest
-        instead of relying on auto-detection or explicit lists.
-
-        Args:
-            manifest_path: Path to the feature manifest JSON file
-            label_column: Override label column (uses first from manifest if None)
-            weight_column: Override weight column
-            **kwargs: Additional arguments passed to __init__
-
-        Returns:
-            Adapter instance configured with manifest's feature columns
-
-        Raises:
-            FileNotFoundError: If manifest file doesn't exist
-
-        Example:
-            adapter = SequenceAdapter.from_manifest(
-                "data/MES_feature_manifest.json",
-                sequence_length=60
-            )
-        """
-        from src.data.pipeline.feature_manifest import FeatureManifest
-
-        manifest = FeatureManifest.load(Path(manifest_path))
-
-        # Use first label from manifest if not specified
-        if label_column is None and manifest.label_columns:
-            label_column = manifest.label_columns[0]
-        elif label_column is None:
-            label_column = "label_h20"  # Default fallback
-
-        return cls(
-            feature_columns=manifest.feature_columns,
-            label_column=label_column,
-            weight_column=weight_column,
-            **kwargs,
-        )
-
     def _get_weights(self, df: pd.DataFrame) -> np.ndarray | None:
         """Get sample weights from DataFrame."""
         if self.weight_column and self.weight_column in df.columns:
@@ -504,45 +435,6 @@ class BaseAdapter(ABC):
             return int(match.group(1))
 
         return 20  # Default horizon
-
-    def load_data_lazy(self, file_path: Path | str) -> pd.DataFrame:
-        """
-        Load data with lazy loading for large datasets (12D-7).
-
-        For datasets >1GB, reads in chunks to avoid memory spikes.
-        For smaller datasets, uses standard pd.read_parquet.
-
-        Args:
-            file_path: Path to parquet file
-
-        Returns:
-            DataFrame with all data loaded
-        """
-        file_path = Path(file_path)
-
-        # Check file size
-        file_size_gb = file_path.stat().st_size / (1024**3)
-
-        if not self.lazy_load or file_size_gb < 1.0:
-            # Standard loading for small files
-            return pd.read_parquet(file_path)
-
-        # Lazy loading for large files
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.info(
-            f"Large dataset detected ({file_size_gb:.2f} GB). "
-            f"Using chunked reading with chunk_size={self.chunk_size:,}"
-        )
-
-        # Read in chunks and concatenate
-        parquet_file = pd.read_parquet(file_path, engine="pyarrow")
-
-        # If file is already loaded, just return it
-        # (pyarrow doesn't support true streaming for parquet yet)
-        # For future: use dask or pyarrow.parquet.ParquetFile for true streaming
-        return parquet_file
 
 
 __all__ = [

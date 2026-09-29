@@ -140,30 +140,6 @@ class ArtifactManifest:
         self.artifacts[name] = artifact_info
         logger.debug(f"Added artifact: {name}")
 
-    def add_stage_artifacts(
-        self, stage: str, files: list[Path], metadata: dict[str, Any] | None = None
-    ) -> None:
-        """
-        Add multiple artifacts from a pipeline stage.
-
-        Args:
-            stage: Pipeline stage name
-            files: List of file paths produced by this stage
-            metadata: Additional metadata for the stage
-        """
-        for file_path in files:
-            file_path = Path(file_path)
-            artifact_name = f"{stage}_{file_path.name}"
-            self.add_artifact(
-                name=artifact_name,
-                file_path=file_path,
-                artifact_type="file",
-                stage=stage,
-                metadata=metadata,
-            )
-
-        logger.info(f"Added {len(files)} artifacts from stage: {stage}")
-
     def get_artifact(self, name: str) -> dict[str, Any] | None:
         """Get artifact information by name."""
         return self.artifacts.get(name)
@@ -229,42 +205,6 @@ class ArtifactManifest:
     # =========================================================================
     # CONFIG SNAPSHOT (DATA-004)
     # =========================================================================
-
-    def set_config_snapshot(self, config_dict: dict[str, Any]) -> None:
-        """
-        Set the configuration snapshot for this run.
-
-        The config snapshot captures training-relevant parameters while
-        excluding sensitive data like secrets and absolute paths.
-
-        Args:
-            config_dict: Dictionary of configuration parameters.
-                Should exclude secrets, credentials, and paths.
-
-        Example:
-            >>> manifest.set_config_snapshot({
-            ...     "symbols": ["MES"],
-            ...     "target_timeframe": "5min",
-            ...     "label_horizons": [5, 10, 20],
-            ...     "purge_bars": 60,
-            ...     "embargo_bars": 1440,
-            ... })
-        """
-        self.config_snapshot = {
-            "snapshot_created_at": datetime.now().isoformat(),
-            "config": config_dict,
-        }
-        self.metadata["has_config_snapshot"] = True
-        logger.debug(f"Config snapshot set with {len(config_dict)} parameters")
-
-    def get_config_snapshot(self) -> dict[str, Any]:
-        """
-        Get the configuration snapshot.
-
-        Returns:
-            Config snapshot dict, or empty dict if not set.
-        """
-        return self.config_snapshot
 
     def save(self, path: Path | None = None) -> None:
         """
@@ -346,42 +286,6 @@ class ArtifactManifest:
         logger.info(f"Loaded manifest with {len(manifest.artifacts)} artifacts")
         return manifest
 
-    def compare_with(self, other: "ArtifactManifest") -> dict[str, Any]:
-        """
-        Compare this manifest with another to find changes.
-
-        Args:
-            other: Another ArtifactManifest to compare with
-
-        Returns:
-            Dictionary containing added, removed, and modified artifacts
-        """
-        self_names = set(self.artifacts.keys())
-        other_names = set(other.artifacts.keys())
-
-        added = self_names - other_names
-        removed = other_names - self_names
-        common = self_names & other_names
-
-        modified = []
-        for name in common:
-            self_artifact = self.artifacts[name]
-            other_artifact = other.artifacts[name]
-
-            # Compare checksums if available
-            self_checksum = self_artifact.get("checksum")
-            other_checksum = other_artifact.get("checksum")
-
-            if self_checksum and other_checksum and self_checksum != other_checksum:
-                modified.append(name)
-
-        return {
-            "added": sorted(added),
-            "removed": sorted(removed),
-            "modified": sorted(modified),
-            "unchanged": sorted(common - set(modified)),
-        }
-
     def get_summary(self) -> dict[str, Any]:
         """Get summary statistics about the manifest."""
         stages = {artifact["stage"] for artifact in self.artifacts.values()}
@@ -411,40 +315,6 @@ class ArtifactManifest:
         for stage in summary["stages"]:
             stage_artifacts = self.get_stage_artifacts(stage)
             print(f"  {stage}: {len(stage_artifacts)} artifacts")
-
-
-def compare_runs(run_id_1: str, run_id_2: str, project_root: Path | None = None) -> dict[str, Any]:
-    """
-    Compare manifests between two runs.
-
-    Args:
-        run_id_1: First run ID
-        run_id_2: Second run ID
-        project_root: Project root directory
-
-    Returns:
-        Comparison results
-    """
-    if project_root is None:
-        project_root = Path(__file__).parent.parent.resolve()
-
-    try:
-        manifest_1 = ArtifactManifest.load(run_id_1, project_root)
-        manifest_2 = ArtifactManifest.load(run_id_2, project_root)
-
-        comparison = manifest_1.compare_with(manifest_2)
-
-        logger.info(f"Compared runs: {run_id_1} vs {run_id_2}")
-        logger.info(f"  Added: {len(comparison['added'])}")
-        logger.info(f"  Removed: {len(comparison['removed'])}")
-        logger.info(f"  Modified: {len(comparison['modified'])}")
-        logger.info(f"  Unchanged: {len(comparison['unchanged'])}")
-
-        return comparison
-
-    except FileNotFoundError as e:
-        logger.error(f"Failed to compare runs: {e}")
-        raise
 
 
 if __name__ == "__main__":

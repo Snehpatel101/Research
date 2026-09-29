@@ -293,51 +293,6 @@ class PurgedKFold:
         """Return number of splits (sklearn API compatibility)."""
         return self.config.n_splits
 
-    def get_fold_info(self, X: pd.DataFrame) -> list[dict]:
-        """
-        Get detailed information about each fold.
-
-        Args:
-            X: Features DataFrame (needed for timestamp info)
-
-        Returns:
-            List of dicts with fold information including sizes and time ranges
-        """
-        info = []
-        has_datetime_index = isinstance(X.index, pd.DatetimeIndex)
-
-        for fold_idx, (train_idx, test_idx) in enumerate(self.split(X)):
-            fold_info = {
-                "fold": fold_idx,
-                "train_size": len(train_idx),
-                "test_size": len(test_idx),
-                "purge_bars": self.config.purge_bars,
-                "embargo_bars": self.config.embargo_bars,
-            }
-
-            if has_datetime_index:
-                fold_info.update(
-                    {
-                        "train_start": X.index[train_idx[0]],
-                        "train_end": X.index[train_idx[-1]],
-                        "test_start": X.index[test_idx[0]],
-                        "test_end": X.index[test_idx[-1]],
-                    }
-                )
-            else:
-                fold_info.update(
-                    {
-                        "train_start_idx": int(train_idx[0]),
-                        "train_end_idx": int(train_idx[-1]),
-                        "test_start_idx": int(test_idx[0]),
-                        "test_end_idx": int(test_idx[-1]),
-                    }
-                )
-
-            info.append(fold_info)
-
-        return info
-
     def validate_coverage(self, X: pd.DataFrame) -> dict:
         """
         Validate that CV covers all samples at least once.
@@ -441,10 +396,6 @@ class ModelAwareCV:
             cv = self.base_cv
 
         yield from cv.split(X, y, label_end_times=label_end_times, label_spans=label_spans)
-
-    def get_tuning_trials(self) -> int:
-        """Return appropriate number of Optuna trials for model family."""
-        return int(self.strategy["tuning_trials"])
 
     def get_n_splits(self) -> int:
         """Return number of CV splits for this model family."""

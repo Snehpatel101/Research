@@ -118,11 +118,6 @@ class MetaLabelingPrediction:
         """Number of trades passing the threshold filter."""
         return int(self.trade_mask.sum())
 
-    @property
-    def trade_ratio(self) -> float:
-        """Fraction of samples passing the threshold filter."""
-        return float(self.trade_mask.mean()) if len(self.trade_mask) else 0.0
-
 
 class MetaLabelingBundle:
     """Primary ModelBundle + meta estimator + threshold.

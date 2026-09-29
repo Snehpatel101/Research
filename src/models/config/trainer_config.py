@@ -198,64 +198,6 @@ class TrainerConfig:
         """Create TrainerConfig from dictionary."""
         return cls(**data)
 
-    @classmethod
-    def from_model_contract(
-        cls,
-        model_name: str,
-        horizon: int,
-        **overrides: Any,
-    ) -> "TrainerConfig":
-        """
-        Create TrainerConfig from a ModelContract.
-
-        This is the preferred way to create TrainerConfig for SNwH-compatible
-        configuration. It automatically populates timeframe, MTF mode, and
-        other settings from the model's contract.
-
-        Args:
-            model_name: Name of the model (e.g., "xgboost", "lstm", "patchtst")
-            horizon: Training horizon (e.g., 20)
-            **overrides: Additional overrides for any TrainerConfig field
-
-        Returns:
-            TrainerConfig with contract-based defaults
-
-        Example:
-            # Create config for LSTM with contract defaults
-            config = TrainerConfig.from_model_contract("lstm", horizon=20)
-
-            # Override specific settings
-            config = TrainerConfig.from_model_contract(
-                "xgboost",
-                horizon=20,
-                batch_size=512,
-                max_epochs=200,
-            )
-        """
-        from src.core.contracts import get_model_contract
-
-        contract = get_model_contract(model_name)
-
-        # Build kwargs from contract (normalize model_name to lowercase)
-        contract_kwargs: dict[str, Any] = {
-            "model_name": model_name.lower().strip(),
-            "horizon": horizon,
-            "primary_timeframe": contract.primary_timeframe,
-            "mtf_mode": contract.mtf_mode.value,
-            "mtf_timeframes": list(contract.mtf_timeframes),
-            "feature_mode": contract.feature_mode.value,
-            "adapter_id": contract.adapter_id,
-            "input_rank": contract.input_rank.value,
-            "min_features": contract.min_features,
-            "max_features": contract.max_features,
-            "sequence_length": contract.sequence_length,
-        }
-
-        # Apply overrides (user values take precedence)
-        contract_kwargs.update(overrides)
-
-        return cls(**contract_kwargs)
-
     def get_resolved_device(self) -> str:
         """Get the resolved device (auto -> cuda/cpu)."""
         return resolve_device(self.device)
@@ -284,28 +226,3 @@ class TrainerConfig:
         """
         strategy = self.get_feature_strategy()
         return list(strategy.baseline_features)
-
-    def resolve_features(
-        self,
-        available_features: list[str],
-        strict: bool = True,
-    ) -> list[str]:
-        """
-        Resolve features based on strategy and availability.
-
-        Args:
-            available_features: Features available in the data
-            strict: Raise error if insufficient features
-
-        Returns:
-            List of resolved feature names
-        """
-        from src.data.features.strategy_manager import FeatureStrategyManager
-
-        manager = FeatureStrategyManager(available_features=available_features)
-        resolved = manager.get_features_for_model(self.model_name, strict=strict)
-
-        # Store resolution result for logging
-        self._resolved_features = resolved
-
-        return resolved.feature_columns

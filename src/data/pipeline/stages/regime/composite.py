@@ -55,7 +55,7 @@ class CompositeRegimeDetector:
         structure_detector: Market structure detector
 
     Example:
-        >>> composite = CompositeRegimeDetector.from_config(REGIME_CONFIG)
+        >>> composite = CompositeRegimeDetector.with_defaults()
         >>> result = composite.detect_all(df)
         >>> df_with_regimes = result.regimes
         >>> print(df_with_regimes[['volatility_regime', 'trend_regime']].head())

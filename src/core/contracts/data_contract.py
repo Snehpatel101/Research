@@ -112,14 +112,6 @@ class DataContractSchema:
         """Get sample weight column name for a horizon."""
         return self.WEIGHT_PATTERN.format(horizon=horizon)
 
-    def get_label_end_time_column(self, horizon: int) -> str:
-        """Get label end time column name for a horizon."""
-        return self.LABEL_END_TIME_PATTERN.format(horizon=horizon)
-
-    def is_metadata_column(self, column: str) -> bool:
-        """Check if a column is a metadata column."""
-        return column in self.METADATA_COLUMNS or column.startswith("label_")
-
 
 # Singleton schema instance
 DATA_SCHEMA = DataContractSchema()
@@ -231,82 +223,6 @@ class DataContract:
         # Check weight column (warning only)
         if self.weight_column and self.weight_column not in df.columns:
             issues.append(f"Missing weight column: {self.weight_column}")
-
-        return len(issues) == 0, issues
-
-    def validate_dataframe_strict(self, df: pd.DataFrame) -> None:
-        """
-        Validate DataFrame, raising DataContractViolation on failure.
-
-        This is the preferred method for validation in pipelines where
-        invalid data should halt execution.
-
-        Args:
-            df: DataFrame to validate
-
-        Raises:
-            DataContractViolation: If validation fails with list of issues
-        """
-        is_valid, issues = self.validate_dataframe(df)
-        if not is_valid:
-            raise DataContractViolation(issues)
-
-    def validate_array(self, X: np.ndarray, y: np.ndarray | None = None) -> tuple[bool, list[str]]:
-        """
-        Validate numpy arrays against this contract.
-
-        Returns:
-            (is_valid, list_of_issues)
-        """
-        issues = []
-
-        # Check rank
-        if X.ndim != self.data_rank.value:
-            issues.append(f"Rank mismatch: expected {self.data_rank.value}D, got {X.ndim}D")
-            return False, issues
-
-        # Check shape based on rank
-        if self.data_rank == DataRank.TABULAR_2D:
-            if X.shape[0] != self.n_samples:
-                issues.append(f"Sample count mismatch: expected {self.n_samples}, got {X.shape[0]}")
-            if X.shape[1] != self.n_features:
-                issues.append(
-                    f"Feature count mismatch: expected {self.n_features}, got {X.shape[1]}"
-                )
-
-        elif self.data_rank == DataRank.SEQUENCE_3D:
-            # (n_samples, seq_len, n_features)
-            if self.sequence_length and X.shape[1] != self.sequence_length:
-                issues.append(
-                    f"Sequence length mismatch: expected {self.sequence_length}, "
-                    f"got {X.shape[1]}"
-                )
-            if X.shape[2] != self.n_features:
-                issues.append(
-                    f"Feature count mismatch: expected {self.n_features}, got {X.shape[2]}"
-                )
-
-        elif self.data_rank == DataRank.MULTI_TF_4D:
-            # (n_samples, n_timeframes, seq_len, n_features)
-            if self.n_timeframes and X.shape[1] != self.n_timeframes:
-                issues.append(
-                    f"Timeframe count mismatch: expected {self.n_timeframes}, " f"got {X.shape[1]}"
-                )
-            if self.sequence_length and X.shape[2] != self.sequence_length:
-                issues.append(
-                    f"Sequence length mismatch: expected {self.sequence_length}, "
-                    f"got {X.shape[2]}"
-                )
-            if X.shape[3] != self.n_features:
-                issues.append(
-                    f"Feature count mismatch: expected {self.n_features}, got {X.shape[3]}"
-                )
-
-        # Validate y if provided
-        if y is not None and y.shape[0] != X.shape[0]:
-            issues.append(
-                f"Label count mismatch: X has {X.shape[0]} samples, " f"y has {y.shape[0]}"
-            )
 
         return len(issues) == 0, issues
 

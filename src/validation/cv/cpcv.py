@@ -97,11 +97,6 @@ class CPCVConfig:
             raise ValueError(f"embargo_bars must be >= 0, got {self.embargo_bars}")
 
     @property
-    def n_train_groups(self) -> int:
-        """Number of groups used for training in each split."""
-        return self.n_groups - self.n_test_groups
-
-    @property
     def total_combinations(self) -> int:
         """Number of splits C(N, k)."""
         return comb(self.n_groups, self.n_test_groups)
@@ -418,43 +413,6 @@ class CombinatorialPurgedCV:
     ) -> int:
         """Return number of splits C(N, k)."""
         return self.config.total_combinations
-
-    def get_path_info(self, X: pd.DataFrame) -> list[dict[str, Any]]:
-        """
-        Train/test sizes and boundaries of every split.
-
-        Args:
-            X: Features DataFrame
-
-        Returns:
-            List of dicts with split information
-        """
-        info = []
-        has_datetime = isinstance(X.index, pd.DatetimeIndex)
-
-        for train_idx, test_idx, split_id in self.split(X):
-            split_info: dict[str, Any] = {
-                "split_id": split_id,
-                "test_groups": self._test_combinations[split_id],
-                "train_size": len(train_idx),
-                "test_size": len(test_idx),
-                "train_start_idx": int(train_idx[0]),
-                "train_end_idx": int(train_idx[-1]),
-                "test_start_idx": int(test_idx[0]),
-                "test_end_idx": int(test_idx[-1]),
-            }
-            if has_datetime:
-                split_info.update(
-                    {
-                        "train_start_time": X.index[train_idx[0]],
-                        "train_end_time": X.index[train_idx[-1]],
-                        "test_start_time": X.index[test_idx[0]],
-                        "test_end_time": X.index[test_idx[-1]],
-                    }
-                )
-            info.append(split_info)
-
-        return info
 
     def validate_coverage(self, X: pd.DataFrame | np.ndarray) -> dict[str, Any]:
         """

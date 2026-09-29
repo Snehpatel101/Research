@@ -12,7 +12,6 @@ Created: 2025-12-22
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -21,7 +20,6 @@ from .config import (
     DEFAULT_SESSIONS_CONFIG,
     SESSION_OVERLAPS,
     SESSIONS,
-    SessionConfig,
     SessionName,
     SessionsConfig,
 )
@@ -44,7 +42,6 @@ class SessionFilter:
     Usage:
         filter = SessionFilter(config)
         df = filter.add_session_features(df)
-        df = filter.filter_by_session(df)
     """
 
     def __init__(self, config: SessionsConfig | None = None, datetime_column: str = "datetime"):
@@ -87,50 +84,6 @@ class SessionFilter:
                 f"Column '{self.datetime_column}' must be datetime type, "
                 f"got {df[self.datetime_column].dtype}"
             )
-
-    def _get_time_minutes(self, dt: datetime) -> int:
-        """Get time of day as minutes since midnight UTC."""
-        return dt.hour * 60 + dt.minute
-
-    def _is_in_session(self, time_minutes: int, session: SessionConfig) -> bool:
-        """
-        Check if a time is within a session.
-
-        Args:
-            time_minutes: Time as minutes since midnight UTC
-            session: Session configuration
-
-        Returns:
-            True if time is within the session
-        """
-        start = session.start_minutes
-        end = session.end_minutes
-
-        if session.crosses_midnight:
-            # Session spans midnight: e.g., 23:00 to 07:00
-            # Time is in session if >= start OR < end
-            return time_minutes >= start or time_minutes < end
-        else:
-            # Normal session: e.g., 08:00 to 16:30
-            return start <= time_minutes < end
-
-    def classify_session(self, dt: datetime) -> SessionName | None:
-        """
-        Classify which session a datetime belongs to.
-
-        Args:
-            dt: Datetime to classify (assumed UTC)
-
-        Returns:
-            SessionName if in a session, None otherwise
-        """
-        time_minutes = self._get_time_minutes(dt)
-
-        for session_name, session_config in SESSIONS.items():
-            if self._is_in_session(time_minutes, session_config):
-                return session_name
-
-        return None
 
     def classify_sessions_vectorized(self, datetimes: pd.Series) -> pd.Series:
         """
@@ -281,104 +234,6 @@ class SessionFilter:
         )
 
         return df
-
-    def filter_by_session(self, df: pd.DataFrame, inplace: bool = False) -> pd.DataFrame:
-        """
-        Filter DataFrame to only include rows from active sessions.
-
-        Args:
-            df: Input DataFrame with datetime column
-            inplace: If True, modify df in place
-
-        Returns:
-            Filtered DataFrame
-
-        Raises:
-            ValueError: If DataFrame is invalid
-        """
-        self._validate_dataframe(df)
-
-        if not inplace:
-            df = df.copy()
-
-        datetimes = df[self.datetime_column]
-        time_minutes = datetimes.dt.hour * 60 + datetimes.dt.minute
-
-        active_sessions = self.config.get_active_sessions()
-
-        if not active_sessions:
-            logger.warning("No active sessions - returning empty DataFrame")
-            return df.iloc[0:0]
-
-        # Build mask for active sessions
-        mask = pd.Series(False, index=df.index)
-
-        for session_name in active_sessions:
-            session_config = SESSIONS[session_name]
-            start = session_config.start_minutes
-            end = session_config.end_minutes
-
-            if session_config.crosses_midnight:
-                session_mask = (time_minutes >= start) | (time_minutes < end)
-            else:
-                session_mask = (time_minutes >= start) & (time_minutes < end)
-
-            mask = mask | session_mask
-
-        original_len = len(df)
-        df = df.loc[mask]
-        filtered_len = len(df)
-
-        logger.info(
-            f"Filtered by session: {original_len} -> {filtered_len} rows "
-            f"({100 * filtered_len / original_len:.1f}% retained)"
-        )
-
-        return df
-
-    def get_session_stats(self, df: pd.DataFrame) -> dict[str, dict]:
-        """
-        Calculate statistics for each session in the DataFrame.
-
-        Args:
-            df: Input DataFrame with datetime column
-
-        Returns:
-            Dictionary of session name -> statistics dict
-        """
-        self._validate_dataframe(df)
-
-        datetimes = df[self.datetime_column]
-        sessions = self.classify_sessions_vectorized(datetimes)
-
-        stats = {}
-        for session_name in SessionName:
-            mask = sessions == session_name
-            count = mask.sum()
-
-            if count > 0:
-                stats[session_name.value] = {
-                    "count": int(count),
-                    "percentage": float(100 * count / len(df)),
-                    "first": df.loc[mask, self.datetime_column].min(),
-                    "last": df.loc[mask, self.datetime_column].max(),
-                }
-            else:
-                stats[session_name.value] = {
-                    "count": 0,
-                    "percentage": 0.0,
-                    "first": None,
-                    "last": None,
-                }
-
-        # Add None/gap stats
-        mask = sessions.isna()
-        stats["outside_sessions"] = {
-            "count": int(mask.sum()),
-            "percentage": float(100 * mask.sum() / len(df)) if len(df) > 0 else 0.0,
-        }
-
-        return stats
 
 
 def create_session_filter(

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from joblib import Parallel, delayed
@@ -105,29 +104,6 @@ class ParallelTrainingService:
         # Create a fresh service instance in the worker process
         service = ModelTrainingService()
         return service.train_model(request)
-
-    def train_with_callback(
-        self,
-        training_requests: list[ModelTrainingRequest],
-        on_complete: Callable[[ModelTrainingResult], None] | None = None,
-    ) -> list[ModelTrainingResult]:
-        """
-        Train models in parallel with optional callback on completion.
-
-        Args:
-            training_requests: List of training requests
-            on_complete: Optional callback called for each completed model
-
-        Returns:
-            List of ModelTrainingResult objects
-        """
-        results = self.train_models_parallel(training_requests)
-
-        if on_complete:
-            for result in results:
-                on_complete(result)
-
-        return results
 
 
 def train_models_parallel(

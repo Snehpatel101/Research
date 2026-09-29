@@ -140,14 +140,6 @@ class RegimeTrainingResult:
             return self.regime_results[key].trainer
         return None
 
-    def get_regime_models(self, model_name: str) -> dict[str, Any]:
-        """Get all regime models for a given model name."""
-        result = {}
-        for (name, regime), res in self.regime_results.items():
-            if name == model_name and res.trainer is not None:
-                result[regime] = res.trainer
-        return result
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
@@ -789,22 +781,6 @@ class RegimeAwareTrainer:
             json.dump(result.to_dict(), f, indent=2, cls=NumpyEncoder)
 
         logger.info(f"Summary saved to: {summary_path}")
-
-    def get_trained_model(
-        self,
-        model_name: str,
-        regime: str,
-    ) -> Any | None:
-        """Get a trained model by name and regime."""
-        return self._trainers.get((model_name, regime))
-
-    def get_all_regime_models(self, model_name: str) -> dict[str, Any]:
-        """Get all regime models for a given model name."""
-        return {
-            regime: trainer
-            for (name, regime), trainer in self._trainers.items()
-            if name == model_name
-        }
 
 
 # =============================================================================

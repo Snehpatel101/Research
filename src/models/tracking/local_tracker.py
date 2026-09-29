@@ -37,9 +37,10 @@ class LocalTracker(ExperimentTracker):
     Usage:
         config = TrackerConfig(backend="local", output_dir=Path("experiments"))
         tracker = LocalTracker(config)
-        with tracker.run_context("my_run") as run_id:
-            tracker.log_params({"lr": 0.001})
-            tracker.log_metrics({"loss": 0.5}, step=1)
+        tracker.start_run("my_run")
+        tracker.log_params({"lr": 0.001})
+        tracker.log_metrics({"loss": 0.5}, step=1)
+        tracker.end_run()
     """
 
     def __init__(self, config: TrackerConfig) -> None:
@@ -252,30 +253,6 @@ class LocalTracker(ExperimentTracker):
 
         logger.debug(f"Logged artifact: {path} -> {dest}")
 
-    def set_tags(self, tags: dict[str, str]) -> None:
-        """
-        Set tags on the current run.
-
-        Args:
-            tags: Dictionary of tag name -> value
-        """
-        if not self._is_active:
-            logger.warning("No active run, tags not set")
-            return
-
-        self._tags.update(tags)
-
-        if self._run_dir:
-            self._save_json(self._run_dir / "tags.json", self._tags)
-
-    def get_run_metrics(self) -> list[dict[str, Any]]:
-        """Get all logged metrics for current run."""
-        return list(self._metrics)
-
-    def get_run_params(self) -> dict[str, Any]:
-        """Get all logged params for current run."""
-        return dict(self._params)
-
     @staticmethod
     def _save_json(path: Path, data: Any) -> None:
         """Save data to JSON file."""
@@ -289,28 +266,6 @@ class LocalTracker(ExperimentTracker):
         """Load data from JSON file."""
         with open(path) as f:
             return json.load(f)
-
-    @classmethod
-    def load_run(cls, run_dir: Path) -> dict[str, Any]:
-        """
-        Load a completed run's data.
-
-        Args:
-            run_dir: Path to run directory
-
-        Returns:
-            Dictionary with run_info, params, metrics, tags
-        """
-        result = {}
-
-        for name in ["run_info", "params", "metrics", "tags"]:
-            path = run_dir / f"{name}.json"
-            if path.exists():
-                result[name] = cls._load_json(path)
-            else:
-                result[name] = {} if name != "metrics" else []
-
-        return result
 
     @classmethod
     def list_runs(

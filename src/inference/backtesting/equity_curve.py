@@ -67,13 +67,6 @@ class Trade:
         """Check if trade is profitable after costs."""
         return self.net_pnl > 0
 
-    @property
-    def holding_period(self) -> int:
-        """Calculate holding period in bars/periods."""
-        if hasattr(self.exit_time, "timestamp") and hasattr(self.entry_time, "timestamp"):
-            return int((self.exit_time - self.entry_time).total_seconds())
-        return 0
-
     def calculate_r_multiple(self, point_value: float = 5.0) -> None:
         """
         Calculate R-multiple from stop loss.

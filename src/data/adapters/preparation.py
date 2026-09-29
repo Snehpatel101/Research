@@ -643,58 +643,6 @@ class UnifiedDataPreparation:
         logger.info(prepared.summary())
         return prepared
 
-    def prepare_heterogeneous(
-        self,
-        df: pd.DataFrame,
-        models: list[str],
-        feature_columns: list[str] | None = None,
-        label_column: str = "label",
-        weight_column: str | None = None,
-        additional_dfs: dict[str, pd.DataFrame] | None = None,
-        apply_scaling: bool = True,
-    ) -> dict[str, PreparedData]:
-        """
-        Prepare data for heterogeneous ensemble (multiple model types).
-
-        Calls prepare() for each model, returning a dictionary of PreparedData
-        objects. Each model gets data in its required format.
-
-        Args:
-            df: Source DataFrame.
-            models: List of model names to prepare data for.
-            feature_columns: Optional feature columns (shared across models).
-            label_column: Label column name.
-            weight_column: Optional weight column name.
-            additional_dfs: For multi-stream models.
-            apply_scaling: Whether to apply scaling.
-
-        Returns:
-            Dictionary mapping model name -> PreparedData.
-
-        Example:
-            >>> results = prep.prepare_heterogeneous(
-            ...     df,
-            ...     models=["xgboost", "lightgbm", "lstm"],
-            ... )
-            >>> xgb_data = results["xgboost"]  # 2D
-            >>> lstm_data = results["lstm"]    # 3D
-        """
-        results: dict[str, PreparedData] = {}
-
-        for model_name in models:
-            logger.info(f"Preparing data for model: {model_name}")
-            results[model_name] = self.prepare(
-                df=df,
-                model_name=model_name,
-                feature_columns=feature_columns,
-                label_column=label_column,
-                weight_column=weight_column,
-                additional_dfs=additional_dfs,
-                apply_scaling=apply_scaling,
-            )
-
-        return results
-
     @staticmethod
     def _label_end_positions(df: pd.DataFrame, label_column: str) -> np.ndarray | None:
         """Per-row label-end positions from the column paired with ``label_column``."""
@@ -879,27 +827,6 @@ class UnifiedDataPreparation:
             kwargs["timeframes"] = self.config.mtf_timeframes
 
         return kwargs
-
-    def get_scaler(self, model_name: str) -> AdapterScaler | None:
-        """
-        Get the fitted scaler for a model.
-
-        Args:
-            model_name: Name of the model.
-
-        Returns:
-            Fitted AdapterScaler or None if not found/not applied.
-        """
-        return self._scalers.get(model_name)
-
-    def get_all_scalers(self) -> dict[str, AdapterScaler]:
-        """
-        Get all fitted scalers.
-
-        Returns:
-            Dictionary mapping model name -> AdapterScaler.
-        """
-        return dict(self._scalers)
 
 
 # =============================================================================

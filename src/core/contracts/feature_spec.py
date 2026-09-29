@@ -131,12 +131,6 @@ class FeatureSpec:
         return len(self.selected_features)
 
     @property
-    def has_mtf_features(self) -> bool:
-        """Check if spec uses multiple timeframes."""
-        timeframes = set(self.feature_timeframes.values())
-        return len(timeframes) > 1
-
-    @property
     def unique_timeframes(self) -> list[str]:
         """Get list of unique timeframes used."""
         return sorted(set(self.feature_timeframes.values()))
@@ -238,31 +232,6 @@ class FeatureSpec:
             issues.append("model_name is required")
 
         return len(issues) == 0, issues
-
-    def with_trial_info(
-        self,
-        trial_id: int,
-        study_name: str = "",
-        metrics: dict[str, float] | None = None,
-    ) -> FeatureSpec:
-        """
-        Create a copy with Optuna trial information added.
-
-        Args:
-            trial_id: Optuna trial ID
-            study_name: Optuna study name
-            metrics: Validation metrics from the trial
-
-        Returns:
-            New FeatureSpec with trial info
-        """
-        data = self.to_dict()
-        data["optuna_trial_id"] = trial_id
-        if study_name:
-            data["optuna_study_name"] = study_name
-        if metrics:
-            data["validation_metrics"] = metrics
-        return FeatureSpec.from_dict(data)
 
     def __repr__(self) -> str:
         """Concise string representation."""

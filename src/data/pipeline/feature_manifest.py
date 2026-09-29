@@ -207,33 +207,6 @@ class FeatureManifest:
         """Number of label columns."""
         return len(self.label_columns)
 
-    def add_feature(
-        self,
-        name: str,
-        category: str,
-        params: dict[str, Any],
-        source_columns: list[str],
-    ) -> None:
-        """Register a feature with its computation parameters.
-
-        Args:
-            name: Feature name (e.g., 'rsi_14')
-            category: Feature category (e.g., 'momentum', 'volatility', 'mtf')
-            params: Computation parameters (e.g., {'period': 14, 'method': 'sma'})
-            source_columns: Input columns used to compute this feature
-        """
-        metadata = FeatureMetadata(
-            name=name,
-            category=category,
-            params=params,
-            source_columns=source_columns,
-        )
-        self.features[name] = metadata
-        # Also add to feature_columns if not present
-        if name not in self.feature_columns:
-            self.feature_columns.append(name)
-        logger.debug(f"Added feature '{name}' with category '{category}'")
-
     def get_feature_params(self, name: str) -> dict[str, Any] | None:
         """Get computation parameters for a feature.
 
@@ -248,17 +221,6 @@ class FeatureManifest:
             return None
         return metadata.params
 
-    def get_feature_metadata(self, name: str) -> FeatureMetadata | None:
-        """Get full metadata for a feature.
-
-        Args:
-            name: Feature name to look up
-
-        Returns:
-            FeatureMetadata instance, or None if feature not found
-        """
-        return self.features.get(name)
-
     def get_features_by_category(self, category: str) -> list[FeatureMetadata]:
         """Get all features in a specific category.
 
@@ -269,78 +231,6 @@ class FeatureManifest:
             List of FeatureMetadata instances in the category
         """
         return [meta for meta in self.features.values() if meta.category == category]
-
-    def to_reproducibility_record(self) -> dict[str, Any]:
-        """Export manifest for reproducibility tracking.
-
-        Creates a comprehensive record containing all information needed
-        to exactly reproduce the feature engineering process.
-
-        Returns:
-            Dictionary with complete reproducibility information
-        """
-        return {
-            "manifest_version": "2.0.0",  # Version with params support
-            "pipeline_version": self.pipeline_version,
-            "created_at": self.created_at,
-            "symbol": self.symbol,
-            "timeframe": self.timeframe,
-            "computation_config": self.computation_config,
-            "features": {
-                name: {
-                    "category": meta.category,
-                    "params": meta.params,
-                    "source_columns": meta.source_columns,
-                    "checksum": meta.checksum,
-                }
-                for name, meta in self.features.items()
-            },
-            "feature_count": len(self.feature_columns),
-            "label_columns": self.label_columns,
-            "timestamp_column": self.timestamp_column,
-        }
-
-    def validate_reproducibility(self, other: FeatureManifest) -> tuple[bool, list[str]]:
-        """Validate that another manifest can reproduce this one.
-
-        Compares feature checksums to detect parameter changes.
-
-        Args:
-            other: Another FeatureManifest to compare against
-
-        Returns:
-            Tuple of (is_reproducible, list of differences)
-        """
-        differences = []
-
-        # Check pipeline versions
-        if self.pipeline_version != other.pipeline_version:
-            differences.append(
-                f"Pipeline version mismatch: {self.pipeline_version} vs "
-                f"{other.pipeline_version}"
-            )
-
-        # Check computation configs
-        if self.computation_config != other.computation_config:
-            differences.append("Computation config differs")
-
-        # Check feature checksums
-        for name, meta in self.features.items():
-            other_meta = other.features.get(name)
-            if other_meta is None:
-                differences.append(f"Feature '{name}' missing in other manifest")
-            elif meta.checksum != other_meta.checksum:
-                differences.append(
-                    f"Feature '{name}' params differ: checksum "
-                    f"{meta.checksum} vs {other_meta.checksum}"
-                )
-
-        # Check for extra features in other
-        for name in other.features:
-            if name not in self.features:
-                differences.append(f"Extra feature '{name}' in other manifest")
-
-        return len(differences) == 0, differences
 
     def validate_dataframe(self, df: pd.DataFrame) -> tuple[bool, list[str]]:
         """Validate that a DataFrame contains expected columns.

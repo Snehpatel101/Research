@@ -80,15 +80,6 @@ class SessionConfig:
         """End time as minutes since midnight UTC."""
         return self.end_utc[0] * 60 + self.end_utc[1]
 
-    @property
-    def duration_minutes(self) -> int:
-        """Session duration in minutes."""
-        if self.crosses_midnight:
-            # Session spans midnight: e.g., 23:00 to 07:00
-            return (24 * 60 - self.start_minutes) + self.end_minutes
-        else:
-            return self.end_minutes - self.start_minutes
-
 
 # =============================================================================
 # SESSION DEFINITIONS (UTC times)

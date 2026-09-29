@@ -2,44 +2,6 @@
 
 from typing import Any
 
-from .exceptions import ConfigValidationError
-
-
-def validate_model_config_structure(config: dict[str, Any]) -> list[str]:
-    """Validate structured config (checks model/defaults/training/device sections)."""
-    errors = []
-
-    # Check for required sections
-    if "model" not in config:
-        errors.append("Missing required section: 'model'")
-    else:
-        model_section = config["model"]
-        if "name" not in model_section:
-            errors.append("Missing required field: model.name")
-        if "family" not in model_section:
-            errors.append("Missing required field: model.family")
-
-        # Validate family
-        valid_families = {"boosting", "neural", "transformer", "classical", "ensemble"}
-        if "family" in model_section and model_section["family"] not in valid_families:
-            errors.append(
-                f"Invalid model.family: {model_section['family']}. "
-                f"Must be one of: {valid_families}"
-            )
-
-    # Check device section
-    if "device" in config:
-        device_section = config["device"]
-        if "default" in device_section:
-            valid_devices = {"auto", "cuda", "cpu"}
-            if device_section["default"] not in valid_devices:
-                errors.append(
-                    f"Invalid device.default: {device_section['default']}. "
-                    f"Must be one of: {valid_devices}"
-                )
-
-    return errors
-
 
 def validate_config(config: dict[str, Any], model_name: str) -> list[str]:
     """Validate flattened config (checks ranges and valid values)."""
@@ -81,16 +43,4 @@ def validate_config(config: dict[str, Any], model_name: str) -> list[str]:
         if config["device"] not in valid_devices:
             errors.append(f"Invalid device: {config['device']}. Must be one of: {valid_devices}")
 
-    return errors
-
-
-def validate_config_strict(
-    config: dict[str, Any],
-    model_name: str,
-    raise_on_error: bool = True,
-) -> list[str]:
-    """Validate config and optionally raise ConfigValidationError."""
-    errors = validate_config(config, model_name)
-    if errors and raise_on_error:
-        raise ConfigValidationError(errors)
     return errors

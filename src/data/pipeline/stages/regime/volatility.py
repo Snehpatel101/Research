@@ -187,38 +187,6 @@ class VolatilityRegimeDetector(RegimeDetector):
 
         return regimes
 
-    def detect_with_thresholds(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
-        """
-        Detect regime and return threshold values for debugging.
-
-        Args:
-            df: DataFrame with OHLC data
-
-        Returns:
-            Tuple of (regimes, low_threshold, high_threshold)
-        """
-        self.validate_input(df)
-
-        # Get ATR values
-        if self.atr_column and self.atr_column in df.columns:
-            atr = df[self.atr_column].values
-        else:
-            atr = calculate_atr(
-                df["high"].values, df["low"].values, df["close"].values, self.atr_period
-            )
-
-        atr_series = pd.Series(atr, index=df.index)
-        low_threshold = atr_series.rolling(window=self.lookback, min_periods=1).quantile(
-            self.low_percentile / 100.0
-        )
-        high_threshold = atr_series.rolling(window=self.lookback, min_periods=1).quantile(
-            self.high_percentile / 100.0
-        )
-
-        regimes = self.detect(df)
-
-        return regimes, low_threshold, high_threshold
-
 
 __all__ = [
     "VolatilityRegimeDetector",

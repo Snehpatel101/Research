@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -32,19 +32,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
-    from src.models.base import BaseModel
-    from src.models.config.trainer_config import TrainerConfig
-    from src.optimization.feature_selection import FeatureSelectionManager
 
 logger = logging.getLogger(__name__)
-
-
-class _HasTrainerAttributes(Protocol):
-    """Protocol for classes that use TrainerFeaturesMixin."""
-
-    config: TrainerConfig
-    model: BaseModel | None
-    feature_selector: FeatureSelectionManager | None
 
 
 class TrainerFeaturesMixin:
@@ -229,54 +218,6 @@ class TrainerFeaturesMixin:
         return [
             col for col in df.columns if col not in METADATA_COLUMNS and not _is_label_column(col)
         ]
-
-    def _validate_features_for_model(
-        self,
-        feature_columns: list[str],
-    ) -> tuple[bool, list[str]]:
-        """
-        Validate feature set against model requirements.
-
-        Args:
-            feature_columns: List of feature column names
-
-        Returns:
-            (is_valid, list_of_warnings)
-        """
-        from src.core.contracts import get_model_contract
-        from src.data.features.strategies import get_strategy_for_model
-
-        warnings = []
-        strategy = get_strategy_for_model(self.config.model_name)
-
-        n_features = len(feature_columns)
-
-        # Check strategy bounds
-        if n_features < strategy.min_features:
-            warnings.append(
-                f"Feature count ({n_features}) below strategy minimum ({strategy.min_features})"
-            )
-
-        if n_features > strategy.max_features:
-            warnings.append(
-                f"Feature count ({n_features}) above strategy maximum ({strategy.max_features})"
-            )
-
-        # Check contract bounds
-        try:
-            contract = get_model_contract(self.config.model_name)
-            if n_features < contract.min_features:
-                warnings.append(
-                    f"Feature count ({n_features}) below contract minimum ({contract.min_features})"
-                )
-            if n_features > contract.max_features:
-                warnings.append(
-                    f"Feature count ({n_features}) above contract maximum ({contract.max_features})"
-                )
-        except ValueError:
-            pass  # No contract available, skip contract validation
-
-        return len(warnings) == 0, warnings
 
     def _resolve_feature_set_columns(self, df: pd.DataFrame) -> list[str] | None:
         """

@@ -168,51 +168,6 @@ class KellyCriterion(BasePositionSizer):
 
         return self._round_to_contracts(fractional_contracts)
 
-    def calculate_optimal_f(
-        self,
-        returns: np.ndarray,
-        method: str = "empirical",
-    ) -> float:
-        """
-        Calculate optimal f from historical returns.
-
-        Args:
-            returns: Array of trade returns (positive and negative)
-            method: Calculation method ('empirical' or 'parametric')
-
-        Returns:
-            Optimal fraction to risk
-        """
-        if len(returns) == 0:
-            return 0.0
-
-        if method == "empirical":
-            # Empirical Kelly from returns
-            wins = returns[returns > 0]
-            losses = returns[returns < 0]
-
-            if len(wins) == 0 or len(losses) == 0:
-                return 0.0
-
-            win_rate = len(wins) / len(returns)
-            avg_win = wins.mean()
-            avg_loss = abs(losses.mean())
-
-            return self.calculate_kelly_fraction(win_rate, avg_win, avg_loss)
-
-        elif method == "parametric":
-            # Parametric Kelly assuming normal returns
-            mean_return = returns.mean()
-            var_return = returns.var()
-
-            if var_return <= 0:
-                return 0.0
-
-            # For normal returns: f* = mu / sigma^2
-            return float(mean_return / var_return)
-
-        return 0.0
-
 
 @dataclass
 class FixedFractional(BasePositionSizer):
@@ -342,33 +297,6 @@ class VolatilityTargeted(BasePositionSizer):
         fractional_contracts = position_value / contract_notional
 
         return self._round_to_contracts(fractional_contracts)
-
-    def calculate_realized_volatility(
-        self,
-        returns: np.ndarray,
-        window: int = 20,
-    ) -> float:
-        """
-        Calculate realized volatility from returns.
-
-        Args:
-            returns: Array of returns
-            window: Lookback window
-
-        Returns:
-            Annualized volatility
-        """
-        if len(returns) < window:
-            return self.target_volatility
-
-        # Rolling standard deviation
-        recent_returns = returns[-window:]
-        daily_vol = np.std(recent_returns)
-
-        # Annualize
-        annualized_vol = daily_vol * np.sqrt(self.trading_days)
-
-        return float(annualized_vol)
 
 
 @dataclass

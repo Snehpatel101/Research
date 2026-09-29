@@ -1,5 +1,7 @@
 """
-InferenceOrchestrator - THE single entry point for all inference operations.
+InferenceOrchestrator - older inference interface (no in-repo consumers).
+
+Production inference goes through ``load_deploy_artifact`` / ``UniversalInferencePipeline``.
 
 Uses PipelineConfig from src/core as the ONLY configuration source.
 Integrates with PHASE_3 training and PHASE_4 ensemble results.
@@ -56,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 class InferenceOrchestrator:
     """
-    THE single entry point for all inference in the ML Factory.
+    Older inference interface; see ``load_deploy_artifact``.
 
     Uses PipelineConfig from src/core as the ONLY configuration source.
 

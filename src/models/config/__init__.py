@@ -41,15 +41,9 @@ from .merging import (
     merge_configs,
 )
 from .paths import CONFIG_DIR, CONFIG_ROOT
-from .per_model_config import EnsemblePlan, PerModelConfig
 from .serialization import save_config, save_config_json
 from .trainer_config import TrainerConfig
-from .utils import get_model_info, list_available_models
-from .validation import (
-    validate_config,
-    validate_config_strict,
-    validate_model_config_structure,
-)
+from .validation import validate_config
 
 __all__ = [
     # Paths
@@ -79,13 +73,8 @@ __all__ = [
     "validate_model_config",
     "get_all_model_names",
     "get_all_ensemble_names",
-    # Phase 1 SNwH: Per-model configuration
-    "PerModelConfig",
-    "EnsemblePlan",
     # Validation
-    "validate_model_config_structure",
     "validate_config",
-    "validate_config_strict",
     # Loaders
     "load_yaml_config",
     "load_model_config",
@@ -101,7 +90,4 @@ __all__ = [
     # Serialization
     "save_config",
     "save_config_json",
-    # Utils
-    "list_available_models",
-    "get_model_info",
 ]

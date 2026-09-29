@@ -331,21 +331,6 @@ class OOFCache:
         logger.info(f"Invalidated cache entry: {cache_key}")
         return True
 
-    def invalidate_model(self, model_name: str) -> int:
-        """
-        Remove all cached entries for a model.
-
-        Args:
-            model_name: Model name to invalidate
-
-        Returns:
-            Number of entries removed
-        """
-        keys_to_remove = [k for k, v in self._index.items() if v.model_name == model_name]
-        for key in keys_to_remove:
-            self.invalidate(key)
-        return len(keys_to_remove)
-
     def clear(self) -> int:
         """
         Clear all cached entries.

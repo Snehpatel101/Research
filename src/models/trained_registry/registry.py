@@ -109,11 +109,7 @@ class TrainedModelRegistry:
             ModelQuery()
             .model_name("xgboost")
             .horizon(20)
-            .min_metric("val_f1", 0.5)
         )
-
-        # Get best model
-        best = registry.get_best("xgboost", horizon=20, metric="val_f1")
     """
 
     def __init__(
@@ -217,23 +213,6 @@ class TrainedModelRegistry:
         logger.info(f"Registered model: {run_id} (val_f1={metrics.get('val_f1', 0):.4f})")
         return entry
 
-    def unregister(self, run_id: str) -> bool:
-        """
-        Remove a model from the registry.
-
-        Args:
-            run_id: The run ID to remove
-
-        Returns:
-            True if removed, False if not found
-        """
-        if run_id in self._entries:
-            del self._entries[run_id]
-            self._save_index()
-            logger.info(f"Unregistered model: {run_id}")
-            return True
-        return False
-
     def get(self, run_id: str) -> TrainedModelEntry | None:
         """
         Get a specific model entry by run ID.
@@ -274,114 +253,9 @@ class TrainedModelRegistry:
 
         return results
 
-    def get_best(
-        self,
-        model_name: str,
-        horizon: int,
-        metric: str = "val_f1",
-    ) -> TrainedModelEntry | None:
-        """
-        Get the best model for a given configuration.
-
-        Args:
-            model_name: Model name to filter by
-            horizon: Prediction horizon
-            metric: Metric to optimize (higher is better)
-
-        Returns:
-            Best TrainedModelEntry or None if none found
-        """
-        query = (
-            ModelQuery()
-            .model_name(model_name)
-            .horizon(horizon)
-            .sort_by(metric, descending=True)
-            .limit(1)
-        )
-        results = self.query(query)
-        return results[0] if results else None
-
     def list_all(self) -> list[TrainedModelEntry]:
         """Get all registered models."""
         return list(self._entries.values())
-
-    def list_by_model(self, model_name: str) -> list[TrainedModelEntry]:
-        """Get all models with given name."""
-        return [e for e in self._entries.values() if e.model_name == model_name]
-
-    def list_by_horizon(self, horizon: int) -> list[TrainedModelEntry]:
-        """Get all models with given horizon."""
-        return [e for e in self._entries.values() if e.horizon == horizon]
-
-    def rebuild_index(self, runs_dir: Path | str) -> int:
-        """
-        Rebuild index by scanning run directories.
-
-        Useful for recovering from corrupted index or indexing
-        existing models not yet in the registry.
-
-        Args:
-            runs_dir: Path to experiments/runs directory
-
-        Returns:
-            Number of models indexed
-        """
-        runs_dir = Path(runs_dir)
-        if not runs_dir.exists():
-            logger.warning(f"Runs directory not found: {runs_dir}")
-            return 0
-
-        count = 0
-        for run_path in runs_dir.iterdir():
-            if not run_path.is_dir():
-                continue
-
-            # Check if it looks like a valid run directory
-            config_path = run_path / "config" / "trainer_config.json"
-            if not config_path.exists():
-                continue
-
-            # Skip if already registered
-            if run_path.name in self._entries:
-                continue
-
-            try:
-                self.register(run_path)
-                count += 1
-            except Exception as e:
-                logger.warning(f"Failed to index {run_path}: {e}")
-
-        logger.info(f"Rebuilt index: {count} new models indexed")
-        return count
-
-    def validate_entries(self) -> dict[str, bool]:
-        """
-        Validate that all registered models still exist.
-
-        Returns:
-            Dict mapping run_id to validity status
-        """
-        results = {}
-        for run_id, entry in self._entries.items():
-            results[run_id] = entry.is_valid()
-        return results
-
-    def prune_invalid(self) -> int:
-        """
-        Remove entries for models that no longer exist.
-
-        Returns:
-            Number of entries removed
-        """
-        invalid_ids = [run_id for run_id, entry in self._entries.items() if not entry.is_valid()]
-        for run_id in invalid_ids:
-            del self._entries[run_id]
-
-        if invalid_ids:
-            self._save_index()
-            logger.info(f"Pruned {len(invalid_ids)} invalid entries")
-
-        return len(invalid_ids)
 
     def get_summary(self) -> dict[str, Any]:
         """

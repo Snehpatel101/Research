@@ -51,9 +51,7 @@ from src.models.config import (
     find_model_config,
     flatten_model_config,
     get_applied_overrides,
-    get_model_info,
     is_colab,
-    list_available_models,
     load_model_config,
     load_yaml_config,
     merge_configs,
@@ -61,8 +59,6 @@ from src.models.config import (
     save_config,
     save_config_json,
     validate_config,
-    validate_config_strict,
-    validate_model_config_structure,
 )
 
 __all__ = [
@@ -80,9 +76,7 @@ __all__ = [
     # TrainerConfig
     "TrainerConfig",
     # Validation
-    "validate_model_config_structure",
     "validate_config",
-    "validate_config_strict",
     # Loaders
     "load_yaml_config",
     "load_model_config",
@@ -98,7 +92,4 @@ __all__ = [
     # Serialization
     "save_config",
     "save_config_json",
-    # Utils
-    "list_available_models",
-    "get_model_info",
 ]

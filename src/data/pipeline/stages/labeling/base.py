@@ -193,35 +193,3 @@ class LabelingStrategy(ABC):
             metrics["max"] = float(np.max(valid_labels))
 
         return metrics
-
-    def add_labels_to_dataframe(
-        self, df: pd.DataFrame, result: LabelingResult, prefix: str = "label"
-    ) -> pd.DataFrame:
-        """
-        Add labeling results to the DataFrame as new columns.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            Original DataFrame
-        result : LabelingResult
-            Labeling result to add
-        prefix : str
-            Column name prefix (default: 'label')
-
-        Returns
-        -------
-        pd.DataFrame
-            DataFrame with new label columns added
-        """
-        horizon = result.horizon
-        df = df.copy()
-
-        # Add main label column
-        df[f"{prefix}_h{horizon}"] = result.labels
-
-        # Add metadata columns
-        for key, values in result.metadata.items():
-            df[f"{key}_h{horizon}"] = values
-
-        return df

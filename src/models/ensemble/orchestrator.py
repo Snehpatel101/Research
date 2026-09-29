@@ -56,7 +56,6 @@ from src.models.common.label_mapping import map_classes_to_labels
 # -> models.base -> models/__init__ -> models.ensemble -> orchestrator
 # -> cross_validation (CIRCULAR)
 if TYPE_CHECKING:
-    from src.models.training.unified_orchestrator import TrainingRunResult
     from src.validation.cv import OOFPrediction, StackingDataset
 else:
     # At runtime, use Protocol for type hints (structural typing)
@@ -397,58 +396,6 @@ class EnsembleOrchestrator:
 
         return self._result
 
-    def train_from_training_result(
-        self,
-        training_result: TrainingRunResult,
-    ) -> EnsembleResult:
-        """
-        Train ensemble from PHASE_3 TrainingRunResult.
-
-        Convenience method that extracts OOF predictions from training result.
-        This enables direct integration with UnifiedTrainingOrchestrator output.
-
-        Args:
-            training_result: Result from UnifiedTrainingOrchestrator.train()
-
-        Returns:
-            EnsembleResult
-
-        Raises:
-            ValueError: If no OOF predictions found in training result
-        """
-        # Extract OOF predictions from model results
-        oof_predictions: dict[str, OOFPrediction] = {}
-        y_train: np.ndarray | None = None
-
-        for _key, model_result in training_result.model_results.items():
-            if model_result.oof_prediction is not None:
-                oof_predictions[model_result.model_name] = model_result.oof_prediction
-
-                # Extract y_train from first OOF prediction's y_true column
-                if y_train is None:
-                    oof_df = model_result.oof_prediction.predictions
-                    if "y_true" in oof_df.columns:
-                        y_train = oof_df["y_true"].values
-
-        if not oof_predictions:
-            raise ValueError("No OOF predictions found in training result")
-
-        if y_train is None:
-            # Try to extract from aligned_oof if available
-            if training_result.aligned_oof is not None:
-                raise ValueError(
-                    "Cannot extract y_train from OOF predictions. "
-                    "Please provide y_train explicitly via train() method."
-                )
-            raise ValueError(
-                "Cannot extract y_train from OOF predictions. "
-                "Ensure OOF predictions include 'y_true' column."
-            )
-
-        logger.info(f"Extracted {len(oof_predictions)} OOF predictions from TrainingRunResult")
-
-        return self.train(oof_predictions, y_train)
-
     def predict(
         self,
         base_predictions: dict[str, np.ndarray],
@@ -673,11 +620,6 @@ class EnsembleOrchestrator:
     def result(self) -> EnsembleResult | None:
         """Get training result."""
         return self._result
-
-    @property
-    def is_trained(self) -> bool:
-        """Check if ensemble has been trained."""
-        return self._ensemble is not None
 
 
 # =============================================================================

@@ -279,8 +279,6 @@ class PeriodScaler:
     Examples
     --------
     >>> scaler = PeriodScaler('15min')
-    >>> scaler.get_period('rsi')
-    5
     >>> scaler.get_periods('sma')
     [3, 7, 17, 33, 67]
     """
@@ -297,20 +295,6 @@ class PeriodScaler:
                 f"Unknown indicator: '{indicator}'. " f"Available: {list(self._config.keys())}"
             )
         return self._config[indicator]
-
-    def get_period(self, indicator: str, index: int = 0) -> int:
-        """Get a specific scaled period for an indicator."""
-        periods = self.get_periods(indicator)
-        if index >= len(periods):
-            raise IndexError(
-                f"Period index {index} out of range for '{indicator}' "
-                f"(has {len(periods)} periods)"
-            )
-        return periods[index]
-
-    def scale_custom_period(self, period: int) -> int:
-        """Scale a custom period from base_tf to target_tf."""
-        return scale_period(period, self.base_tf, self.target_tf)
 
     @property
     def config(self) -> dict[str, list[int]]:

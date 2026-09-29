@@ -15,26 +15,15 @@ Integrates with:
 - src/adapters/alignment.py - OOFAligner for heterogeneous models (PHASE_2)
 
 Usage:
-    # Create from EnsembleResult (after training)
-    from src.models.ensemble import EnsembleOrchestrator, EnsembleResult
+    # Bundles are written by BundleBuilder during MLFactory.run()
     from src.inference import EnsembleBundle
-
-    orchestrator = EnsembleOrchestrator(config)
-    ensemble_result = orchestrator.train(oof_predictions, y_train)
-
-    bundle = EnsembleBundle.from_ensemble_result(
-        ensemble_result,
-        base_bundle_paths=[Path("./bundles/xgb"), Path("./bundles/lstm")],
-        config=config,
-    )
-    bundle.save("./bundles/ensemble_h20")
 
     # Load and predict
     bundle = EnsembleBundle.load("./bundles/ensemble_h20")
     predictions = bundle.predict(base_predictions)
 
-    # End-to-end prediction with base bundles
-    predictions = bundle.predict_from_base_features(X_test)
+    # End-to-end prediction from raw OHLCV
+    predictions = bundle.predict_from_raw(ohlcv_df)
 """
 
 from __future__ import annotations
@@ -44,7 +33,6 @@ import logging
 import pickle
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -54,9 +42,7 @@ import pandas as pd
 from src.data.adapters.alignment import compute_vote_agreement
 
 if TYPE_CHECKING:
-    from src.core import PipelineConfig
     from src.core.interfaces import PredictionResult
-    from src.models.ensemble.orchestrator import EnsembleResult
 
 logger = logging.getLogger(__name__)
 
@@ -214,16 +200,12 @@ class EnsembleBundle:
             meta_learner/               # Meta-learner artifacts
 
     Usage:
-        # Create from EnsembleResult
-        bundle = EnsembleBundle.from_ensemble_result(ensemble_result)
-        bundle.save("./bundles/ensemble_h20")
-
         # Load and predict
         bundle = EnsembleBundle.load("./bundles/ensemble_h20")
         predictions = bundle.predict(base_predictions)
 
-        # End-to-end prediction
-        predictions = bundle.predict_from_base_features(X_test)
+        # End-to-end prediction from raw OHLCV
+        predictions = bundle.predict_from_raw(ohlcv_df)
     """
 
     def __init__(
@@ -255,144 +237,6 @@ class EnsembleBundle:
 
         # Loaded base bundles (lazy load)
         self._base_bundles: dict[str, Any] = {}
-
-    @classmethod
-    def from_ensemble_result(
-        cls,
-        ensemble_result: EnsembleResult,
-        base_bundle_paths: list[Path] | None = None,
-        config: PipelineConfig | None = None,
-        scaler: Any | None = None,
-    ) -> EnsembleBundle:
-        """
-        Create bundle from PHASE_4 EnsembleResult.
-
-        Args:
-            ensemble_result: Result from EnsembleOrchestrator.train()
-            base_bundle_paths: Paths to base model bundles
-            config: Optional PipelineConfig
-            scaler: Optional fitted scaler for stacking features
-
-        Returns:
-            EnsembleBundle ready for saving
-        """
-        # Extract meta-learner from orchestrator
-        # The ensemble_result stores the trained meta-learner
-        meta_learner = None
-
-        # Try different attribute names for meta-learner
-        if hasattr(ensemble_result, "_ensemble"):
-            meta_learner = ensemble_result._ensemble
-        elif hasattr(ensemble_result, "ensemble"):
-            meta_learner = ensemble_result.ensemble
-
-        if meta_learner is None:
-            logger.warning(
-                "Could not extract meta-learner from EnsembleResult. "
-                "Ensure the orchestrator.ensemble property is accessible."
-            )
-
-        # Extract stacking feature names from aligned OOF
-        stacking_feature_names: list[str] = []
-        if ensemble_result.aligned_oof is not None:
-            aligned = ensemble_result.aligned_oof
-            if hasattr(aligned, "get_feature_names"):
-                stacking_feature_names = aligned.get_feature_names()
-
-        # Determine n_stacking_features
-        n_stacking_features = len(stacking_feature_names)
-        if n_stacking_features == 0 and ensemble_result.stacking_dataset is not None:
-            # Get from stacking dataset shape
-            stacking_data = ensemble_result.stacking_dataset.data
-            # Exclude y_true and datetime columns
-            feature_cols = [c for c in stacking_data.columns if c not in ("y_true", "datetime")]
-            n_stacking_features = len(feature_cols)
-            stacking_feature_names = feature_cols
-
-        # Build alignment config from aligned_oof
-        alignment_config = AlignmentConfig()
-        if ensemble_result.aligned_oof is not None:
-            aligned = ensemble_result.aligned_oof
-            alignment_config.n_classes = getattr(aligned, "n_classes", 3)
-            # Store coverage info for each model
-            if hasattr(aligned, "coverage"):
-                alignment_config.model_offsets = dict.fromkeys(ensemble_result.base_model_names, 0)
-
-        # Extract horizon from config or default
-        horizon = 20
-        if config is not None and config.horizons:
-            horizon = config.horizons[0]
-
-        # Extract symbol from config
-        symbol = ""
-        if config is not None:
-            symbol = getattr(config, "symbol", "")
-
-        metadata = EnsembleBundleMetadata(
-            version=ENSEMBLE_BUNDLE_VERSION,
-            created_at=datetime.now().isoformat(),
-            meta_learner_name=ensemble_result.meta_learner_name,
-            base_model_names=ensemble_result.base_model_names,
-            horizon=horizon,
-            n_base_models=ensemble_result.n_base_models,
-            n_stacking_features=n_stacking_features,
-            symbol=symbol,
-            coverage=ensemble_result.coverage,
-            alignment_offset=ensemble_result.alignment_offset,
-            metrics=ensemble_result.metrics,
-        )
-
-        return cls(
-            meta_learner=meta_learner,
-            metadata=metadata,
-            base_bundle_paths=base_bundle_paths or [],
-            stacking_feature_names=stacking_feature_names,
-            scaler=scaler,
-            alignment_config=alignment_config,
-        )
-
-    @classmethod
-    def from_orchestrator(
-        cls,
-        orchestrator: Any,
-        base_bundle_paths: list[Path] | None = None,
-        scaler: Any | None = None,
-    ) -> EnsembleBundle:
-        """
-        Create bundle directly from EnsembleOrchestrator after training.
-
-        This is a convenience method that extracts both the result and
-        the trained meta-learner from the orchestrator.
-
-        Args:
-            orchestrator: Trained EnsembleOrchestrator instance
-            base_bundle_paths: Paths to base model bundles
-            scaler: Optional fitted scaler for stacking features
-
-        Returns:
-            EnsembleBundle ready for saving
-
-        Raises:
-            ValueError: If orchestrator has not been trained
-        """
-        if not orchestrator.is_trained:
-            raise ValueError("Orchestrator has not been trained. Call train() first.")
-
-        result = orchestrator.result
-        config = orchestrator.config
-
-        # Create bundle from result
-        bundle = cls.from_ensemble_result(
-            ensemble_result=result,
-            base_bundle_paths=base_bundle_paths,
-            config=config,
-            scaler=scaler,
-        )
-
-        # Override meta_learner with the actual trained model
-        bundle.meta_learner = orchestrator.ensemble
-
-        return bundle
 
     def save(self, path: str | Path, overwrite: bool = False) -> Path:
         """
@@ -646,59 +490,6 @@ class EnsembleBundle:
         output = self.predict(base_predictions, calibrate=False)
         result: np.ndarray = output.class_probabilities
         return result
-
-    def predict_classes(
-        self,
-        base_predictions: dict[str, np.ndarray],
-    ) -> np.ndarray:
-        """
-        Get class predictions from base model outputs.
-
-        Args:
-            base_predictions: Dict mapping model_name -> probability array
-
-        Returns:
-            Class prediction array of shape (n_samples,)
-        """
-        output = self.predict(base_predictions, calibrate=False)
-        result: np.ndarray = output.class_predictions
-        return result
-
-    def predict_from_base_features(
-        self,
-        X: pd.DataFrame | np.ndarray,
-        calibrate: bool = True,
-    ) -> PredictionResult:
-        """
-        End-to-end prediction from base features.
-
-        Loads base bundles, gets predictions, then combines with meta-learner.
-
-        Args:
-            X: Input features for base models
-            calibrate: Whether to apply calibration
-
-        Returns:
-            PredictionResult with class predictions and probabilities
-
-        Raises:
-            ValueError: If base bundles not available
-        """
-        # Load base bundles if needed
-        self._ensure_base_bundles_loaded()
-
-        if not self._base_bundles:
-            raise ValueError("No base bundles loaded. Ensure base_bundle_paths are valid.")
-
-        # Get predictions from each base model
-        base_predictions: dict[str, np.ndarray] = {}
-
-        for model_name, bundle in self._base_bundles.items():
-            output = bundle.predict(X, calibrate=False)
-            base_predictions[model_name] = output.class_probabilities
-
-        # Combine with meta-learner
-        return self.predict(base_predictions, calibrate=calibrate)
 
     def predict_from_raw(
         self,

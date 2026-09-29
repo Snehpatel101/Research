@@ -8,7 +8,6 @@ This module provides:
 - TimeSeriesDataContainer: Unified container for Phase 2 model training
 - SequenceDataset: PyTorch Dataset for sequence models (3D)
 - MultiResolution4DDataset: PyTorch Dataset for multi-timeframe models (4D)
-- validate_model_ready: Comprehensive validation for model training readiness
 
 Usage:
 ------
@@ -33,15 +32,6 @@ Usage:
     # Get Multi-Resolution 4D sequences
     dataset_4d = container.get_multi_resolution_4d("train", seq_len=60)
     # X_4d shape: (batch, n_timeframes, seq_len, n_features)
-
-    # Get NeuralForecast format
-    nf_df = container.get_neuralforecast_df("train")
-
-    # Validate model readiness
-    from src.data.pipeline.stages.datasets import validate_model_ready, ValidationResult
-    result = validate_model_ready(container)
-    if not result.is_valid:
-        raise ValueError(f"Validation failed: {result.errors}")
 """
 
 # Import from canonical location (src/core/)
@@ -58,7 +48,6 @@ from src.core.datasets.sequences import (
     SequenceConfig,
     SequenceDataset,
     build_sequence_indices,
-    create_sequence_dataset,
     find_symbol_boundaries,
 )
 
@@ -74,10 +63,6 @@ from src.data.pipeline.stages.datasets.run import (
     run_build_datasets,
     validate_feature_schema,
 )
-from src.data.pipeline.stages.datasets.validators import (
-    ValidationResult,
-    validate_model_ready,
-)
 from src.data.pipeline.utils.constants import LABEL_PREFIXES
 
 __all__ = [
@@ -90,16 +75,13 @@ __all__ = [
     # Sequence classes (3D)
     "SequenceDataset",
     "SequenceConfig",
-    "create_sequence_dataset",
     # Multi-Resolution classes (4D)
     "MultiResolution4DAdapter",
     "MultiResolution4DConfig",
     "MultiResolution4DDataset",
     "create_multi_resolution_dataset",
     # Validation
-    "validate_model_ready",
     "validate_feature_schema",
-    "ValidationResult",
     "FeatureSchemaError",
     # Utility functions
     "build_sequence_indices",

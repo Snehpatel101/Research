@@ -522,27 +522,6 @@ class CVIntegratedFeatureSelector:
         self.n_features = n_features
         self.min_frequency = min_frequency
 
-    def select_single_fold(
-        self,
-        X_train: pd.DataFrame,
-        y_train: pd.Series,
-        sample_weights: pd.Series | None = None,
-    ) -> list[str]:
-        """
-        Select top N features for a single fold.
-
-        Args:
-            X_train: Training features
-            y_train: Training labels
-            sample_weights: Optional sample weights
-
-        Returns:
-            List of selected feature names
-        """
-        importance = self.selector._compute_importance(X_train, y_train, sample_weights)
-        result: list[str] = importance.nlargest(self.n_features).index.tolist()
-        return result
-
 
 __all__ = [
     "WalkForwardFeatureSelector",

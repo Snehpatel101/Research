@@ -315,82 +315,6 @@ def get_barrier_params(
     }
 
 
-def validate_barrier_params() -> list[str]:
-    """
-    Validate all barrier parameter configurations.
-
-    Returns
-    -------
-    list[str]
-        List of validation error messages (empty if valid)
-    """
-    errors = []
-
-    # Validate symbol-specific barrier params
-    for symbol, horizons in BARRIER_PARAMS.items():
-        for horizon, params in horizons.items():
-            k_up = params.get("k_up", 0)
-            k_down = params.get("k_down", 0)
-            max_bars = params.get("max_bars", 0)
-            if isinstance(k_up, (int, float)) and k_up <= 0:
-                errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['k_up'] must be positive")
-            if isinstance(k_down, (int, float)) and k_down <= 0:
-                errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['k_down'] must be positive")
-            if isinstance(max_bars, int) and max_bars <= 0:
-                errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['max_bars'] must be positive")
-
-    # Validate default barrier params
-    for horizon, params in BARRIER_PARAMS_DEFAULT.items():
-        k_up = params.get("k_up", 0)
-        k_down = params.get("k_down", 0)
-        max_bars = params.get("max_bars", 0)
-        if isinstance(k_up, (int, float)) and k_up <= 0:
-            errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['k_up'] must be positive")
-        if isinstance(k_down, (int, float)) and k_down <= 0:
-            errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['k_down'] must be positive")
-        if isinstance(max_bars, int) and max_bars <= 0:
-            errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['max_bars'] must be positive")
-
-    # Validate transaction costs
-    for symbol, cost in TRANSACTION_COSTS.items():
-        if cost < 0:
-            errors.append(f"TRANSACTION_COSTS['{symbol}'] must be non-negative, got {cost}")
-
-    # Validate slippage costs
-    for symbol, regimes in SLIPPAGE_TICKS.items():
-        if not isinstance(regimes, dict):
-            errors.append(
-                f"SLIPPAGE_TICKS['{symbol}'] must be a dict with 'low_vol' and 'high_vol' keys"
-            )
-            continue
-
-        for regime in ("low_vol", "high_vol"):
-            if regime not in regimes:
-                errors.append(f"SLIPPAGE_TICKS['{symbol}'] missing '{regime}' regime")
-            elif regimes[regime] < 0:
-                errors.append(
-                    f"SLIPPAGE_TICKS['{symbol}']['{regime}'] must be non-negative, got {regimes[regime]}"
-                )
-
-        # High volatility slippage should be >= low volatility slippage
-        if (
-            "low_vol" in regimes
-            and "high_vol" in regimes
-            and regimes["high_vol"] < regimes["low_vol"]
-        ):
-            errors.append(
-                f"SLIPPAGE_TICKS['{symbol}']['high_vol'] ({regimes['high_vol']}) should be >= "
-                f"'low_vol' ({regimes['low_vol']})"
-            )
-
-    # Validate tick values
-    for symbol, value in TICK_VALUES.items():
-        if value <= 0:
-            errors.append(f"TICK_VALUES['{symbol}'] must be positive, got {value}")
-
-    return errors
-
-
 def get_slippage_ticks(symbol: str, regime: str = "low_vol") -> float:
     """
     Get slippage estimate in ticks for a symbol and volatility regime.
@@ -462,46 +386,6 @@ def get_total_trade_cost(
     return commission + total_slippage
 
 
-def get_max_bars_across_all_params() -> tuple[int, str]:
-    """
-    Get the maximum max_bars value across all barrier configurations.
-
-    Returns
-    -------
-    tuple[int, str]
-        (max_max_bars, source) - The maximum value and its source location
-    """
-    max_max_bars = 0
-    max_bars_source: str = ""
-
-    # Check symbol-specific barrier params
-    for symbol, horizons in BARRIER_PARAMS.items():
-        for horizon, params in horizons.items():
-            mb_val = params.get("max_bars", 0)
-            mb = mb_val if isinstance(mb_val, int) else 0
-            if mb > max_max_bars:
-                max_max_bars = mb
-                max_bars_source = f"BARRIER_PARAMS['{symbol}'][{horizon}]"
-
-    # Check default barrier params
-    for horizon, params in BARRIER_PARAMS_DEFAULT.items():
-        mb_val = params.get("max_bars", 0)
-        mb = mb_val if isinstance(mb_val, int) else 0
-        if mb > max_max_bars:
-            max_max_bars = mb
-            max_bars_source = f"BARRIER_PARAMS_DEFAULT[{horizon}]"
-
-    # Check percentage barrier params
-    for horizon, pct_params in PERCENTAGE_BARRIER_PARAMS.items():
-        mb_val = pct_params.get("max_bars", 0)
-        mb = mb_val if isinstance(mb_val, int) else 0
-        if mb > max_max_bars:
-            max_max_bars = mb
-            max_bars_source = f"PERCENTAGE_BARRIER_PARAMS[{horizon}]"
-
-    return max_max_bars, max_bars_source
-
-
 def get_tick_value(symbol: str) -> float:
     """
     Get the tick value in dollars for a symbol.
@@ -521,24 +405,3 @@ def get_tick_value(symbol: str) -> float:
     Unknown symbols use DEFAULT_TICK_VALUE.
     """
     return TICK_VALUES.get(symbol, DEFAULT_TICK_VALUE)
-
-
-def get_transaction_cost(symbol: str) -> float:
-    """
-    Get the round-trip transaction cost in ticks for a symbol.
-
-    Parameters
-    ----------
-    symbol : str
-        Symbol name (any valid symbol)
-
-    Returns
-    -------
-    float
-        Transaction cost in ticks (round-trip)
-
-    Notes
-    -----
-    Unknown symbols use DEFAULT_TRANSACTION_COST.
-    """
-    return TRANSACTION_COSTS.get(symbol, DEFAULT_TRANSACTION_COST)

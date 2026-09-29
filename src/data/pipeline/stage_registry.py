@@ -34,7 +34,6 @@ class StageName(StrEnum):
     VALIDATE_SCALED = "validate_scaled"
     VALIDATE = "validate"
     GENERATE_REPORT = "generate_report"
-    EVALUATION = "evaluation"  # Phase 43: Post-training evaluation
 
 
 @dataclass
@@ -167,26 +166,4 @@ def get_stage_definitions() -> list[dict]:
             "required": True,
             "stage_number": 9,
         },
-        # Phase 43: Stage 10 is optional, runs after model training
-        # Not included in default pipeline - must be explicitly called
-        # {
-        #     "name": StageName.EVALUATION.value,
-        #     "dependencies": [StageName.GENERATE_REPORT.value],
-        #     "description": "Stage 10: Post-training model evaluation",
-        #     "required": False,
-        #     "stage_number": 10,
-        # },
     ]
-
-
-def get_stage_order() -> list[str]:
-    """Get ordered list of stage names."""
-    return [s["name"] for s in get_stage_definitions()]
-
-
-def get_stage_by_name(name: str) -> dict | None:
-    """Get stage definition by name."""
-    for stage in get_stage_definitions():
-        if stage["name"] == name:
-            return stage
-    return None

@@ -14,7 +14,6 @@ Public API:
     - run_optuna_optimization_safe: SAFE Optuna TPE (train data only)
     - process_symbol_ga: Run optimization for all horizons for a symbol
     - calculate_fitness: Fitness function for label quality
-    - evaluate_individual: Evaluate parameter set
     - plot_convergence: Plot optimization convergence curve
     - main: Entry point for Stage 5
 
@@ -25,12 +24,8 @@ CRITICAL - Test Data Leakage Prevention:
     labeling parameters were tuned on data that will later become the test set.
 """
 
-from .fitness import calculate_fitness, evaluate_individual
-from .operators import (
-    check_bounds,
-    get_contiguous_subset,
-    get_seeded_individuals,
-)
+from .fitness import calculate_fitness
+from .operators import get_contiguous_subset
 from .optimization import process_symbol_ga, run_ga_optimization, run_ga_optimization_safe
 from .optuna_optimizer import (
     ConvergenceRecord,
@@ -49,11 +44,8 @@ __all__ = [
     "main",
     # Fitness
     "calculate_fitness",
-    "evaluate_individual",
     # Helpers
     "get_contiguous_subset",
-    "check_bounds",
-    "get_seeded_individuals",
     # Optuna types
     "ConvergenceRecord",
     # Plotting

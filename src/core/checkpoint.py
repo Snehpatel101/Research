@@ -249,34 +249,6 @@ class PipelineCheckpointManager:
             logger.warning(f"Failed to load checkpoint: {e}")
             return None
 
-    def load_checkpoint(self, stage_index: int) -> CheckpointState | None:
-        """
-        Load a specific checkpoint by stage index.
-
-        Args:
-            stage_index: Zero-based index of the stage to load
-
-        Returns:
-            CheckpointState if found, None otherwise
-        """
-        # Find checkpoint file for this stage
-        pattern = f"checkpoint_{stage_index:03d}_*.json"
-        matches = list(self.checkpoint_dir.glob(pattern))
-
-        if not matches:
-            logger.debug(f"No checkpoint found for stage {stage_index}")
-            return None
-
-        checkpoint_path = matches[0]
-
-        try:
-            with open(checkpoint_path) as f:
-                data = json.load(f)
-            return CheckpointState.from_dict(data)
-        except Exception as e:
-            logger.warning(f"Failed to load checkpoint {checkpoint_path}: {e}")
-            return None
-
     def has_checkpoint(self) -> bool:
         """
         Check if any checkpoint exists.

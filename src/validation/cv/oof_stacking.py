@@ -488,33 +488,6 @@ class HeterogeneousStackingBuilder:
 
         return X_stack, y_aligned, weights_aligned
 
-    def get_alignment_summary(self) -> dict[str, Any]:
-        """
-        Get summary of the last alignment operation.
-
-        Returns:
-            Dictionary with alignment details:
-                - common_start: Start index of common range
-                - common_end: End index of common range
-                - n_common: Number of common samples
-                - model_coverages: Coverage info per model
-                - issues: Any alignment issues detected
-        """
-        if self._alignment_result is None:
-            return {"error": "No alignment performed yet. Call build_stacking_dataset first."}
-
-        return {
-            "common_start": self._alignment_result.common_start_idx,
-            "common_end": self._alignment_result.common_end_idx,
-            "n_common": self._alignment_result.n_common_samples,
-            "is_aligned": self._alignment_result.is_aligned,
-            "sample_counts": self._alignment_result.sample_counts,
-            "offsets": self._alignment_result.offsets,
-            "issues": self._alignment_result.issues,
-            "purge_bars": self.purge_bars,
-            "embargo_bars": self.embargo_bars,
-        }
-
 
 __all__ = [
     "StackingDataset",

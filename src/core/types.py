@@ -42,24 +42,6 @@ class DataRank(int, Enum):
     SEQUENCE_3D = 3
     MULTI_TF_4D = 4
 
-    @classmethod
-    def from_model(cls, model_name: str) -> DataRank:
-        """Get the expected data rank for a model."""
-        from src.core.constants import MODEL_DATA_RANKS
-
-        rank = MODEL_DATA_RANKS.get(model_name.lower())
-        if rank is None:
-            raise ValueError(f"Unknown model: {model_name}")
-        return cls(rank)
-
-    @classmethod
-    def from_ndim(cls, ndim: int) -> DataRank:
-        """Get DataRank from array dimensions."""
-        for rank in cls:
-            if rank.value == ndim:
-                return rank
-        raise ValueError(f"Unsupported array dimension: {ndim}. Must be 2, 3, or 4.")
-
 
 # =============================================================================
 # MODEL FAMILY - Groupings of models with similar characteristics
@@ -82,16 +64,6 @@ class ModelFamily(StrEnum):
     ENSEMBLE = "ensemble"
     META_LEARNER = "meta_learner"
     TRANSFORMER = "transformer"
-
-    @classmethod
-    def from_model(cls, model_name: str) -> ModelFamily:
-        """Get the family for a model."""
-        from src.core.constants import MODEL_TO_FAMILY
-
-        family = MODEL_TO_FAMILY.get(model_name.lower())
-        if family is None:
-            raise ValueError(f"Unknown model: {model_name}")
-        return cls(family)
 
 
 # =============================================================================
@@ -195,14 +167,6 @@ class AdapterType(StrEnum):
     TABULAR = "tabular"
     SEQUENCE = "sequence"
     MULTI_STREAM = "multi_stream"
-
-    @classmethod
-    def from_rank(cls, rank: int) -> AdapterType:
-        """Get adapter type from data rank."""
-        mapping = {2: cls.TABULAR, 3: cls.SEQUENCE, 4: cls.MULTI_STREAM}
-        if rank not in mapping:
-            raise ValueError(f"Invalid rank: {rank}. Must be 2, 3, or 4.")
-        return mapping[rank]
 
 
 # =============================================================================

@@ -410,7 +410,7 @@ def run_optuna_optimization(
         include_slippage=include_slippage,
     )
 
-    # Calculate asymmetry_bonus (must match logic in fitness.py evaluate_individual)
+    # Calculate asymmetry_bonus
     avg_k = (best_k_up + best_k_down) / 2.0
     if symbol == "MGC":
         # MGC: Strict symmetry - penalize asymmetry > 10%

@@ -356,27 +356,6 @@ class SequenceDataset(Dataset):
         """Sequence length."""
         return self.config.seq_len
 
-    @property
-    def feature_shape(self) -> tuple[int, int]:
-        """Shape of feature tensor: (seq_len, n_features)."""
-        return (self.config.seq_len, self.n_features)
-
-    def get_all_labels(self) -> np.ndarray:
-        """Get all labels for the valid sequences (for stratification)."""
-        target_indices = self._indices + self.config.seq_len - 1
-        return np.asarray(self._labels[target_indices])
-
-    def get_all_weights(self) -> np.ndarray:
-        """Get all weights for the valid sequences."""
-        target_indices = self._indices + self.config.seq_len - 1
-        return np.asarray(self._weights[target_indices])
-
-    def get_label_distribution(self) -> dict[int, int]:
-        """Get label value counts for valid sequences."""
-        labels = self.get_all_labels()
-        unique, counts = np.unique(labels, return_counts=True)
-        return dict(zip(unique.tolist(), counts.tolist(), strict=False))
-
     def __repr__(self) -> str:
         return (
             f"SequenceDataset(n_sequences={len(self)}, "
@@ -388,40 +367,3 @@ class SequenceDataset(Dataset):
 # =============================================================================
 # FACTORY FUNCTION
 # =============================================================================
-
-
-def create_sequence_dataset(
-    df: pd.DataFrame,
-    feature_columns: list[str],
-    label_column: str,
-    seq_len: int,
-    weight_column: str | None = None,
-    symbol_column: str | None = "symbol",
-    stride: int = 1,
-) -> SequenceDataset:
-    """
-    Factory function to create SequenceDataset.
-
-    Convenience wrapper around SequenceDataset constructor.
-
-    Args:
-        df: Source DataFrame
-        feature_columns: List of feature column names
-        label_column: Target/label column name
-        seq_len: Sequence length
-        weight_column: Sample weight column (optional)
-        symbol_column: Symbol column for isolation (default "symbol")
-        stride: Step between sequences (default 1)
-
-    Returns:
-        SequenceDataset instance
-    """
-    return SequenceDataset(
-        df=df,
-        feature_columns=feature_columns,
-        label_column=label_column,
-        seq_len=seq_len,
-        weight_column=weight_column,
-        symbol_column=symbol_column,
-        stride=stride,
-    )

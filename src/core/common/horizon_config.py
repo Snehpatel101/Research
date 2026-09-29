@@ -19,7 +19,6 @@ Usage:
         get_scaled_horizons,
         auto_scale_purge_embargo,
         compute_embargo_bars,  # NEW: timeframe-aware embargo calculation
-        get_default_barrier_params_for_horizon,
         EMBARGO_TIME_MINUTES,  # NEW: embargo specified in calendar time
     )
 """
@@ -27,9 +26,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass, field
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +35,6 @@ logger = logging.getLogger(__name__)
 # SUPPORTED AND ACTIVE HORIZONS
 # =============================================================================
 # Static defaults — no dependency on global_config at import time.
-# Use get_config_horizons() for dynamic lookups that respect global_config.
 SUPPORTED_HORIZONS: list[int] = [1, 5, 10, 15, 20, 30, 60, 120]
 HORIZONS: list[int] = [5, 10, 15, 20]
 
@@ -46,30 +42,6 @@ HORIZONS: list[int] = [5, 10, 15, 20]
 LOOKBACK_HORIZONS: list[int] = [1, 5, 20]
 ACTIVE_HORIZONS: list[int] = [5, 10, 15, 20]
 LABEL_HORIZONS: list[int] = ACTIVE_HORIZONS
-
-
-def get_config_horizons() -> dict[str, list[int]]:
-    """
-    Dynamically fetch horizon lists from global_config at call time.
-
-    Returns a dict with 'supported' and 'active' keys. Falls back to the
-    static module-level defaults when global_config is unavailable.
-    """
-    try:
-        from src.config.global_config import get_global_config
-
-        config = get_global_config()
-        supported = getattr(getattr(config, "horizons", None), "supported", None)
-        active = getattr(getattr(config, "horizons", None), "active", None)
-        return {
-            "supported": list(supported) if supported is not None else list(SUPPORTED_HORIZONS),
-            "active": list(active) if active is not None else list(HORIZONS),
-        }
-    except Exception:
-        return {
-            "supported": list(SUPPORTED_HORIZONS),
-            "active": list(HORIZONS),
-        }
 
 
 # =============================================================================
@@ -382,57 +354,6 @@ def auto_scale_purge_embargo(
 
 
 # =============================================================================
-# DEFAULT BARRIER PARAMETER GENERATION
-# =============================================================================
-def get_default_barrier_params_for_horizon(horizon: int) -> dict[str, Any]:
-    """
-    Generate default barrier parameters for a non-standard horizon.
-
-    For horizons not explicitly defined in BARRIER_PARAMS_DEFAULT, this function
-    calculates reasonable defaults based on horizon scaling patterns.
-
-    Parameters:
-    -----------
-    horizon : int
-        Horizon value
-
-    Returns:
-    --------
-    dict : Barrier parameters with 'k_up', 'k_down', 'max_bars', 'description'
-
-    Notes:
-    ------
-    - k values scale logarithmically with horizon
-    - max_bars = horizon * 2.5 (allows time for barrier hits)
-    - Uses symmetric barriers by default
-
-    Examples:
-    ---------
-    >>> get_default_barrier_params_for_horizon(30)
-    {'k_up': 1.8, 'k_down': 1.8, 'max_bars': 75, 'description': 'H30: Auto-generated defaults'}
-    """
-    if horizon <= 0:
-        raise ValueError(f"Horizon must be positive, got {horizon}")
-
-    # k values scale logarithmically: more bars = wider barriers
-    # Base: H5 uses k~1.2, H20 uses k~2.5
-    # Formula: k = 0.8 + 0.4 * log2(horizon)
-    k_base = 0.8 + 0.4 * math.log2(max(1, horizon))
-    k_base = max(0.5, min(k_base, 4.0))  # Clamp to reasonable range
-
-    # max_bars: allow 2.5x horizon for barrier resolution
-    max_bars = int(horizon * 2.5)
-    max_bars = max(5, min(max_bars, 300))  # Clamp to reasonable range
-
-    return {
-        "k_up": round(k_base, 2),
-        "k_down": round(k_base, 2),
-        "max_bars": max_bars,
-        "description": f"H{horizon}: Auto-generated defaults (symmetric)",
-    }
-
-
-# =============================================================================
 # HORIZON CONFIG DATACLASS
 # =============================================================================
 @dataclass
@@ -451,11 +372,6 @@ class HorizonConfig:
     >>> config = HorizonConfig()
     >>> config.horizons
     [5, 20]
-
-    >>> # Custom horizons with auto-scaling
-    >>> config = HorizonConfig(horizons=[5, 20, 60])
-    >>> purge, embargo = config.get_purge_embargo()
-    >>> purge  # 180 (60 * 3)
 
     >>> # Horizons for different timeframe
     >>> config = HorizonConfig(horizons=[5, 20], source_timeframe='5min')
@@ -480,52 +396,6 @@ class HorizonConfig:
     # Purge/embargo multipliers (used when auto_scale=True)
     purge_multiplier: float = 3.0
     embargo_multiplier: float = 15.0
-
-    def get_purge_embargo(self, target_timeframe: str | None = None) -> tuple[int, int]:
-        """
-        Get purge and embargo bars based on configuration.
-
-        When auto_scale_purge_embargo=True, calculates values from max horizon.
-        Otherwise, uses manual_purge_bars and manual_embargo_bars.
-
-        IMPORTANT: If target_timeframe is provided (or defaults to source_timeframe),
-        embargo is calculated based on calendar time (5 days = 7200 minutes) to ensure
-        consistent decorrelation regardless of bar resolution.
-
-        Parameters:
-        -----------
-        target_timeframe : str, optional
-            Timeframe for embargo calculation. Defaults to source_timeframe.
-            When provided, embargo_bars = 7200 / timeframe_minutes.
-
-        Returns:
-        --------
-        Tuple[int, int] : (purge_bars, embargo_bars)
-
-        Examples:
-        ---------
-        >>> config = HorizonConfig(horizons=[5, 20], source_timeframe='5min')
-        >>> config.get_purge_embargo()  # uses source_timeframe='5min'
-        (60, 1440)  # 5 days at 5-min bars
-
-        >>> config.get_purge_embargo(target_timeframe='15min')
-        (60, 480)   # 5 days at 15-min bars
-        """
-        if target_timeframe is None:
-            target_timeframe = self.source_timeframe
-
-        if self.auto_scale_purge_embargo:
-            return auto_scale_purge_embargo(
-                self.horizons,
-                self.purge_multiplier,
-                self.embargo_multiplier,
-                timeframe=target_timeframe,  # Use timeframe-aware calculation
-            )
-        else:
-            # Use manual values, with defaults if not specified
-            purge = self.manual_purge_bars if self.manual_purge_bars is not None else 60
-            embargo = self.manual_embargo_bars if self.manual_embargo_bars is not None else 288
-            return purge, embargo
 
     def get_scaled_horizons(self, target_timeframe: str) -> list[int]:
         """

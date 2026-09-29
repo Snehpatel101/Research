@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -84,11 +82,6 @@ class ExperimentTracker(ABC):
         """Get current run ID."""
         return self._run_id
 
-    @property
-    def is_active(self) -> bool:
-        """Check if a run is currently active."""
-        return self._is_active
-
     @abstractmethod
     def start_run(
         self,
@@ -159,66 +152,6 @@ class ExperimentTracker(ABC):
         """
         pass
 
-    def log_model(
-        self,
-        model_path: Path | str,
-        model_name: str | None = None,
-    ) -> None:
-        """
-        Log a trained model.
-
-        Default implementation calls log_artifact.
-        Backends may override for model-specific logging.
-
-        Args:
-            model_path: Path to model file or directory
-            model_name: Optional model name
-        """
-        self.log_artifact(model_path, artifact_type="model")
-
-    @abstractmethod
-    def set_tags(self, tags: dict[str, str]) -> None:
-        """
-        Set tags on the current run.
-
-        Args:
-            tags: Dictionary of tag name -> value
-        """
-        pass
-
-    @contextmanager
-    def run_context(
-        self,
-        run_name: str | None = None,
-        tags: dict[str, str] | None = None,
-    ) -> Iterator[str]:
-        """
-        Context manager for tracking runs.
-
-        Automatically starts and ends the run, handling exceptions.
-
-        Args:
-            run_name: Optional name for the run
-            tags: Optional tags to add
-
-        Yields:
-            Run ID
-
-        Example:
-            with tracker.run_context("training_run") as run_id:
-                tracker.log_params(config)
-                # ... training code ...
-                tracker.log_metrics(final_metrics)
-        """
-        run_id = self.start_run(run_name=run_name, tags=tags)
-        try:
-            yield run_id
-            self.end_run(status="FINISHED")
-        except Exception as e:
-            logger.error(f"Run failed with error: {e}")
-            self.end_run(status="FAILED")
-            raise
-
 
 class DisabledTracker(ExperimentTracker):
     """No-op tracker for when tracking is disabled."""
@@ -248,10 +181,6 @@ class DisabledTracker(ExperimentTracker):
 
     def log_artifact(self, path: Path | str, artifact_type: str | None = None) -> None:
         """No-op artifact logging."""
-        pass
-
-    def set_tags(self, tags: dict[str, str]) -> None:
-        """No-op tag setting."""
         pass
 
 

@@ -126,16 +126,6 @@ class GPUInfo:
     supports_bf16: bool
 
     @property
-    def is_ampere_or_newer(self) -> bool:
-        """Check if GPU is Ampere (SM 8.0) or newer."""
-        return self.compute_capability[0] >= 8
-
-    @property
-    def is_volta_or_newer(self) -> bool:
-        """Check if GPU is Volta (SM 7.0) or newer."""
-        return self.compute_capability[0] >= 7
-
-    @property
     def generation(self) -> str:
         """Get GPU generation name."""
         major, minor = self.compute_capability
@@ -764,10 +754,6 @@ class DeviceManager:
         return self._device
 
     @property
-    def device_str(self) -> str:
-        return self._device_str
-
-    @property
     def gpu_info(self) -> GPUInfo | None:
         return self._gpu_info
 
@@ -776,16 +762,8 @@ class DeviceManager:
         return self._amp_dtype
 
     @property
-    def amp_enabled(self) -> bool:
-        return bool(self._mp_config["enabled"])
-
-    @property
     def scaler(self) -> torch.amp.GradScaler | None:
         return self._scaler
-
-    @property
-    def mixed_precision_config(self) -> dict[str, Any]:
-        return self._mp_config.copy()
 
     def autocast(self) -> torch.amp.autocast:
         """Get autocast context manager for mixed precision."""
@@ -794,12 +772,6 @@ class DeviceManager:
         if self._device.type == "cuda" and self._mp_config["enabled"]:
             return torch.amp.autocast("cuda", dtype=self._amp_dtype)
         return torch.amp.autocast("cpu", enabled=False)
-
-    def to_device(self, tensor: torch.Tensor) -> torch.Tensor:
-        return tensor.to(self._device)
-
-    def get_optimal_settings(self, model_family: str) -> dict[str, Any]:
-        return get_optimal_gpu_settings(model_family, self._gpu_info)
 
     def __repr__(self) -> str:
         gpu_str = f"{self._gpu_info.name}" if self._gpu_info else "None"

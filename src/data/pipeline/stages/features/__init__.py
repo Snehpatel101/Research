@@ -26,7 +26,7 @@ Note: Each symbol is processed independently (no cross-symbol correlation).
 Example:
     >>> from stages.features import FeatureEngineer
     >>> engineer = FeatureEngineer(input_dir='data/clean', output_dir='data/features')
-    >>> results = engineer.process_directory()
+    >>> features_df, report = engineer.engineer_features(clean_df, symbol='MES')
 """
 
 # Main class
@@ -35,7 +35,6 @@ from ..mtf import (
     MTF_TIMEFRAMES,
     MTFFeatureGenerator,
     add_mtf_features,
-    validate_mtf_alignment,
 )
 
 # Constants
@@ -286,7 +285,6 @@ __all__ = [
     # MTF Features
     "MTFFeatureGenerator",
     "add_mtf_features",
-    "validate_mtf_alignment",
     "MTF_TIMEFRAMES",
     # Entropy Features
     "add_entropy_features",

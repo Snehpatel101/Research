@@ -228,28 +228,6 @@ class ModelRegistry:
         )
 
     @classmethod
-    def list_family(cls, family: str) -> list[str]:
-        """
-        List all models in a specific family.
-
-        Args:
-            family: Family name (e.g., "boosting", "neural")
-
-        Returns:
-            List of model names in the family
-
-        Raises:
-            ValueError: If family is not found
-        """
-        family_lower = family.lower().strip()
-
-        if family_lower not in cls._families:
-            available = sorted(cls._families.keys())
-            raise ValueError(f"Unknown family '{family}'. Available families: {available}")
-
-        return list(cls._families[family_lower])
-
-    @classmethod
     def get_metadata(cls, name: str) -> dict[str, Any]:
         """
         Get metadata for a registered model.

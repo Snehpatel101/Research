@@ -59,7 +59,7 @@ from src.core.constants import (
     MODEL_FAMILIES,
 )
 from src.core.types import CVMethod, LabelingMethod, TrainingMode
-from src.core.validation import ValidationError, validate_model_list, validate_path_exists
+from src.core.validation import ValidationError, validate_model_list
 
 # Training sample-weighting schemes (see PipelineConfig.sample_weighting)
 SAMPLE_WEIGHTING_MODES = ("uniqueness", "none")
@@ -486,10 +486,6 @@ class PipelineConfig:
 
         return int(get_model_contract(model_name).sequence_length)
 
-    def validate_data_path(self) -> None:
-        """Validate that data_path exists (call before running pipeline)."""
-        validate_path_exists(self.data_path, must_be_file=True, context="data_path")
-
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for serialization."""
         d = asdict(self)
@@ -545,18 +541,6 @@ class PipelineConfig:
             models_str += f"_plus{len(self.models)-3}"
         return f"{self.symbol}_{models_str}_h{self.horizons[0]}"
 
-    @property
-    def total_optuna_trials(self) -> int:
-        """Calculate total Optuna trials for this config."""
-        total = 0
-        if self.optimize_labels:
-            total += self.label_optimization_trials
-        if self.optimize_features:
-            total += self.feature_selection_trials + self.feature_pruning_trials
-        if self.optimize_hyperparams:
-            total += self.hyperparam_trials * len(self.models)
-        return total
-
     def __repr__(self) -> str:
         return (
             f"PipelineConfig(\n"
@@ -577,11 +561,6 @@ class PipelineConfig:
         from src.data.pipeline.config_adapter import to_data_config
 
         return to_data_config(self)
-
-    # Backward compatibility alias
-    def to_phase1_config(self) -> DataConfig:
-        """Deprecated: Use to_data_config instead."""
-        return self.to_data_config()
 
 
 # =============================================================================

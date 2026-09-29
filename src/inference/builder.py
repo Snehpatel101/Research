@@ -933,54 +933,6 @@ class BundleBuilder:
                     total_bytes += path.stat().st_size
         return total_bytes / (1024 * 1024)
 
-    def validate_bundles(self) -> dict[str, Any]:
-        """
-        Validate all bundles in the bundles directory.
-
-        Returns:
-            Dictionary with validation results for each bundle
-        """
-        from src.inference.bundle import ModelBundle
-
-        results: dict[str, Any] = {
-            "valid": True,
-            "bundles": {},
-            "issues": [],
-        }
-
-        # Find all bundle directories
-        if not self.bundles_dir.exists():
-            results["valid"] = False
-            results["issues"].append("Bundles directory does not exist")
-            return results
-
-        for bundle_dir in self.bundles_dir.iterdir():
-            if not bundle_dir.is_dir():
-                continue
-            if bundle_dir.name == "ensemble":
-                # Handle ensemble bundle separately
-                continue
-
-            try:
-                bundle = ModelBundle.load(bundle_dir)
-                validation = bundle.validate()
-                results["bundles"][bundle_dir.name] = validation
-
-                if not validation["valid"]:
-                    results["valid"] = False
-                    for issue in validation.get("issues", []):
-                        results["issues"].append(f"{bundle_dir.name}: {issue}")
-
-            except Exception as e:
-                results["valid"] = False
-                results["bundles"][bundle_dir.name] = {
-                    "valid": False,
-                    "error": str(e),
-                }
-                results["issues"].append(f"{bundle_dir.name}: Failed to load - {e}")
-
-        return results
-
 
 # =============================================================================
 # CONVENIENCE FUNCTIONS
