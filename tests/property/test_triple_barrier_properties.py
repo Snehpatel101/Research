@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 
 from src.core.label_spans import INVALID_LABEL, NO_LABEL_END
 from src.data.labeling.triple_barrier import TripleBarrierConfig, TripleBarrierLabeler
-from tests.property.strategies import build_ohlcv
+from tests.property.strategies import budget, build_ohlcv
 
 
 def _labeler(
@@ -61,7 +61,7 @@ config_strategy = {
 }
 
 
-@settings(max_examples=60, deadline=None)
+@settings(budget(60), deadline=None)
 @given(**config_strategy)
 def test_labels_and_ends_ignore_the_time_index(
     seed: int,
@@ -88,9 +88,9 @@ def test_labels_and_ends_ignore_the_time_index(
     assert labels2.index.equals(relabeled.index)  # labels stay aligned to the caller's index
 
 
-@settings(max_examples=60, deadline=None)
+@settings(budget(60), deadline=None)
 @given(**{k: v for k, v in config_strategy.items() if k != "style"})
-def test_label_end_is_not_before_the_row_and_within_data(
+def test_label_end_is_after_the_row_and_within_data(
     seed: int,
     n: int,
     vol: float,
@@ -100,20 +100,24 @@ def test_label_end_is_not_before_the_row_and_within_data(
     costs: bool,
     symbol: str,
 ) -> None:
-    """Valid labels resolve at row >= own row (within the horizon and the data); invalid get -1."""
+    """Valid labels resolve strictly after their own row, within the horizon and the data.
+
+    The barrier walk starts at the next bar, so no label can end on its own bar; invalid
+    rows carry ``NO_LABEL_END``.
+    """
     bars = build_ohlcv(n, seed=seed, vol=vol)
     labels, ends = _labeler(horizon, k_up, k_down, costs, symbol).create_labels_with_ends(bars)
     positions = np.arange(n)
     valid = labels.to_numpy() != INVALID_LABEL
 
     assert set(np.unique(labels.to_numpy()[valid])) <= {-1, 0, 1}
-    assert np.all(ends[valid] >= positions[valid])
+    assert np.all(ends[valid] > positions[valid]), "label end at or before its own bar"
     assert np.all(ends[valid] - positions[valid] <= horizon)
     assert np.all(ends[valid] < n)
     assert np.all(ends[~valid] == NO_LABEL_END)
 
 
-@settings(max_examples=40, deadline=None)
+@settings(budget(40), deadline=None)
 @given(
     seed=st.integers(0, 2**32 - 1),
     n=st.integers(60, 250),

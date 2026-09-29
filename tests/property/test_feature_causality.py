@@ -13,7 +13,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from src.data.pipeline.stages.features.engineer import FeatureEngineer
-from tests.property.strategies import build_ohlcv
+from tests.property.strategies import budget, build_ohlcv
 
 WAVELET_WINDOW = 64  # wavelets are skipped below this many rows
 RTOL = 1e-6
@@ -66,7 +66,7 @@ def _causality_violations(
     return _first_difference(original, changed, t)
 
 
-@settings(max_examples=12, **_SLOW_OK)
+@settings(budget(12, heavy=True), **_SLOW_OK)
 @given(
     seed=st.integers(0, 2**32 - 1),
     vol=st.sampled_from([1e-4, 5e-4, 2e-3, 1e-2]),
@@ -91,7 +91,7 @@ def test_features_at_or_before_t_ignore_future_bars(
     )
 
 
-@settings(max_examples=5, **_SLOW_OK)
+@settings(budget(5, heavy=True), **_SLOW_OK)
 @given(
     seed=st.integers(0, 2**32 - 1),
     t_frac=st.floats(0.4, 0.9),

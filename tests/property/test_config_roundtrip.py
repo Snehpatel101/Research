@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 
 from src.config.experiment import ExperimentConfig
 from src.core.constants import MODEL_FAMILIES
+from tests.property.strategies import budget
 
 BASE_MODELS = [
     m
@@ -59,7 +60,7 @@ def experiment_configs(draw: st.DrawFn) -> ExperimentConfig:
     return config
 
 
-@settings(max_examples=100, deadline=None)
+@settings(budget(100), deadline=None)
 @given(config=experiment_configs())
 def test_dict_roundtrip_is_lossless(config: ExperimentConfig) -> None:
     """to_dict -> from_dict -> to_dict reproduces the original dict exactly."""
@@ -75,7 +76,7 @@ def test_dict_roundtrip_is_lossless(config: ExperimentConfig) -> None:
     assert restored.output_dir == config.output_dir  # run_id is not appended twice
 
 
-@settings(max_examples=40, deadline=None)
+@settings(budget(40), deadline=None)
 @given(config=experiment_configs())
 def test_yaml_roundtrip_is_lossless(config: ExperimentConfig, tmp_path_factory) -> None:
     """save_yaml -> from_yaml (safe_load) reproduces the configuration."""
@@ -88,7 +89,7 @@ def test_yaml_roundtrip_is_lossless(config: ExperimentConfig, tmp_path_factory) 
     assert yaml.safe_load(path.read_text()) == config.to_dict()
 
 
-@settings(max_examples=100, deadline=None)
+@settings(budget(100), deadline=None)
 @given(config=experiment_configs(), bar_timeframe=st.sampled_from(["1min", "5min", "15min"]))
 def test_resolved_purge_covers_label_span_and_survives_roundtrip(
     config: ExperimentConfig, bar_timeframe: str

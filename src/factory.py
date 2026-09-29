@@ -1128,7 +1128,8 @@ class MLFactory:
             bt_kwargs["max_holding_period"] = max_bars
             # Same cost term the labeler added (persisted with the data
             # checkpoint; None only for checkpoints that predate it — the
-            # backtester then derives it with the labeler's own helper)
+            # backtester then derives it causally per signal bar: price
+            # cost over the expanding median ATR, expanding_cost_in_atr)
             bt_kwargs["barrier_cost_in_atr"] = self._label_cost_in_atr.get(first_horizon)
 
             backtest_config = BacktestConfig.from_symbol_config(

@@ -16,17 +16,25 @@ from src.core.label_spans import LabelSpans
 from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig
 from src.validation.cv.early_stopping_split import carve_early_stopping_split
 from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
-
-_CV_SETTINGS = {"max_examples": 60, "deadline": None}
+from tests.property.strategies import budget
 
 
 @st.composite
 def label_spans(draw: st.DrawFn, n: int) -> LabelSpans:
-    """Per-bar spans [i, i + length] with end >= start, clipped to the data."""
-    max_len = draw(st.integers(0, 25))
+    """Spans [start, start + length] of n event samples, clipped to the data.
+
+    Starts are strictly increasing bar positions with drawn gaps (sparse events, e.g.
+    CUSUM-sampled bars), so a sample's position differs from its bar position; a maximum
+    gap of 1 gives one sample per bar. Label lengths scale with the gap, so a label can
+    still reach past several later events (up to ~25), whatever the event density.
+    """
+    max_gap = draw(st.integers(1, 10))
+    gaps = draw(st.lists(st.integers(1, max_gap), min_size=n, max_size=n))
+    starts = np.cumsum(gaps) - gaps[0]
+    max_len = draw(st.integers(0, 25 * max_gap))
     lengths = draw(st.lists(st.integers(0, max_len), min_size=n, max_size=n))
-    starts = np.arange(n)
-    ends = np.minimum(starts + np.asarray(lengths), n - 1)
+    n_bars = int(starts[-1]) + 1 + draw(st.integers(0, max_len))
+    ends = np.minimum(starts + np.asarray(lengths), n_bars - 1)
     return LabelSpans(starts=starts, ends=ends)
 
 
@@ -52,7 +60,7 @@ def _contiguous_blocks(test: np.ndarray) -> list[tuple[int, int]]:
 # =============================================================================
 
 
-@settings(suppress_health_check=[HealthCheck.filter_too_much], **_CV_SETTINGS)
+@settings(budget(60), deadline=None, suppress_health_check=[HealthCheck.filter_too_much])
 @given(
     data=st.data(),
     n=st.integers(100, 500),
@@ -87,7 +95,7 @@ def test_purged_kfold_train_never_overlaps_test_spans_or_embargo(
             assert np.intersect1d(train, in_purge).size == 0, "train row inside the purge floor"
 
 
-@settings(suppress_health_check=[HealthCheck.filter_too_much], **_CV_SETTINGS)
+@settings(budget(60), deadline=None, suppress_health_check=[HealthCheck.filter_too_much])
 @given(
     data=st.data(),
     n=st.integers(120, 500),
@@ -149,7 +157,7 @@ def train_runs(draw: st.DrawFn, min_gap: int = 1) -> np.ndarray:
     return np.concatenate(rows)
 
 
-@settings(max_examples=200, deadline=None)
+@settings(budget(200), deadline=None)
 @given(
     data=st.data(),
     purge=st.integers(0, 40),

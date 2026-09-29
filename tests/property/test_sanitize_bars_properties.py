@@ -18,6 +18,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.data.pipeline.stages.clean.sanitize import PRICE_COLUMNS, sanitize_bars
+from tests.property.strategies import budget
 
 BASE = pd.Timestamp("2024-01-08 09:30")
 MESSY_PRICE = st.one_of(
@@ -55,7 +56,7 @@ def messy_bars(draw: st.DrawFn) -> pd.DataFrame:
     return pd.DataFrame(frame, index=index)
 
 
-@settings(max_examples=150, deadline=None)
+@settings(budget(150), deadline=None)
 @given(raw=messy_bars())
 def test_sanitized_bars_are_sorted_unique_positive_and_ohlc_consistent(raw: pd.DataFrame) -> None:
     """Every frame that survives sanitizing satisfies the OHLCV invariants."""
@@ -85,7 +86,7 @@ def test_sanitized_bars_are_sorted_unique_positive_and_ohlc_consistent(raw: pd.D
     assert report.rows_out == len(clean) <= len(raw)
 
 
-@settings(max_examples=100, deadline=None)
+@settings(budget(100), deadline=None)
 @given(raw=messy_bars())
 def test_sanitize_is_idempotent(raw: pd.DataFrame) -> None:
     """Sanitizing an already-sanitized frame changes nothing (train and serve agree)."""
@@ -100,7 +101,7 @@ def test_sanitize_is_idempotent(raw: pd.DataFrame) -> None:
     assert not report.changed
 
 
-@settings(max_examples=100, deadline=None)
+@settings(budget(100), deadline=None)
 @given(
     n=st.integers(2, 30),
     seed=st.integers(0, 2**32 - 1),

@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 from src.core.constants import OHLCV_COLUMNS
 from src.data.pipeline.stages.features.engineer import FeatureEngineer
 from src.inference.preprocessing_graph import PreprocessingGraph
-from tests.property.strategies import build_ohlcv
+from tests.property.strategies import budget, build_ohlcv
 
 RTOL = 1e-6
 ATOL = 1e-9
@@ -56,20 +56,24 @@ def _assert_prefix_matches_full(
         _as_raw(bars.iloc[: t + 1], datetime_column, shuffle), skip_scaling=True
     )
 
-    assert len(prefix) > 0
+    # Every full-series row up to bar t, not just a leading slice of the full output:
+    # a feature reading future bars would be NaN (dropped) on the prefix's last rows,
+    # so a shorter prefix must fail here rather than be compared on fewer rows.
+    expected = full.loc[full.index <= bars.index[t]]
+
+    assert len(expected) > 0
     assert list(prefix.columns) == list(full.columns)
-    assert prefix.index.equals(full.index[: len(prefix)]), "prefix rows differ from full rows"
-    assert prefix.index.max() <= bars.index[t]
+    assert prefix.index.equals(expected.index), "prefix rows differ from the full rows up to t"
     np.testing.assert_allclose(
         prefix.to_numpy(dtype=float),
-        full.iloc[: len(prefix)].to_numpy(dtype=float),
+        expected.to_numpy(dtype=float),
         rtol=RTOL,
         atol=ATOL,
         err_msg="serving features on a prefix differ from the full-series features (lookahead)",
     )
 
 
-@settings(max_examples=8, **_SLOW_OK)
+@settings(budget(8, heavy=True), **_SLOW_OK)
 @given(
     seed=st.integers(0, 2**32 - 1),
     vol=st.sampled_from([5e-4, 2e-3, 1e-2]),
@@ -87,7 +91,7 @@ def test_transform_on_prefix_equals_rows_of_full_transform(
     _assert_prefix_matches_full(_graph(False), bars, t, datetime_column, shuffle)
 
 
-@settings(max_examples=3, **_SLOW_OK)
+@settings(budget(3, heavy=True), **_SLOW_OK)
 @given(
     seed=st.integers(0, 2**32 - 1),
     t_frac=st.floats(0.6, 0.95),

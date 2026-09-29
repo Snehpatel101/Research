@@ -5,36 +5,27 @@ Layout: ``tests/unit/<area>/`` (fast, isolated, mirrors ``src/``), ``tests/integ
 (components wired together) and ``tests/e2e/`` (full pipeline runs). The directory sets the
 ``unit`` / ``integration`` / ``e2e`` marker automatically; tests over 30 s carry ``slow``.
 ``tests/property/`` (hypothesis property-based tests of leakage / parity invariants) counts as
-``unit``. Hypothesis settings profile: ``HYPOTHESIS_PROFILE`` = ``dev`` (default) or ``ci``.
+``unit``. Hypothesis settings profile: ``HYPOTHESIS_PROFILE`` = ``dev`` (default) or ``ci``
+(an unknown name warns and falls back to ``dev``); per-test example budgets scale with it.
 Shared plain helpers live in ``tests/helpers.py``.
 """
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-from hypothesis import HealthCheck, settings
+
+from tests.property.strategies import load_hypothesis_profile
 
 # Directory under tests/ -> layer marker
 _LAYERS = {"unit": "unit", "property": "unit", "integration": "integration", "e2e": "e2e"}
 
-# ci: reproducible (derandomized) and bounded; no deadline because the first example
-# pays numba JIT compilation. dev: hypothesis defaults (random exploration, 100 examples).
-settings.register_profile(
-    "ci",
-    derandomize=True,
-    max_examples=25,
-    deadline=None,
-    print_blob=True,
-    suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
-)
-settings.register_profile("dev", settings.get_profile("default"))
-settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
+# Profiles (dev / ci) and per-test example budgets live with the property tests
+load_hypothesis_profile()
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
