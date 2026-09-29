@@ -6,7 +6,7 @@
 
 ## Phase 116: Correctness Audit + Repo Hygiene | 2026-09-29 | COMPLETE
 
-**Impact:** Four parallel research audits (financial-ML validation per López de Prado, stacking/calibration literature, reference implementations of every neural architecture, Python tooling practice) found defects that made results optimistic or meaningless while everything still "passed". Every confirmed defect was reproduced, fixed in an isolated worktree, pinned by a regression test and merged; the full mix-and-match matrix was then rerun on the final code (MATRIX2_RESULTS). Suite: ~830 tests, ruff + black + pyright (0 errors) + vulture clean, new uv-based CI.
+**Impact:** Four parallel research audits (financial-ML validation per López de Prado, stacking/calibration literature, reference implementations of every neural architecture, Python tooling practice) found defects that made results optimistic or meaningless while everything still "passed". Every confirmed defect was reproduced, fixed in an isolated worktree, pinned by a regression test and merged; the full mix-and-match matrix was then rerun on the final code (MATRIX2_RESULTS). Suite: ~830 tests (net −25k lines across the phase), ruff + black + pyright (0 errors) + vulture clean, new uv-based CI.
 
 ### Correctness fixes (before → after)
 
@@ -39,7 +39,7 @@
 
 ### Repo hygiene
 
-- **Deleted dead code:** serving/monitoring chain (2,568 lines, DECISIONS #1), legacy `AdapterResult` + phantom `TrainingResult` (#6/#7), aspirational config layer + dead global.yaml sections (3,882 lines, #8/#9), unused ensemble modules (second_level, heterogeneous_stacking, meta_selection, meta_base), DEADCODE_RESULTS.
+- **Deleted dead code:** serving/monitoring chain (2,568 lines, DECISIONS #1), legacy `AdapterResult` + phantom `TrainingResult` (#6/#7), aspirational config layer + dead global.yaml sections (3,882 lines, #8/#9), unused ensemble modules (second_level, heterogeneous_stacking, meta_selection, meta_base), and a verified dead-code sweep: 42 modules + ~285 symbols (~23k lines; unused `stages/meta_labeling`, alternative labelers, clean/bar builders, reporting sections, presets, HMM regime, session normalizer, per-model config, report schema, duplicate walk-forward/CV evaluators, timeframe coordinator, stray notebook copy). Evidence per symbol: word-boundary grep over src/tests/scripts/notebooks, an import graph from every entry point, and three coverage runs. Unused-but-public modules (resilience, InferenceOrchestrator, notebook/colab helpers, ...) were kept for your call.
 - **Config honesty:** `ExperimentConfig` fields that never reached the pipeline were wired (splits, calibration, verbose) or removed; `from_dict` warns on and ignores unknown keys.
 - **Reproducibility:** seeded `np.random.default_rng` everywhere (ruff NPY rules on), one global seeder (`set_all_seeds`), CLI report no longer uses simulated prices.
 - **Tooling:** Python 3.11 targets (black/ruff/pyright), CI on uv with CPU torch (ruff, black, pyright, vulture, `pytest -m "not slow" -n auto`; weekly slow job), `slow` marker, Makefile `check`/`matrix` targets, pre-commit, `uv.lock` regenerated.

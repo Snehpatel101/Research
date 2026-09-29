@@ -351,6 +351,25 @@ train/serve and label/backtest drift keeps reappearing.
 
 ---
 
+## 14. Unused public-API modules (~7k lines)
+
+**What:** modules that are exported by a package `__init__` but used by nothing
+in the repo (no notebook, script, CLI or pipeline path): `core/resilience`,
+`inference/orchestrator` (InferenceOrchestrator), `inference/pipeline`,
+`config/validators`, `core/utils/{notebook,colab_setup,cache,checkpoint_manager,
+config_validator,device_utils}`, `core/data_contract`, `core/defaults`,
+`core/coordination/alignment`, `data/adapters/factory`,
+`validation/statistical_tests`; script-only: `inference/batch`
+(`scripts/batch_inference.py`), `validation/cv/cv_orchestrator`
+(`scripts/phase3_validation.py`). Phase 116's verified dead-code sweep left them
+in place because they are importable public API.
+
+**Options:** delete them (and the stale scripts), or keep them as supported API
+and add tests. **Recommendation:** delete — the supported serving API is
+`load_deploy_artifact` / `load_bundle` / `UniversalInferencePipeline`.
+
+---
+
 ## Quick-reference matrix
 
 | # | Decision | Default if you do nothing | Recommended | Effort |
@@ -368,6 +387,7 @@ train/serve and label/backtest drift keeps reappearing.
 | 11 | Source-grep tests | Documentation-grade tests stay | Replace opportunistically | rolling |
 | 12 | uv adoption | ✅ Resolved (Phase 116: uv venv, lock regenerated, CI on uv) | — | — |
 | 13 | Second data pipeline | Broken parallel pipeline stays | Re-point CLI at MLFactory, delete runner | 2–3 days |
+| 14 | Unused public-API modules | ~7k unused lines stay | Delete | ~2 h |
 
 ---
 
