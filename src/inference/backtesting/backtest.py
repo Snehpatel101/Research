@@ -167,9 +167,9 @@ class BacktestConfig:
         barrier_k_up / barrier_k_down: Triple-barrier ATR multipliers from the
             training config (0.0 = legacy 2% stop, no take-profit)
         barrier_cost_in_atr: Cost term added to both multipliers, exactly as
-            the labeler does. None = derive it with the labeler's helper
-            (round-trip cost in price units / median ATR of the price data);
-            0.0 = plain k * ATR barriers.
+            the labeler does. None = derive it causally per signal bar (round-trip
+            cost in price units / expanding median ATR up to that bar, the
+            labeler's cost helpers); 0.0 = plain k * ATR barriers.
     """
 
     initial_equity: float = 100000.0
@@ -205,7 +205,7 @@ class BacktestConfig:
     # 0.0 = not set, uses legacy hardcoded logic for backward compat
     barrier_k_up: float = 0.0  # Upper barrier ATR multiplier
     barrier_k_down: float = 0.0  # Lower barrier ATR multiplier
-    barrier_cost_in_atr: float | None = None  # None = derive like the labeler
+    barrier_cost_in_atr: float | None = None  # None = derive causally per signal bar
 
     # Session-end forced close: close all positions at session end
     # False = legacy behavior (positions can be held overnight)
@@ -427,6 +427,8 @@ class _Bars:
     lows: np.ndarray
     closes: np.ndarray
     atr: np.ndarray
+    # Causal per-bar barrier cost term (None = the explicit config value applies)
+    barrier_cost: np.ndarray | None
     fills: np.ndarray
     can_enter: np.ndarray
     session_end: np.ndarray
@@ -512,7 +514,8 @@ class Backtester:
             enable_adverse_selection=True,
         )
 
-        # Barrier cost term, resolved once so labels and backtest agree
+        # Barrier cost term: the labeling run's value when given (label parity);
+        # otherwise derived per signal bar from prices known at that bar
         self._barrier_cost_in_atr = self._resolve_barrier_cost_in_atr()
 
         # State variables (reset at the start of every run())
@@ -558,23 +561,33 @@ class Backtester:
         return mapping.get(value, value)
 
     def _resolve_barrier_cost_in_atr(self) -> float:
-        """Cost term of the barrier multipliers, computed like the labeler's.
+        """Explicit cost term of the barrier multipliers (0.0 when derived per bar).
 
         An explicit ``barrier_cost_in_atr`` (the factory passes the labeling
-        run's value) wins. Otherwise the labeler's own helper converts the
-        symbol's round-trip cost (price units) into ATR units with the median
-        ATR of the price data — the same global calibration the labeler
-        applies to its dataset.
+        run's value) wins and applies to every trade. When it is None the
+        cost is derived causally per signal bar (``_derived_barrier_cost``),
+        so this scalar is only the fallback 0.0.
         """
-        if not self.config.uses_barriers:
+        if not self.config.uses_barriers or self.config.barrier_cost_in_atr is None:
             return 0.0
-        if self.config.barrier_cost_in_atr is not None:
-            return float(self.config.barrier_cost_in_atr)
-        from src.data.labeling.triple_barrier import compute_cost_in_atr
+        return float(self.config.barrier_cost_in_atr)
 
-        prices = self.prices.sort_values("timestamp")
-        atr = self._compute_atr(prices).to_numpy(dtype=float)
-        return compute_cost_in_atr(self.config.contract_symbol, atr)
+    def _derived_barrier_cost(self, atr: pd.Series) -> np.ndarray | None:
+        """Causal per-bar cost term, or None when barriers are off or a cost is explicit.
+
+        ``cost_in_atr[i] = round-trip cost in price / expanding median ATR up
+        to bar i`` (the labeler's cost helpers), so a trade's barriers never
+        depend on bars after its signal bar.
+        """
+        if not self.config.uses_barriers or self.config.barrier_cost_in_atr is not None:
+            return None
+        from src.data.labeling.triple_barrier import (
+            expanding_cost_in_atr,
+            transaction_cost_in_price,
+        )
+
+        cost = transaction_cost_in_price(self.config.contract_symbol)
+        return expanding_cost_in_atr(cost, atr.to_numpy(dtype=float))
 
     def _validate_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validate and normalize predictions DataFrame."""
@@ -654,7 +667,11 @@ class Backtester:
         """
         rows_before = len(self.predictions)
         prices = self.prices.sort_values("timestamp", kind="stable").reset_index(drop=True)
-        prices["atr"] = self._compute_atr(prices).to_numpy(dtype=float)
+        atr = self._compute_atr(prices)
+        prices["atr"] = atr.to_numpy(dtype=float)
+        derived_cost = self._derived_barrier_cost(atr)
+        if derived_cost is not None:
+            prices["barrier_cost"] = derived_cost
 
         matched = self.predictions["timestamp"].isin(prices["timestamp"])
         if not matched.any():
@@ -754,8 +771,12 @@ class Backtester:
         atr: float | None = None,
         signal_bar: int | None = None,
         monitor_from_bar: int | None = None,
+        cost_in_atr: float | None = None,
     ) -> None:
         """Open a new position filled at ``price`` on bar ``bar_idx``.
+
+        ``cost_in_atr`` is the barrier cost term known at the signal bar
+        (default: the explicit configured value, 0.0 when none).
 
         Barrier distances come from ``barrier_distances`` — the labeler's
         helper — so the stop / take-profit sit ``(k + cost_in_atr) * ATR``
@@ -771,7 +792,8 @@ class Backtester:
         up_dist = down_dist = 0.0
         if use_barriers:
             assert atr is not None
-            up_dist, down_dist = barrier_distances(atr, k_up, k_down, self._barrier_cost_in_atr)
+            cost = self._barrier_cost_in_atr if cost_in_atr is None else cost_in_atr
+            up_dist, down_dist = barrier_distances(atr, k_up, k_down, cost)
             # Barrier-aware stop distance (matches training semantics)
             stop_dist = down_dist if direction == 1 else up_dist
         else:
@@ -1068,6 +1090,11 @@ class Backtester:
                 if "atr" in data.columns
                 else self._compute_atr(data).to_numpy(dtype=float)
             ),
+            barrier_cost=(
+                data["barrier_cost"].to_numpy(dtype=float)
+                if "barrier_cost" in data.columns
+                else None
+            ),
             fills=fills,
             can_enter=can_enter,
             session_end=session_end,
@@ -1195,6 +1222,7 @@ class Backtester:
             atr=signal_atr,
             signal_bar=s,
             monitor_from_bar=monitor_from,
+            cost_in_atr=None if bars.barrier_cost is None else float(bars.barrier_cost[s]),
         )
 
     def _start_halt(self, j: int, ts: datetime, reason: HaltReason, value: float) -> None:
@@ -1272,10 +1300,17 @@ class Backtester:
         delay = cfg.resolved_signal_delay
         timing = cfg.fill_timing
 
+        # Reported cost term: explicit value, or the last (fully calibrated) derived one
+        cost_reported = (
+            float(bars.barrier_cost[-1])
+            if bars.barrier_cost is not None and n_bars
+            else self._barrier_cost_in_atr
+        )
+
         if cfg.uses_barriers:
             logger.info(
                 f"Barrier-aligned backtest: k_up={cfg.barrier_k_up:.2f}, "
-                f"k_down={cfg.barrier_k_down:.2f}, cost_in_atr={self._barrier_cost_in_atr:.4f}, "
+                f"k_down={cfg.barrier_k_down:.2f}, cost_in_atr={cost_reported:.4f}, "
                 f"max_holding={cfg.max_holding_period}"
             )
 
@@ -1390,7 +1425,7 @@ class Backtester:
             "short_trades": sum(1 for t in self._trades if t.direction == -1),
             "execution_model": cfg.execution_model.value,
             "signal_delay_bars": delay,
-            "barrier_cost_in_atr": self._barrier_cost_in_atr,
+            "barrier_cost_in_atr": cost_reported,
             "n_halts": len(self._halts),
             "halted_at": str(self._halts[0].timestamp) if self._halts else None,
             "halts_by_reason": halts_by_reason,
