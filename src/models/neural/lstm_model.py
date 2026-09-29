@@ -155,18 +155,16 @@ class LSTMModel(BaseRNNModel):
         if not self._is_fitted:
             return None
 
-        if self._model.rnn is None:
+        rnn_network = self._unwrapped_model()
+        if not isinstance(rnn_network, LSTMNetwork) or rnn_network.rnn is None:
             return None
 
-        self._model.eval()
+        rnn_network.eval()
         X_tensor = torch.from_numpy(np.ascontiguousarray(X).astype(np.float32)).to(self._device)
 
         with torch.no_grad():
             # Get RNN output (hidden states at each timestep)
-            # Note: rnn is nn.RNNBase which is callable via Module.__call__
-            rnn = self._model.rnn
-            assert rnn is not None  # Already checked above
-            output, _ = rnn(X_tensor)  # type: ignore[operator]
+            output, _ = rnn_network.rnn(X_tensor)
             result: np.ndarray = np.asarray(output.cpu().numpy())
             return result
 

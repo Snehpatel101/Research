@@ -12,8 +12,8 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 
 from __future__ import annotations
 
-import contextlib
 import logging
+import math
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -63,6 +63,54 @@ class EarlyStoppingState:
         else:
             self.patience_counter += 1
             return self.patience_counter >= patience
+
+
+# Checkpoints written before the architecture version was recorded (and every
+# checkpoint written by the removed iTransformer save() override) carry no
+# "arch_version" key; they were produced by version-1.0 networks.
+_LEGACY_ARCH_VERSION = "1.0"
+
+
+class WarmupCosineSchedule:
+    """Linear-warmup + cosine-decay LR multiplier driven by fractional epochs.
+
+    The multiplier is a function of *epoch position* (completed epochs plus the
+    fraction of the current epoch), not of the raw optimizer-step count. That
+    keeps the schedule correct when OOM recovery shrinks the batch size mid
+    training (steps per epoch changes) or an epoch is retried: the fit loop
+    reports epoch boundaries via :meth:`end_epoch` / :meth:`restart_epoch`.
+
+    Instances are callable objects (not lambdas), so ``LambdaLR.state_dict()``
+    persists the clock alongside the step counter.
+    """
+
+    def __init__(self, max_epochs: int, warmup_epochs: int, steps_per_epoch: int) -> None:
+        self.max_epochs = max_epochs
+        self.warmup_epochs = warmup_epochs
+        self.steps_per_epoch = max(int(steps_per_epoch), 1)
+        self.completed_epochs = 0
+        self.epoch_start_step = 0
+
+    def epoch_position(self, step: int) -> float:
+        return self.completed_epochs + (step - self.epoch_start_step) / self.steps_per_epoch
+
+    def __call__(self, step: int) -> float:
+        position = self.epoch_position(step)
+        if position < self.warmup_epochs:
+            return position / self.warmup_epochs
+        decay_epochs = max(self.max_epochs - self.warmup_epochs, 1)
+        progress = min((position - self.warmup_epochs) / decay_epochs, 1.0)
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+    def end_epoch(self, completed_epochs: int, step: int) -> None:
+        """Record a successfully completed epoch (``step`` = scheduler step count)."""
+        self.completed_epochs = completed_epochs
+        self.epoch_start_step = step
+
+    def restart_epoch(self, steps_per_epoch: int, step: int) -> None:
+        """Retry the current epoch with a new loader length (after OOM recovery)."""
+        self.steps_per_epoch = max(int(steps_per_epoch), 1)
+        self.epoch_start_step = step
 
 
 def _check_cuda_available() -> bool:
@@ -192,12 +240,19 @@ class BaseRNNModel(BaseModel):
         that may not generalize to real-time inference.
     """
 
+    # Version of the network definition. A subclass bumps its own value whenever
+    # its state_dict layout OR its forward semantics change; load() refuses a
+    # checkpoint whose recorded version differs instead of silently loading
+    # weights into a network that computes something else.
     ARCH_VERSION = "1.0"
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
         self._model: nn.Module = None  # type: ignore[assignment]
         self._n_features: int | None = None
+        # Training window length; persisted so seq_len-dependent networks
+        # (iTransformer, N-BEATS, channel-independent PatchTST) rebuild on load.
+        self._seq_len: int | None = None
         self._bidirectional_warning_logged: bool = False
 
         # Device setup with "auto" detection support
@@ -226,6 +281,15 @@ class BaseRNNModel(BaseModel):
     @property
     def model_family(self) -> str:
         return "neural"
+
+    def _unwrapped_model(self) -> nn.Module:
+        """The eager network, looking through a ``torch.compile`` wrapper.
+
+        ``torch.compile`` returns an ``OptimizedModule`` that fails
+        ``isinstance(m, <Network class>)`` checks; interpretability accessors
+        must go through this helper to reach the real network.
+        """
+        return getattr(self._model, "_orig_mod", self._model)
 
     @property
     def requires_scaling(self) -> bool:
@@ -309,6 +373,7 @@ class BaseRNNModel(BaseModel):
             "early_stopping_patience": 7,
             "min_delta": 0.0001,
             "warmup_epochs": 5,
+            "label_smoothing": 0.0,  # CrossEntropyLoss label smoothing (0 = off)
             "device": "auto",  # Auto-detect GPU/CPU
             "mixed_precision": True,  # Use GPU-appropriate precision
             # DataLoader workers/pinning auto-tuned in _create_dataloader for CUDA
@@ -353,17 +418,13 @@ class BaseRNNModel(BaseModel):
         else:
             n_samples, seq_len, n_features = X_train.shape
         self._n_features = n_features
+        self._seq_len = seq_len
 
-        # Create network
-        self._model = self._create_network(n_features)
-        self._model = self._model.to(self._device)
+        # Use dynamically detected AMP dtype
+        amp_dtype = self._amp_dtype
 
-        # Attempt torch.compile for potential speedup (PyTorch 2.0+, CUDA only)
-        # CPU compilation requires a system C++ compiler and provides minimal benefit
-        if hasattr(torch, "compile") and self._device.type == "cuda":
-            with contextlib.suppress(Exception):
-                self._model = torch.compile(self._model, mode="max-autotune")
-                logger.info("torch.compile(mode='max-autotune') applied")
+        # Create network (compiled on CUDA, with eager fallback)
+        self._build_network(n_features, train_config, X_train, amp_dtype)
 
         # Log bidirectional warning if applicable (only logged once per model)
         self._log_bidirectional_warning()
@@ -372,34 +433,14 @@ class BaseRNNModel(BaseModel):
         extra_metadata = self._on_training_start(train_config, seq_len)
 
         # Prepare data
-        train_loader = self._create_dataloader(
-            X_train, y_train, sample_weights, train_config, shuffle=True
+        train_loader, val_loader = self._create_fit_loaders(
+            X_train, y_train, sample_weights, X_val, y_val, train_config
         )
-        # Use 2x batch size for validation (no gradients stored, so memory allows it)
-        val_config = {**train_config, "batch_size": train_config.get("batch_size", 512) * 2}
-        val_loader = self._create_dataloader(X_val, y_val, None, val_config, shuffle=False)
 
         # Setup training components
         optimizer = self._create_optimizer(train_config)
-        scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
-
-        # Compute class weights for imbalanced datasets (common in trading: neutral >> long/short)
-        use_class_weights = train_config.get("use_class_weights", True)
-        if use_class_weights:
-            # Same label -> class-index mapping the loss sees ({-1,0,1} or binary {0,1})
-            y_class = self._convert_labels_to_class(y_train).astype(np.int64)
-            class_counts = np.bincount(y_class, minlength=self._n_classes)
-            # Handle edge case of zero counts (shouldn't happen in practice)
-            class_counts = np.maximum(class_counts, 1)
-            # Inverse frequency weighting: rarer classes get higher weights
-            class_weights = len(y_train) / (len(class_counts) * class_counts)
-            class_weights_tensor = torch.tensor(
-                class_weights, dtype=torch.float32, device=self._device
-            )
-            criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
-            logger.debug(f"Class weights: {class_weights}")
-        else:
-            criterion = nn.CrossEntropyLoss()
+        scheduler, schedule = self._create_scheduler(optimizer, train_config, len(train_loader))
+        criterion = self._create_criterion(y_train, train_config)
 
         # Mixed precision scaler (only needed for float16, not bfloat16)
         scaler = (
@@ -407,18 +448,10 @@ class BaseRNNModel(BaseModel):
             if self._use_grad_scaler and self._device.type == "cuda"
             else None
         )
-        # Use dynamically detected AMP dtype
-        amp_dtype = self._amp_dtype
 
         # Training state
         early_stopping = EarlyStoppingState()
-        history: dict[str, list[float]] = {
-            "train_loss": [],
-            "val_loss": [],
-            "train_acc": [],
-            "val_acc": [],
-            "gradient_norms": [],  # Track gradient norms for debugging
-        }
+        history = self._new_history()
 
         # Numerical stability validator for training loop
         self._numerical_validator = NumericalValidator(
@@ -450,7 +483,7 @@ class BaseRNNModel(BaseModel):
             min_batch_size=train_config.get("oom_min_batch_size", 2),
         )
         self._oom_manager = OOMRecoveryManager(oom_config)
-        current_batch_size = train_config.get("batch_size", 64)
+        current_batch_size = train_config.get("batch_size", 512)
         initial_batch_size = current_batch_size  # Save for dtype-fallback reset
 
         max_epochs = train_config.get("max_epochs", 100)
@@ -495,6 +528,9 @@ class BaseRNNModel(BaseModel):
                         f"grad_norm: {avg_grad_norm:.4f}"
                     )
 
+                # Advance the LR clock to the epoch boundary
+                schedule.end_epoch(completed_epochs=epoch + 1, step=scheduler.last_epoch)
+
                 # Early stopping check
                 if early_stopping.check(val_loss, epoch, self._model, patience, min_delta):
                     logger.info(f"Early stopping at epoch {epoch + 1}")
@@ -523,91 +559,93 @@ class BaseRNNModel(BaseModel):
 
             except RuntimeError as e:
                 # Handle CUDA OOM errors with automatic batch size reduction
-                if self._oom_manager.is_oom_error(e):
-                    error_msg = str(e).lower()
-                    is_cublas_error = "cublas" in error_msg or "cudnn" in error_msg
-
-                    # cuBLAS/cuDNN internal errors are often bf16 dtype issues,
-                    # not memory issues. Fall back to fp32 FIRST, restoring the
-                    # original batch size (the error was dtype, not memory).
-                    if is_cublas_error and self._use_amp and amp_dtype != torch.float32:
-                        logger.warning(
-                            f"cuBLAS/cuDNN error detected with {amp_dtype} — "
-                            "disabling mixed precision and retrying with fp32"
-                        )
-                        from src.models.device import release_gpu_memory
-
-                        release_gpu_memory()
-                        self._use_amp = False
-                        amp_dtype = torch.float32
-                        scaler = None
-                        # Reset OOM state — this is a dtype fix, not memory
-                        self._oom_manager._current_retries = 0
-                        current_batch_size = initial_batch_size
-                        train_config["batch_size"] = current_batch_size
-                        logger.info(
-                            f"Restored batch_size={current_batch_size}, "
-                            f"switched to fp32 — recreating data loaders"
-                        )
-                        train_loader = self._create_dataloader(
-                            X_train, y_train, sample_weights, train_config, shuffle=True
-                        )
-                        val_config = {
-                            **train_config,
-                            "batch_size": train_config.get("batch_size", 512) * 2,
-                        }
-                        val_loader = self._create_dataloader(
-                            X_val, y_val, None, val_config, shuffle=False
-                        )
-                        scheduler = self._create_scheduler(
-                            optimizer, train_config, len(train_loader)
-                        )
-                        epoch = 0  # Restart training from scratch in fp32
-                        continue
-
-                    new_batch_size = self._oom_manager.handle_oom(current_batch_size)
-                    if new_batch_size is None:
-                        # Recovery failed - re-raise the error
-                        raise RuntimeError(
-                            f"OOM recovery failed after {self._oom_manager.config.max_retries} retries. "
-                            f"Final batch size: {current_batch_size}. Consider reducing model size or sequence length."
-                        ) from e
-
-                    # Update batch size and recreate data loaders
-                    current_batch_size = new_batch_size
-                    train_config["batch_size"] = current_batch_size
-                    logger.info(f"Recreating data loaders with batch_size={current_batch_size}")
-
-                    # Recreate data loaders with reduced batch size
-                    train_loader = self._create_dataloader(
-                        X_train, y_train, sample_weights, train_config, shuffle=True
-                    )
-                    val_config = {
-                        **train_config,
-                        "batch_size": train_config.get("batch_size", 512) * 2,
-                    }
-                    val_loader = self._create_dataloader(
-                        X_val, y_val, None, val_config, shuffle=False
-                    )
-
-                    # Reset scheduler steps for new data loader size
-                    scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
-
-                    # Don't increment epoch - retry the same epoch with smaller batch
-                    continue
-                else:
-                    # Not an OOM error - re-raise
+                if not self._oom_manager.is_oom_error(e):
                     raise
+
+                error_msg = str(e).lower()
+                is_cublas_error = "cublas" in error_msg or "cudnn" in error_msg
+
+                # cuBLAS/cuDNN internal errors are often bf16 dtype issues,
+                # not memory issues. Fall back to fp32 FIRST, restoring the
+                # original batch size (the error was dtype, not memory), and
+                # restart training from scratch: fresh network, optimizer,
+                # schedule, history and early-stopping state, so no state of
+                # the aborted mixed-precision run leaks into the fp32 run.
+                if is_cublas_error and self._use_amp and amp_dtype != torch.float32:
+                    logger.warning(
+                        f"cuBLAS/cuDNN error detected with {amp_dtype} — "
+                        "disabling mixed precision and restarting training in fp32"
+                    )
+                    from src.models.device import release_gpu_memory
+
+                    self._model = None  # type: ignore[assignment]
+                    release_gpu_memory()
+                    self._use_amp = False
+                    amp_dtype = torch.float32
+                    scaler = None
+                    # Reset OOM state — this is a dtype fix, not memory
+                    self._oom_manager.reset()
+                    current_batch_size = initial_batch_size
+                    train_config["batch_size"] = current_batch_size
+
+                    set_all_seeds(random_seed, deterministic=deterministic)
+                    self._build_network(n_features, train_config, X_train, amp_dtype)
+                    train_loader, val_loader = self._create_fit_loaders(
+                        X_train, y_train, sample_weights, X_val, y_val, train_config
+                    )
+                    optimizer = self._create_optimizer(train_config)
+                    scheduler, schedule = self._create_scheduler(
+                        optimizer, train_config, len(train_loader)
+                    )
+                    early_stopping = EarlyStoppingState()
+                    history = self._new_history()
+                    epoch = 0
+                    continue
+
+                new_batch_size = self._oom_manager.handle_oom(current_batch_size)
+                if new_batch_size is None:
+                    # Recovery failed - re-raise the error
+                    raise RuntimeError(
+                        f"OOM recovery failed after {self._oom_manager.config.max_retries} retries. "
+                        f"Final batch size: {current_batch_size}. Consider reducing model size or sequence length."
+                    ) from e
+
+                # Rebuild ONLY the data loaders with the reduced batch size.
+                # Optimizer, scheduler (LR position) and early-stopping state are
+                # kept; the schedule clock rewinds to the start of the retried
+                # epoch and adopts the new steps-per-epoch.
+                current_batch_size = new_batch_size
+                train_config["batch_size"] = current_batch_size
+                logger.info(f"Recreating data loaders with batch_size={current_batch_size}")
+                train_loader, val_loader = self._create_fit_loaders(
+                    X_train, y_train, sample_weights, X_val, y_val, train_config
+                )
+                schedule.restart_epoch(steps_per_epoch=len(train_loader), step=scheduler.last_epoch)
+                for group, base_lr in zip(optimizer.param_groups, scheduler.base_lrs, strict=True):
+                    group["lr"] = base_lr * schedule(scheduler.last_epoch)
+
+                # Don't increment epoch - retry the same epoch with smaller batch
+                continue
 
         # Restore best model
         if early_stopping.best_state_dict is not None:
             self._model.load_state_dict(early_stopping.best_state_dict)
 
+        # Inference always runs the eager network: fit() -> predict() then
+        # computes exactly what a load()ed checkpoint computes, and a lazy
+        # recompilation for eval-mode shapes can never fail at predict time.
+        self._model = self._unwrapped_model()
+
         training_time = time.time() - start_time
         epochs_trained = len(history["train_loss"])
 
-        # Compute final metrics
-        train_metrics = self._compute_final_metrics(train_loader, amp_dtype, y_train)
+        # Compute final metrics. The training loader shuffles, so train metrics
+        # are computed on a fresh, order-preserving loader aligned with y_train.
+        eval_config = {**train_config, "batch_size": train_config.get("batch_size", 512) * 2}
+        train_eval_loader = self._create_dataloader(
+            X_train, y_train, None, eval_config, shuffle=False
+        )
+        train_metrics = self._compute_final_metrics(train_eval_loader, amp_dtype, y_train)
         val_metrics = self._compute_final_metrics(val_loader, amp_dtype, y_val)
 
         self._is_fitted = True
@@ -643,6 +681,123 @@ class BaseRNNModel(BaseModel):
             history=history,
             metadata=metadata,
         )
+
+    @staticmethod
+    def _new_history() -> dict[str, list[float]]:
+        return {
+            "train_loss": [],
+            "val_loss": [],
+            "train_acc": [],
+            "val_acc": [],
+            "gradient_norms": [],  # Track gradient norms for debugging
+        }
+
+    def _create_fit_loaders(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        sample_weights: np.ndarray | None,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        train_config: dict[str, Any],
+    ) -> tuple[DataLoader, DataLoader]:
+        """Shuffled training loader + ordered validation loader."""
+        train_loader = self._create_dataloader(
+            X_train, y_train, sample_weights, train_config, shuffle=True
+        )
+        # Use 2x batch size for validation (no gradients stored, so memory allows it)
+        val_config = {**train_config, "batch_size": train_config.get("batch_size", 512) * 2}
+        val_loader = self._create_dataloader(X_val, y_val, None, val_config, shuffle=False)
+        return train_loader, val_loader
+
+    def _create_criterion(
+        self, y_train: np.ndarray, train_config: dict[str, Any]
+    ) -> nn.CrossEntropyLoss:
+        """Cross-entropy with optional inverse-frequency class weights and label smoothing."""
+        label_smoothing = float(train_config.get("label_smoothing", 0.0))
+        # Class weights for imbalanced datasets (common in trading: neutral >> long/short)
+        if not train_config.get("use_class_weights", True):
+            return nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+        # Same label -> class-index mapping the loss sees ({-1,0,1} or binary {0,1})
+        y_class = self._convert_labels_to_class(y_train).astype(np.int64)
+        class_counts = np.bincount(y_class, minlength=self._n_classes)
+        # Handle edge case of zero counts (shouldn't happen in practice)
+        class_counts = np.maximum(class_counts, 1)
+        # Inverse frequency weighting: rarer classes get higher weights
+        class_weights = len(y_train) / (len(class_counts) * class_counts)
+        logger.debug(f"Class weights: {class_weights}")
+        class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32, device=self._device)
+        return nn.CrossEntropyLoss(weight=class_weights_tensor, label_smoothing=label_smoothing)
+
+    def _build_network(
+        self,
+        n_features: int,
+        train_config: dict[str, Any],
+        X_train: np.ndarray,
+        amp_dtype: torch.dtype,
+    ) -> None:
+        """Create the network on the target device; compile it on CUDA only.
+
+        CPU compilation needs a system C++ compiler and brings little, so the
+        CPU path is always eager. ``torch_compile: False`` disables it on CUDA.
+        """
+        self._model = self._create_network(n_features).to(self._device)
+        if (
+            self._device.type == "cuda"
+            and hasattr(torch, "compile")
+            and train_config.get("torch_compile", True)
+        ):
+            batch_size = int(train_config.get("batch_size", 512))
+            self._model = self._compile_with_fallback(self._model, X_train[:batch_size], amp_dtype)
+
+    def _compile_with_fallback(
+        self, eager: nn.Module, X_sample: np.ndarray, amp_dtype: torch.dtype
+    ) -> nn.Module:
+        """Compile ``eager`` and prove the compiled graphs run, else stay eager.
+
+        ``torch.compile`` is lazy: graph capture and Inductor code generation
+        happen on the first call, so wrapping only the ``compile()`` call in a
+        try/except never catches real failures. This runs a guarded warm-up —
+        one train-mode forward+backward and one eval-mode forward on a real
+        batch under the training autocast — and returns the eager module if
+        any of it raises. Parameters, buffers (BatchNorm running stats) and
+        gradients are restored afterwards, so the warm-up leaves no trace.
+        """
+        try:
+            compiled = torch.compile(eager, mode="max-autotune")
+        except Exception as exc:  # noqa: BLE001 - any compile failure -> eager
+            logger.warning(f"torch.compile unavailable ({exc!r}); training eagerly")
+            return eager
+
+        snapshot = {k: v.detach().clone() for k, v in eager.state_dict().items()}
+        sample = torch.from_numpy(np.ascontiguousarray(X_sample)).float().to(self._device)
+        was_training = eager.training
+        try:
+            compiled.train()
+            with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+                logits = compiled(sample)
+            logits.float().sum().backward()
+            compiled.eval()
+            with (
+                torch.no_grad(),
+                torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp),
+            ):
+                compiled(sample)
+        except Exception as exc:  # noqa: BLE001 - any first-call failure -> eager
+            logger.warning(
+                f"torch.compile failed on its first forward/backward ({exc!r}); "
+                "falling back to eager execution"
+            )
+            return eager
+        finally:
+            eager.load_state_dict(snapshot)
+            for param in eager.parameters():
+                param.grad = None
+            eager.train(was_training)
+
+        logger.info("torch.compile(mode='max-autotune') applied")
+        return compiled
 
     def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""
@@ -696,7 +851,7 @@ class BaseRNNModel(BaseModel):
                 "config": self._config,
                 "n_features": self._n_features,
                 "n_classes": self._n_classes,
-                "seq_len": getattr(self, "_seq_len", None),  # N-BEATS needs this
+                "seq_len": self._seq_len,  # seq_len-dependent networks rebuild from it
                 "arch_version": self.ARCH_VERSION,
             },
             path / "model.pt",
@@ -716,20 +871,21 @@ class BaseRNNModel(BaseModel):
             model_path, map_location=self._device, weights_only=False
         )  # nosec: loads state_dict + config metadata from trusted internal checkpoints
 
-        # Check architecture version (warn on mismatch, don't error)
-        saved_version = checkpoint.get("arch_version")
-        if saved_version is not None and saved_version != self.ARCH_VERSION:
-            logger.warning(
-                f"Architecture version mismatch: saved={saved_version}, "
-                f"current={self.ARCH_VERSION}. Model may behave unexpectedly."
+        # Refuse checkpoints of a different network definition: weights of an
+        # older architecture may still fit the state_dict yet compute something
+        # else (e.g. a different pooling or padding), which must fail loudly.
+        saved_version = str(checkpoint.get("arch_version") or _LEGACY_ARCH_VERSION)
+        if saved_version != self.ARCH_VERSION:
+            raise ValueError(
+                f"{self._get_model_type().upper()} checkpoint {model_path} was saved by "
+                f"architecture version {saved_version}, but this code builds version "
+                f"{self.ARCH_VERSION}. The network definition changed; retrain the model."
             )
 
         self._config = checkpoint["config"]
         self._n_features = checkpoint["n_features"]
         self._n_classes = checkpoint["n_classes"]
-        # Restore seq_len for N-BEATS (and other models that need it)
-        if "seq_len" in checkpoint:
-            self._seq_len = checkpoint["seq_len"]
+        self._seq_len = checkpoint.get("seq_len")
 
         # Recreate and load model
         self._model = self._create_network(self._n_features)
@@ -803,28 +959,20 @@ class BaseRNNModel(BaseModel):
         optimizer: torch.optim.Optimizer,
         config: dict[str, Any],
         steps_per_epoch: int,
-    ) -> torch.optim.lr_scheduler.LRScheduler:
-        """Create cosine annealing scheduler with warmup."""
-        max_epochs = config.get("max_epochs", 100)
-        warmup_epochs = config.get("warmup_epochs", 5)
-
-        total_steps = max_epochs * steps_per_epoch
-        warmup_steps = warmup_epochs * steps_per_epoch
-
-        def lr_lambda(step: int) -> float:
-            if step < warmup_steps:
-                return float(step / max(warmup_steps, 1))
-            else:
-                progress = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
-                return float(0.5 * (1 + np.cos(np.pi * progress)))
-
-        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    ) -> tuple[torch.optim.lr_scheduler.LambdaLR, WarmupCosineSchedule]:
+        """Create the per-step warmup + cosine scheduler and its epoch clock."""
+        schedule = WarmupCosineSchedule(
+            max_epochs=config.get("max_epochs", 100),
+            warmup_epochs=config.get("warmup_epochs", 5),
+            steps_per_epoch=steps_per_epoch,
+        )
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, schedule), schedule
 
     def _train_epoch(
         self,
         loader: DataLoader,
         optimizer: torch.optim.Optimizer,
-        criterion: nn.Module,
+        criterion: nn.CrossEntropyLoss,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         scaler: torch.amp.GradScaler | None,
         amp_dtype: torch.dtype,
@@ -869,7 +1017,9 @@ class BaseRNNModel(BaseModel):
                     # Use reduction='none' to get per-sample losses for weighting
                     # Preserve class_weights if active (criterion already has them)
                     criterion_unreduced = nn.CrossEntropyLoss(
-                        weight=criterion.weight, reduction="none"
+                        weight=criterion.weight,
+                        reduction="none",
+                        label_smoothing=criterion.label_smoothing,
                     )
                     per_sample_loss = criterion_unreduced(logits, y_batch)
                     loss = (per_sample_loss * weights).mean()

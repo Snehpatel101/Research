@@ -3,7 +3,7 @@ Transformer Model - Vanilla Transformer encoder for 3-class prediction.
 
 GPU-accelerated Transformer with:
 - Positional encoding (sinusoidal)
-- Multi-head self-attention
+- Causal (masked) multi-head self-attention: position t attends to <= t only
 - Feed-forward networks with GELU activation
 - Mixed precision with automatic dtype selection (bfloat16/float16/float32)
 - Layer normalization and dropout
@@ -24,6 +24,7 @@ import torch.nn as nn
 from ..base import PredictionResult
 from ..registry import register
 from .base_rnn import BaseRNNModel
+from .layers import pre_ln_layer_with_attention
 
 logger = logging.getLogger(__name__)
 
@@ -84,18 +85,18 @@ class PositionalEncoding(nn.Module):
 
 class TransformerNetwork(nn.Module):
     """
-    Vanilla Transformer encoder for sequence classification.
+    Causal Transformer encoder for sequence classification.
 
     Architecture:
         Input (batch, seq_len, features)
         -> Linear projection to d_model
         -> Positional encoding
-        -> TransformerEncoder (n_layers)
-           - Multi-head self-attention
+        -> TransformerEncoder (n_layers, Pre-LN)
+           - Causal multi-head self-attention (position t sees positions <= t)
            - Feed-forward network (d_ff hidden units)
            - Layer normalization
            - Residual connections
-        -> Global average pooling
+        -> Last position (the only one that has attended to the whole window)
         -> LayerNorm + Dropout
         -> Linear -> d_model // 2
         -> GELU + Dropout
@@ -152,9 +153,6 @@ class TransformerNetwork(nn.Module):
         # Initialize weights
         self._init_weights()
 
-        # Store attention weights for interpretability
-        self._last_attention_weights: torch.Tensor | None = None
-
     def _init_weights(self) -> None:
         """Initialize weights using Xavier uniform initialization."""
         for p in self.parameters():
@@ -181,17 +179,12 @@ class TransformerNetwork(nn.Module):
         mask = mask.masked_fill(mask == 1, float("-inf"))
         return mask
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        return_attention: bool = False,
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through Transformer.
 
         Args:
             x: Input tensor, shape (batch, seq_len, features)
-            return_attention: If True, store attention weights
 
         Returns:
             Output logits, shape (batch, n_classes)
@@ -209,8 +202,9 @@ class TransformerNetwork(nn.Module):
         # Transformer encoder with causal mask
         x = self.transformer_encoder(x, mask=causal_mask)  # (batch, seq_len, d_model)
 
-        # Global average pooling over sequence dimension
-        x = x.mean(dim=1)  # (batch, d_model)
+        # Under the causal mask only the last position has attended to the whole
+        # window; earlier positions saw progressively shorter prefixes.
+        x = x[:, -1, :]  # (batch, d_model)
 
         # Classification head
         x = self.layer_norm(x)
@@ -224,10 +218,11 @@ class TransformerNetwork(nn.Module):
 
     def get_attention_weights(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Extract attention weights from all layers.
+        Extract the attention weights ``forward`` actually uses, layer by layer.
 
-        This is a simplified version that computes attention patterns
-        by manually running through encoder layers.
+        Replays each Pre-LN encoder layer with the same causal mask, so the
+        weights are exactly zero above the diagonal (no attention to later
+        positions).
 
         Args:
             x: Input tensor, shape (batch, seq_len, features)
@@ -235,25 +230,15 @@ class TransformerNetwork(nn.Module):
         Returns:
             Attention weights, shape (n_layers, batch, n_heads, seq_len, seq_len)
         """
-        # Project and add positional encoding
         x = self.input_projection(x)
         x = self.pos_encoder(x)
+        causal_mask = self._generate_causal_mask(x.size(1), x.device)
 
         attention_weights = []
-
-        # Manually iterate through encoder layers to capture attention
         for layer in self.transformer_encoder.layers:
-            # Run self-attention (simplified - actual implementation is more complex)
-            # Note: This is a basic extraction; production code would use hooks
-            attn_output, attn_weights = layer.self_attn(
-                x, x, x, need_weights=True, average_attn_weights=False
-            )
-            attention_weights.append(attn_weights.detach())
-
-            # Complete the layer forward pass
-            x = layer.norm1(x + layer.dropout1(attn_output))
-            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(x))))
-            x = layer.norm2(x + layer.dropout2(ff_output))
+            assert isinstance(layer, nn.TransformerEncoderLayer)
+            x, attn_weights = pre_ln_layer_with_attention(layer, x, causal_mask)
+            attention_weights.append(attn_weights)
 
         return torch.stack(attention_weights, dim=0)
 
@@ -283,18 +268,19 @@ class TransformerModel(BaseRNNModel):
     - Gradient clipping and early stopping
 
     Features:
-    - Multi-head self-attention for global context
+    - Causal multi-head self-attention (each position sees only its past)
     - Positional encoding for temporal awareness
     - Feed-forward networks with GELU activation
     - Layer normalization and residual connections
     - Attention weight extraction for interpretability
 
     Note on Causality:
-        Standard Transformer self-attention is inherently bidirectional - each
-        position attends to ALL other positions in the sequence (past and future
-        within the window). This is fundamentally non-causal. For production
-        trading models requiring strict causality, consider using LSTM/GRU with
-        bidirectional=False, or TCN which uses causal convolutions.
+        Self-attention runs under a causal mask: position t attends only to
+        positions <= t, and the classifier reads the last position. The model
+        is therefore causal, like TCN or a unidirectional LSTM/GRU.
+
+    Architecture version 2.0: the classifier reads the last position instead of
+    mean-pooling all positions (1.0 checkpoints are refused on load).
 
     Example:
         >>> from src.models import ModelRegistry
@@ -308,12 +294,10 @@ class TransformerModel(BaseRNNModel):
         >>> attention = model.get_attention_weights(X_test[:10])
     """
 
-    # Track whether the non-causal warning has been logged
-    _noncausal_warning_logged: bool = False
+    ARCH_VERSION = "2.0"  # 2.0: last-position head under the causal mask
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._noncausal_warning_logged = False
         logger.debug(f"Initialized TransformerModel with config: {self._config}")
 
     @property
@@ -321,39 +305,16 @@ class TransformerModel(BaseRNNModel):
         """
         Check if this model configuration is safe for production trading.
 
-        Standard Transformer self-attention is inherently non-causal (attends
-        to all positions). This implementation does NOT use causal masking,
-        so it always returns False.
+        Attention is causally masked (position t sees only positions <= t),
+        so the model is causal.
 
         Returns:
-            False - standard Transformer is not production-safe for trading.
+            True - causal self-attention.
         """
-        return False
+        return True
 
     def _log_bidirectional_warning(self) -> None:
-        """
-        Log a warning about non-causal self-attention (only once).
-
-        Overrides parent method since Transformer has different concerns than
-        bidirectional RNNs.
-        """
-        if self._noncausal_warning_logged:
-            return
-
-        logger.warning(
-            "TRANSFORMER NON-CAUSAL ATTENTION: Standard self-attention allows each "
-            "position to attend to ALL other positions in the sequence window, including "
-            "future positions. This is inherently non-causal.\n"
-            "Implications:\n"
-            "  - Each prediction uses information from later timesteps in the window\n"
-            "  - Patterns learned may not be available during real-time inference\n"
-            "  - Model may perform differently in live trading vs backtesting\n"
-            "Recommendations:\n"
-            "  - For production trading: Use LSTM/GRU (bidirectional=False) or TCN\n"
-            "  - For research/pattern analysis: Transformer is acceptable\n"
-            "  - To add causality: Would require implementing causal attention mask"
-        )
-        self._noncausal_warning_logged = True
+        """Causal attention: nothing to warn about."""
 
     def get_default_config(self) -> dict[str, Any]:
         """Return default Transformer hyperparameters."""
@@ -469,7 +430,7 @@ class TransformerModel(BaseRNNModel):
             return None
 
         # Get input projection weights: (d_model, input_size)
-        transformer_network = self._model
+        transformer_network = self._unwrapped_model()
         if not isinstance(transformer_network, TransformerNetwork):
             return None
         weights = transformer_network.input_projection.weight.detach().cpu().numpy()
@@ -506,7 +467,7 @@ class TransformerModel(BaseRNNModel):
             logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
-        transformer_network = self._model
+        transformer_network = self._unwrapped_model()
         if not isinstance(transformer_network, TransformerNetwork):
             return None
         transformer_network.eval()

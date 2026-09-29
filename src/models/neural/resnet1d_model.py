@@ -554,7 +554,7 @@ class ResNet1DModel(BaseRNNModel):
 
         self._validate_input_shape(X, "X")
 
-        resnet_network = self._model
+        resnet_network = self._unwrapped_model()
         if not isinstance(resnet_network, ResNet1DNetwork):
             return None
 
