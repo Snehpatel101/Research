@@ -172,7 +172,7 @@ class GRUModel(BaseRNNModel):
         with torch.no_grad():
             # Get RNN output (hidden states at each timestep)
             # Access rnn attribute from the underlying GRUNetwork
-            rnn_network = self._model
+            rnn_network = self._unwrapped_model()
             if isinstance(rnn_network, GRUNetwork) and rnn_network.rnn is not None:
                 output, _ = rnn_network.rnn(X_tensor)
                 return np.asarray(output.cpu().numpy())

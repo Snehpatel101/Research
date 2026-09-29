@@ -104,8 +104,15 @@ class TCNNetwork(nn.Module):
         -> TemporalBlock 2 (dilation=2)
         -> TemporalBlock 3 (dilation=4)
         -> TemporalBlock 4 (dilation=8)
-        -> Global average pooling
-        -> Linear -> 3 classes
+        -> Output at the last timestep (Bai et al., 2018)
+        -> Linear -> n_classes
+
+    Each TemporalBlock stacks two causal convolutions, so the receptive field
+    is ``1 + 2 * (kernel_size - 1) * sum(dilation_base**i)``: 121 bars for the
+    default 4 levels, kernel_size=5, dilation_base=2 (61 for kernel_size=3).
+    Only the last timestep's output sees the full receptive field, and it is
+    the only output that summarises the whole window causally, so it feeds the
+    classifier (mean-pooling would average in early, short-context outputs).
     """
 
     def __init__(
@@ -134,13 +141,13 @@ class TCNNetwork(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.transpose(1, 2)  # (batch, seq, feat) -> (batch, feat, seq)
         x = self.network(x)
-        x = x.mean(dim=2)  # Global average pooling
+        x = x[:, :, -1]  # Last timestep: the output that sees the whole window
         result: torch.Tensor = self.fc(x)
         return result
 
     @property
     def receptive_field(self) -> int:
-        """Calculate effective receptive field."""
+        """Receptive field in timesteps (two causal convolutions per block)."""
         rf = 1
         for i in range(len(self.num_channels)):
             dilation = self._dilation_base**i
@@ -172,6 +179,9 @@ class TCNModel(BaseRNNModel):
     - AdamW optimizer with cosine annealing
     - Gradient clipping and early stopping
 
+    Architecture version 2.0: the classifier reads the last timestep instead of
+    mean-pooling over time (1.0 checkpoints are refused on load).
+
     Production Safety:
         TCN uses causal convolutions that only look at past data, making it
         inherently production-safe for real-time trading inference.
@@ -181,6 +191,8 @@ class TCNModel(BaseRNNModel):
         >>> model = ModelRegistry.create("tcn", config={"num_channels": [64, 64, 64, 64]})
         >>> metrics = model.fit(X_train, y_train, X_val, y_val)
     """
+
+    ARCH_VERSION = "2.0"  # 2.0: last-timestep head (was mean-pooled)
 
     @property
     def is_production_safe(self) -> bool:
@@ -213,7 +225,9 @@ class TCNModel(BaseRNNModel):
                 "kernel_size": 5,  # Wider receptive field per layer
                 "dropout": 0.3,  # Stronger dropout for 2000+ features
                 "dilation_base": 2,
-                "sequence_length": 64,  # Matches TCN receptive field
+                # <= receptive field (121 bars at kernel_size=5, 4 levels,
+                # dilation_base=2), so the last output sees the whole window
+                "sequence_length": 64,
             }
         )
         return defaults
@@ -222,9 +236,9 @@ class TCNModel(BaseRNNModel):
         """Create the TCN network."""
         return TCNNetwork(
             input_size=input_size,
-            num_channels=self._config.get("num_channels", [64, 64, 64, 64]),
-            kernel_size=self._config.get("kernel_size", 3),
-            dropout=self._config.get("dropout", 0.2),
+            num_channels=self._config.get("num_channels", [64, 64, 128, 128]),
+            kernel_size=self._config.get("kernel_size", 5),
+            dropout=self._config.get("dropout", 0.3),
             dilation_base=self._config.get("dilation_base", 2),
             n_classes=self._n_classes,
         )
@@ -248,15 +262,15 @@ class TCNModel(BaseRNNModel):
         """
         if self._model is None:
             raise RuntimeError("Model is not initialized")
-        # Cast to TCNNetwork to access receptive_field property
-        model = cast(TCNNetwork, self._model)
+        model = cast(TCNNetwork, self._unwrapped_model())
         rf = model.receptive_field
         logger.info(f"TCN receptive field: {rf} timesteps (seq_len={seq_len})")
 
         if rf < seq_len:
             logger.warning(
-                f"Receptive field ({rf}) < sequence length ({seq_len}). "
-                f"Consider adding more layers or increasing kernel_size."
+                f"Receptive field ({rf}) < sequence length ({seq_len}): the classifier "
+                f"reads the last timestep, so the oldest {seq_len - rf} bars of each "
+                f"window are never seen. Add levels or increase kernel_size."
             )
 
         return {"receptive_field": rf}

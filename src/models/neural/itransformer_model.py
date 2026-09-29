@@ -2,13 +2,15 @@
 iTransformer Model - Inverted Transformer for 3-class prediction.
 
 GPU-accelerated iTransformer with:
-- Inverted attention: attention over features (channels) instead of time
-- Each feature becomes a token with temporal embedding
-- Cross-feature attention captures feature correlations
+- Inverted attention: attention over variates (features) instead of time
+- Per-window, per-variate instance normalisation (reference ``use_norm``)
+- Each variate's whole window is embedded as one token (Linear over time)
+- Cross-variate attention captures feature correlations
 - Mixed precision with automatic dtype selection (bfloat16/float16/float32)
 
 Reference: Liu et al., "iTransformer: Inverted Transformers Are Effective
-for Time Series Forecasting" (ICLR 2024)
+for Time Series Forecasting" (ICLR 2024); classification head as in the
+thuml Time-Series-Library iTransformer (flatten all variate tokens -> linear).
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
@@ -22,23 +24,24 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..base import PredictionResult, TrainingMetrics
+from ..base import PredictionResult
 from ..device import get_optimal_gpu_settings
 from ..registry import register
 from .base_rnn import BaseRNNModel
+from .layers import WindowInstanceNorm, pre_ln_layer_with_attention
 
 logger = logging.getLogger(__name__)
 
 
 class TemporalEmbedding(nn.Module):
     """
-    Temporal embedding layer for iTransformer.
+    Inverted (variate-token) embedding for iTransformer.
 
-    Embeds the temporal dimension of each feature (channel) into a fixed-size
-    representation. Uses a 1D convolution followed by linear projection.
+    Projects each variate's full window of ``seq_len`` values to a
+    ``d_model`` token with one shared linear map, followed by dropout
+    (reference ``DataEmbedding_inverted``).
 
-    This converts input from (batch, seq_len, features) to (batch, features, d_model)
-    where each feature becomes a token with temporal information embedded.
+    Converts (batch, seq_len, n_variates) to (batch, n_variates, d_model).
     """
 
     def __init__(
@@ -50,67 +53,19 @@ class TemporalEmbedding(nn.Module):
         super().__init__()
         self.seq_len = seq_len
         self.d_model = d_model
-
-        # Temporal projection: embed seq_len timesteps into d_model
         self.temporal_proj = nn.Linear(seq_len, d_model)
-        self.layer_norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Create temporal embeddings for each feature.
-
         Args:
-            x: Input tensor, shape (batch, seq_len, features)
+            x: Input tensor, shape (batch, seq_len, n_variates)
 
         Returns:
-            Feature tokens with temporal embedding, shape (batch, features, d_model)
+            Variate tokens, shape (batch, n_variates, d_model)
         """
-        # Transpose to (batch, features, seq_len)
-        x = x.transpose(1, 2)
-
-        # Project temporal dimension to d_model: (batch, features, d_model)
-        x = self.temporal_proj(x)
-        x = self.layer_norm(x)
-        x = self.dropout(x)
-
-        return x
-
-
-class FeaturePositionalEncoding(nn.Module):
-    """
-    Learnable positional encoding for feature tokens.
-
-    In iTransformer, positions correspond to different features (channels),
-    not timesteps. This captures the ordering/relationship between features.
-    """
-
-    def __init__(
-        self,
-        d_model: int,
-        max_features: int = 256,
-        dropout: float = 0.1,
-    ) -> None:
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        # Learnable feature position embeddings
-        self.pe = nn.Parameter(torch.zeros(1, max_features, d_model))
-        nn.init.normal_(self.pe, std=0.02)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Add positional encoding to feature tokens.
-
-        Args:
-            x: Feature tokens, shape (batch, n_features, d_model)
-
-        Returns:
-            Position-encoded tokens, shape (batch, n_features, d_model)
-        """
-        x = x + self.pe[:, : x.size(1), :]
-        result: torch.Tensor = self.dropout(x)
-        return result
+        tokens: torch.Tensor = self.dropout(self.temporal_proj(x.transpose(1, 2)))
+        return tokens
 
 
 class iTransformerNetwork(nn.Module):
@@ -118,20 +73,18 @@ class iTransformerNetwork(nn.Module):
     iTransformer network architecture for sequence classification.
 
     Architecture:
-        Input (batch, seq_len, features)
-        -> Temporal embedding: (batch, features, d_model)
-           (Each feature becomes a token with embedded temporal info)
-        -> Feature positional encoding
-        -> Transformer encoder (attention over features)
-        -> Global average pooling over features
-        -> LayerNorm + Dropout
-        -> Linear classifier -> 3 classes
+        Input (batch, seq_len, n_variates)   [4D inputs are flattened first]
+        -> Instance norm per window and variate (use_norm)
+        -> Variate-token embedding: (batch, n_variates, d_model)
+        -> Transformer encoder (Pre-LN; attention over variates)
+        -> LayerNorm -> GELU -> Dropout
+        -> Flatten all variate tokens (+ the window statistics removed by the
+           instance norm) -> Linear -> n_classes
 
-    Key insight:
-        Standard transformers apply attention over time positions. iTransformer
-        inverts this - applying attention over features. This allows the model
-        to learn cross-feature correlations effectively, which is often more
-        important in multivariate time series than long-range temporal patterns.
+    Why no positional encoding: like the reference, variate tokens carry no
+    position embedding. Attention is permutation-equivariant over variates;
+    identity is preserved because the head flattens the tokens in variate
+    order, so each variate has its own head weights.
     """
 
     def __init__(
@@ -145,6 +98,7 @@ class iTransformerNetwork(nn.Module):
         dropout: float,
         activation: str = "gelu",
         n_classes: int = 3,
+        use_norm: bool = True,
         use_gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
@@ -153,17 +107,15 @@ class iTransformerNetwork(nn.Module):
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
+        self.use_norm = use_norm
         self.use_gradient_checkpointing = use_gradient_checkpointing
 
-        # Temporal embedding: project each feature's temporal sequence to d_model
+        self.instance_norm = WindowInstanceNorm(input_size) if use_norm else None
+
+        # Variate-token embedding: project each variate's window to d_model
         self.temporal_embed = TemporalEmbedding(seq_len, d_model, dropout)
 
-        # Feature positional encoding
-        self.feature_pos = FeaturePositionalEncoding(
-            d_model, max_features=input_size, dropout=dropout
-        )
-
-        # Transformer encoder (attention over features)
+        # Transformer encoder (attention over variates)
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
@@ -179,12 +131,11 @@ class iTransformerNetwork(nn.Module):
         )
 
         # Classification head
-        self.layer_norm = nn.LayerNorm(d_model)
-        self.dropout_cls = nn.Dropout(dropout)
-        self.fc1 = nn.Linear(d_model, d_model // 2)
+        self.encoder_norm = nn.LayerNorm(d_model)
         self.gelu = nn.GELU()
-        self.dropout_fc = nn.Dropout(dropout)
-        self.fc2 = nn.Linear(d_model // 2, n_classes)
+        self.dropout_head = nn.Dropout(dropout)
+        n_stats = 2 * input_size if use_norm else 0
+        self.fc = nn.Linear(input_size * d_model + n_stats, n_classes)
 
         # Initialize weights
         self._init_weights()
@@ -194,6 +145,22 @@ class iTransformerNetwork(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
+
+    @staticmethod
+    def _flatten_timeframes(x: torch.Tensor) -> torch.Tensor:
+        """(batch, n_tf, seq, feat) -> (batch, seq, n_tf * feat); 3D passes through."""
+        if x.ndim == 4:
+            batch, n_tf, seq, feat = x.shape
+            x = x.permute(0, 2, 1, 3).reshape(batch, seq, n_tf * feat)
+        return x
+
+    def _embed(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Instance-normalise (optional) and embed: returns (tokens, window stats)."""
+        x = self._flatten_timeframes(x)
+        stats: torch.Tensor | None = None
+        if self.instance_norm is not None:
+            x, stats = self.instance_norm(x)
+        return self.temporal_embed(x), stats
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -206,66 +173,39 @@ class iTransformerNetwork(nn.Module):
         Returns:
             Output logits, shape (batch, n_classes)
         """
-        # Handle 4D multi-resolution input: flatten timeframes into features
-        if x.ndim == 4:
-            batch, n_tf, seq, feat = x.shape
-            # (batch, n_tf, seq, feat) -> (batch, seq, n_tf * feat)
-            x = x.permute(0, 2, 1, 3).reshape(batch, seq, n_tf * feat)
+        tokens, stats = self._embed(x)  # (batch, n_variates, d_model)
 
-        # Temporal embedding: (batch, seq_len, features) -> (batch, features, d_model)
-        x = self.temporal_embed(x)
-
-        # Add feature positional encoding
-        x = self.feature_pos(x)
-
-        # Transformer encoder with attention over features
+        # Transformer encoder with attention over variates
         if self.use_gradient_checkpointing and self.training:
             from torch.utils.checkpoint import checkpoint
 
-            x = checkpoint(self.transformer_encoder, x, use_reentrant=False)
+            tokens = checkpoint(self.transformer_encoder, tokens, use_reentrant=False)
         else:
-            x = self.transformer_encoder(x)  # (batch, features, d_model)
+            tokens = self.transformer_encoder(tokens)
 
-        # Global average pooling over features
-        x = x.mean(dim=1)  # (batch, d_model)
-
-        # Classification head
-        x = self.layer_norm(x)
-        x = self.dropout_cls(x)
-        x = self.fc1(x)
-        x = self.gelu(x)
-        x = self.dropout_fc(x)
-        x = self.fc2(x)
-
-        return x
+        h = self.dropout_head(self.gelu(self.encoder_norm(tokens))).flatten(1)
+        if stats is not None:
+            h = torch.cat([h, stats], dim=-1)
+        logits: torch.Tensor = self.fc(h)
+        return logits
 
     def get_feature_attention(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Extract attention weights between features.
+        Extract the variate-to-variate attention weights ``forward`` uses.
 
         Args:
-            x: Input tensor, shape (batch, seq_len, features)
+            x: Input tensor, shape (batch, seq_len, features) or 4D
 
         Returns:
             Attention weights, shape (n_layers, batch, n_heads, n_features, n_features)
         """
-        # Get temporal embeddings
-        x = self.temporal_embed(x)
-        x = self.feature_pos(x)
+        tokens, _ = self._embed(x)
 
         attention_weights = []
-
-        # Iterate through encoder layers to capture attention
         for layer in self.transformer_encoder.layers:
-            attn_output, attn_weights = layer.self_attn(
-                x, x, x, need_weights=True, average_attn_weights=False
-            )
-            attention_weights.append(attn_weights.detach())
-
-            # Complete the layer forward pass
-            x = layer.norm1(x + layer.dropout1(attn_output))
-            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(x))))
-            x = layer.norm2(x + layer.dropout2(ff_output))
+            assert isinstance(layer, nn.TransformerEncoderLayer)
+            tokens, attn_weights = pre_ln_layer_with_attention(layer, tokens)
+            attention_weights.append(attn_weights)
 
         return torch.stack(attention_weights, dim=0)
 
@@ -292,9 +232,15 @@ class iTransformerModel(BaseRNNModel):
 
     Key Features:
     - Inverted attention: attends over features, not time
+    - Instance normalisation per window and variate (``use_norm``, default
+      True as in the reference); the removed window mean/log-std are fed to
+      the classification head so level information is not lost
     - Temporal embedding: projects each feature's time series to d_model
     - Effective for multivariate time series with many correlated features
     - Typically needs fewer layers than standard transformers
+
+    Architecture version 2.0: reference instance norm + flatten head, no
+    learned feature positional encoding (1.0 checkpoints are refused on load).
 
     Note on Sequence Length:
         iTransformer is sensitive to sequence length since it's used in the
@@ -312,7 +258,7 @@ class iTransformerModel(BaseRNNModel):
         >>> predictions = model.predict(X_test)
     """
 
-    _seq_len_set: bool = False
+    ARCH_VERSION = "2.0"  # 2.0: use_norm + flatten head, no feature positional encoding
 
     @property
     def requires_4d(self) -> bool:
@@ -321,7 +267,6 @@ class iTransformerModel(BaseRNNModel):
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._seq_len: int | None = None
         logger.debug(f"Initialized iTransformerModel with config: {self._config}")
 
     @property
@@ -364,6 +309,7 @@ class iTransformerModel(BaseRNNModel):
                 "d_ff": gpu_settings.get("d_ff", 256),
                 "dropout": 0.1,
                 "activation": "gelu",
+                "use_norm": True,  # per-window, per-variate instance norm
                 # Training — adaptive batch size
                 "sequence_length": gpu_settings.get("sequence_length", 60),
                 "batch_size": gpu_settings.get("batch_size", 128),
@@ -379,7 +325,7 @@ class iTransformerModel(BaseRNNModel):
 
     def _create_network(self, input_size: int) -> nn.Module:
         """Create the iTransformer network."""
-        # Get sequence length from training data or config
+        # Sequence length from the training data (restored by load()) or config
         seq_len = self._seq_len or self._config.get("sequence_length", 60)
 
         return iTransformerNetwork(
@@ -392,43 +338,13 @@ class iTransformerModel(BaseRNNModel):
             dropout=self._config.get("dropout", 0.1),
             activation=self._config.get("activation", "gelu"),
             n_classes=self._n_classes,
+            use_norm=self._config.get("use_norm", True),
             use_gradient_checkpointing=self._config.get("gradient_checkpointing", False),
         )
 
     def _get_model_type(self) -> str:
         """Return model type string."""
         return "itransformer"
-
-    def fit(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        sample_weights: np.ndarray | None = None,
-        config: dict[str, Any] | None = None,
-    ) -> TrainingMetrics:
-        """
-        Train the iTransformer model.
-
-        Overrides parent to capture and store sequence length from training data.
-
-        Args:
-            X_train: Training features, shape (n_samples, seq_len, n_features)
-            y_train: Training labels
-            X_val: Validation features
-            y_val: Validation labels
-            sample_weights: Optional sample weights
-            config: Optional config overrides
-
-        Returns:
-            TrainingMetrics with training results
-        """
-        # Store sequence length from training data
-        # For 4D input (batch, n_timeframes, seq_len, features), seq_len is dim 2
-        self._seq_len = X_train.shape[2] if X_train.ndim == 4 else X_train.shape[1]
-
-        return super().fit(X_train, y_train, X_val, y_val, sample_weights, config)
 
     def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
@@ -520,61 +436,13 @@ class iTransformerModel(BaseRNNModel):
             },
         )
 
-    def save(self, path: str | Any) -> None:
-        """Save model with sequence length metadata."""
-        self._validate_fitted()
-        from pathlib import Path
-
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
-
-        torch.save(
-            {
-                "model_state_dict": self._model.state_dict(),
-                "config": self._config,
-                "n_features": self._n_features,
-                "n_classes": self._n_classes,
-                "seq_len": self._seq_len,  # Store sequence length
-            },
-            path / "model.pt",
-        )
-
-        logger.info(f"Saved iTransformer model to {path}")
-
-    def load(self, path: str | Any) -> None:
-        """Load model with sequence length metadata."""
-        from pathlib import Path
-
-        path = Path(path)
-        model_path = path / "model.pt"
-
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
-
-        checkpoint = torch.load(
-            model_path, map_location=self._device, weights_only=False
-        )  # nosec: loads state_dict + config metadata from trusted internal checkpoints
-
-        self._config = checkpoint["config"]
-        self._n_features = checkpoint["n_features"]
-        self._n_classes = checkpoint["n_classes"]
-        self._seq_len = checkpoint["seq_len"]  # Restore sequence length
-
-        # Recreate and load model
-        self._model = self._create_network(self._n_features)
-        self._model.load_state_dict(checkpoint["model_state_dict"])
-        self._model = self._model.to(self._device)
-        self._model.eval()
-
-        self._is_fitted = True
-        logger.info(f"Loaded iTransformer model from {path} (seq_len={self._seq_len})")
-
     def get_feature_importance(self) -> dict[str, float] | None:
         """
-        Return feature importance based on temporal embedding weights.
+        Return feature importance from the classification head.
 
-        For iTransformer, we analyze how much each feature contributes
-        to the final representation by examining the temporal embedding.
+        The head flattens the variate tokens in feature order, so each feature
+        owns a block of head weights (its token, plus its window mean/log-std
+        when ``use_norm``). Importance is the L2 norm of that block.
 
         Returns:
             Dict mapping feature indices to importance scores,
@@ -583,31 +451,23 @@ class iTransformerModel(BaseRNNModel):
         if not self._is_fitted:
             return None
 
-        itransformer_network = self._model
+        itransformer_network = self._unwrapped_model()
         if not isinstance(itransformer_network, iTransformerNetwork):
             return None
 
-        # Get temporal projection weights: (d_model, seq_len)
-        weights = itransformer_network.temporal_embed.temporal_proj.weight.detach().cpu().numpy()
+        n_features = itransformer_network.input_size
+        d_model = itransformer_network.d_model
+        weights = itransformer_network.fc.weight.detach().cpu().numpy()  # (n_classes, in)
+        n_classes = weights.shape[0]
+        token_part = weights[:, : n_features * d_model].reshape(n_classes, n_features, d_model)
+        sq = (token_part**2).sum(axis=(0, 2))
+        if itransformer_network.use_norm:
+            stats_part = weights[:, n_features * d_model :].reshape(n_classes, 2, n_features)
+            sq = sq + (stats_part**2).sum(axis=(0, 1))
+        importance = np.sqrt(sq)
+        importance = importance / importance.sum()
 
-        # L2 norm across d_model dimension gives temporal importance
-        # Then average across features (each feature uses same projection)
-        _temporal_importance = np.linalg.norm(weights, axis=0)
-
-        # For feature importance, we use the feature position embeddings
-        # Get position embeddings: (1, max_features, d_model)
-        pos_embed = itransformer_network.feature_pos.pe.detach().cpu().numpy()[0]
-
-        # Only use embeddings for actual features
-        pos_embed = pos_embed[: self._n_features]
-
-        # L2 norm of each feature's position embedding
-        feature_importance = np.linalg.norm(pos_embed, axis=1)
-
-        # Normalize
-        feature_importance = feature_importance / feature_importance.sum()
-
-        return {f"feature_{i}": float(imp) for i, imp in enumerate(feature_importance)}
+        return {f"feature_{i}": float(imp) for i, imp in enumerate(importance)}
 
     def get_feature_attention_matrix(self, X: np.ndarray, sample_idx: int = 0) -> np.ndarray | None:
         """
@@ -633,7 +493,7 @@ class iTransformerModel(BaseRNNModel):
             logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
-        itransformer_network = self._model
+        itransformer_network = self._unwrapped_model()
         if not isinstance(itransformer_network, iTransformerNetwork):
             return None
         itransformer_network.eval()
@@ -651,5 +511,4 @@ __all__ = [
     "iTransformerModel",
     "iTransformerNetwork",
     "TemporalEmbedding",
-    "FeaturePositionalEncoding",
 ]

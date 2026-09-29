@@ -349,7 +349,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         feature_mode=FeatureMode.ENGINEERED,
         mtf_mode=MTFMode.NONE,
         primary_timeframe="5min",
-        sequence_length=64,  # Matches TCN receptive field (61)
+        sequence_length=64,  # <= TCN receptive field (121 at default kernel_size=5)
         requires_scaling=True,
         scaler_type="robust",
         min_features=50,

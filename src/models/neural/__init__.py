@@ -47,7 +47,6 @@ from .inceptiontime_model import (
     InceptionTimeNetwork,
 )
 from .itransformer_model import (
-    FeaturePositionalEncoding,
     TemporalEmbedding,
     iTransformerModel,
     iTransformerNetwork,
@@ -140,7 +139,6 @@ __all__ = [
     "iTransformerModel",
     "iTransformerNetwork",
     "TemporalEmbedding",
-    "FeaturePositionalEncoding",
     # TFT
     "TFTModel",
     "TFTNetwork",

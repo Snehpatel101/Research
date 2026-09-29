@@ -18,13 +18,15 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from ..base import PredictionResult, TrainingMetrics
+from ..base import PredictionResult
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -233,6 +235,10 @@ class NBEATSStack(nn.Module):
     The stack applies blocks sequentially, where each block:
     1. Receives the residual from the previous block
     2. Produces backcast (subtracted for next block) and forecast (accumulated)
+
+    Every block gets its own basis module from ``basis_factory`` (Oreshkin et
+    al., 2020: each block owns its projections). Sharing one instance would tie
+    the learnable generic-basis projections across all blocks of the stack.
     """
 
     def __init__(
@@ -242,7 +248,7 @@ class NBEATSStack(nn.Module):
         theta_size: int,
         hidden_size: int,
         n_layers: int,
-        basis_function: nn.Module,
+        basis_factory: Callable[[], nn.Module],
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
@@ -254,7 +260,7 @@ class NBEATSStack(nn.Module):
                     theta_size=theta_size,
                     hidden_size=hidden_size,
                     n_layers=n_layers,
-                    basis_function=basis_function,
+                    basis_function=basis_factory(),
                     dropout=dropout,
                 )
                 for _ in range(n_blocks)
@@ -360,7 +366,8 @@ class NBEATSNetwork(nn.Module):
                 polynomial_degree=polynomial_degree,
             )
 
-            basis_function = self._create_basis(
+            basis_factory = partial(
+                self._create_basis,
                 stack_type=stack_type,
                 theta_size=stack_theta_size,
                 input_dim=self.input_dim,
@@ -374,7 +381,7 @@ class NBEATSNetwork(nn.Module):
                 theta_size=stack_theta_size,
                 hidden_size=hidden_size,
                 n_layers=n_layers,
-                basis_function=basis_function,
+                basis_factory=basis_factory,
                 dropout=dropout,
             )
             self.stacks.append(stack)
@@ -530,7 +537,6 @@ class NBEATSModel(BaseRNNModel):
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._seq_len: int | None = None
         logger.debug(f"Initialized NBEATSModel with config: {self._config}")
 
     @property
@@ -613,20 +619,6 @@ class NBEATSModel(BaseRNNModel):
     def _get_model_type(self) -> str:
         """Return model type string."""
         return "nbeats"
-
-    def fit(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        sample_weights: np.ndarray | None = None,
-        config: dict[str, Any] | None = None,
-    ) -> TrainingMetrics:
-        """Train the N-BEATS model with early stopping."""
-        # Store sequence length for network creation
-        self._seq_len = X_train.shape[1]
-        return super().fit(X_train, y_train, X_val, y_val, sample_weights, config)
 
     def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
@@ -730,7 +722,7 @@ class NBEATSModel(BaseRNNModel):
             logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
-        nbeats_network = self._model
+        nbeats_network = self._unwrapped_model()
         if not isinstance(nbeats_network, NBEATSNetwork):
             return None
         nbeats_network.eval()

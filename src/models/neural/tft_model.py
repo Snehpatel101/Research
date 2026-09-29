@@ -287,7 +287,11 @@ class InterpretableMultiHeadAttention(nn.Module):
             query: Query tensor, shape (batch, seq_len_q, d_model)
             key: Key tensor, shape (batch, seq_len_k, d_model)
             value: Value tensor, shape (batch, seq_len_v, d_model)
-            mask: Optional attention mask
+            mask: Optional attention mask in the ``scaled_dot_product_attention``
+                convention, applied identically on both paths: a boolean mask
+                marks positions that MAY be attended (True = attend, False =
+                blocked); a float mask is added to the attention scores
+                (``-inf`` = blocked).
 
         Returns:
             Output tensor, shape (batch, seq_len_q, d_model)
@@ -320,7 +324,10 @@ class InterpretableMultiHeadAttention(nn.Module):
             scores = torch.matmul(q, k.transpose(-2, -1)) / self.scale
 
             if mask is not None:
-                scores = scores.masked_fill(mask == 0, float("-inf"))
+                if mask.dtype == torch.bool:
+                    scores = scores.masked_fill(~mask, float("-inf"))
+                else:
+                    scores = scores + mask
 
             attention = torch.softmax(scores, dim=-1)
             self._attention_weights = attention.mean(dim=1).detach()  # (batch, seq_q, seq_k)
@@ -537,8 +544,9 @@ class TFTModel(BaseRNNModel):
     - Gated Residual Networks for controlled information flow
 
     Note on Causality:
-        TFT uses bidirectional LSTM and non-causal attention by default.
-        For production trading, consider using causal variants.
+        The LSTM encoder is unidirectional, but self-attention is unmasked:
+        every position attends to every position of the window. For production
+        trading, consider causal models (TCN, Transformer, LSTM/GRU).
 
     Example:
         >>> from src.models import ModelRegistry
@@ -564,7 +572,7 @@ class TFTModel(BaseRNNModel):
     @property
     def is_production_safe(self) -> bool:
         """
-        TFT uses bidirectional attention, so not production-safe.
+        TFT self-attention is unmasked (non-causal), so not production-safe.
 
         Returns:
             False - TFT is not production-safe for trading.
@@ -733,7 +741,7 @@ class TFTModel(BaseRNNModel):
             return None
 
         # Get variable weights from last forward pass
-        tft_network = self._model
+        tft_network = self._unwrapped_model()
         if not isinstance(tft_network, TFTNetwork):
             return None
         var_weights = tft_network.get_variable_weights()
@@ -790,7 +798,7 @@ class TFTModel(BaseRNNModel):
             _ = self._model(X_tensor)
 
             # Extract attention weights
-            tft_network = self._model
+            tft_network = self._unwrapped_model()
             if not isinstance(tft_network, TFTNetwork):
                 return None
             attention_weights = tft_network.get_attention_weights()
@@ -822,7 +830,7 @@ class TFTModel(BaseRNNModel):
         with torch.no_grad():
             # Forward pass to compute variable weights
             _ = self._model(X_tensor)
-            tft_network = self._model
+            tft_network = self._unwrapped_model()
             if not isinstance(tft_network, TFTNetwork):
                 return None
             var_weights = tft_network.get_variable_weights()
