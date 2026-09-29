@@ -16,6 +16,7 @@ from src.inference.backtesting.backtest import (
     ExitReason,
     Position,
 )
+from tests.helpers import make_minimal_backtester
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,7 +62,7 @@ def _barrier_config(**overrides) -> BacktestConfig:
 
     The labeler's cost term is switched off (barrier_cost_in_atr=0.0) so the
     barriers sit exactly k * ATR from entry; cost parity is covered by
-    tests/test_backtest_realism.py. With the default MARKET_ON_OPEN model the
+    tests/unit/backtesting/test_backtest_realism.py. With the default MARKET_ON_OPEN model the
     bar-20 signal fills at bar 21's open and bar 21's range is watched.
     """
     defaults = {
@@ -92,36 +93,11 @@ def _barrier_config(**overrides) -> BacktestConfig:
 # ---------------------------------------------------------------------------
 
 
-def _make_backtester_for_unit_test(**config_overrides) -> Backtester:
-    """Create a minimal Backtester for unit-testing _resolve_exit_price."""
-    defaults = {
-        "enable_market_hours_filter": False,
-        "slippage_ticks": 0.0,
-        "tick_size": 0.25,
-        "commission_per_contract": 0.0,
-    }
-    defaults.update(config_overrides)
-    cfg = BacktestConfig(**defaults)
-    # Minimal DataFrames — only used to construct the Backtester, not to run
-    ts = pd.date_range("2024-01-01", periods=2, freq="h")
-    prices = pd.DataFrame(
-        {
-            "timestamp": ts,
-            "open": [100, 100],
-            "high": [101, 101],
-            "low": [99, 99],
-            "close": [100, 100],
-        }
-    )
-    preds = pd.DataFrame({"timestamp": ts, "prediction": [0, 0], "confidence": [1.0, 1.0]})
-    return Backtester(predictions=preds, prices=prices, config=cfg)
-
-
 class TestResolveExitPrice:
     """Unit tests for _resolve_exit_price instance method."""
 
     def test_stop_loss_returns_stop_level(self):
-        bt = _make_backtester_for_unit_test(slippage_ticks=0.0)
+        bt = make_minimal_backtester(slippage_ticks=0.0)
         pos = Position(
             direction=1,
             contracts=1,
@@ -136,7 +112,7 @@ class TestResolveExitPrice:
 
     def test_stop_loss_with_slippage(self):
         """Stop exits include slippage: price worse than barrier."""
-        bt = _make_backtester_for_unit_test(slippage_ticks=2.0, tick_size=0.25)
+        bt = make_minimal_backtester(slippage_ticks=2.0, tick_size=0.25)
         pos = Position(
             direction=1,
             contracts=1,
@@ -152,7 +128,7 @@ class TestResolveExitPrice:
 
     def test_short_stop_loss_with_slippage(self):
         """Short stop exits slip upward."""
-        bt = _make_backtester_for_unit_test(slippage_ticks=2.0, tick_size=0.25)
+        bt = make_minimal_backtester(slippage_ticks=2.0, tick_size=0.25)
         pos = Position(
             direction=-1,
             contracts=1,
@@ -167,7 +143,7 @@ class TestResolveExitPrice:
         assert price == 105.50, f"Expected 105.50, got {price}"
 
     def test_take_profit_returns_tp_level(self):
-        bt = _make_backtester_for_unit_test(slippage_ticks=0.0)
+        bt = make_minimal_backtester(slippage_ticks=0.0)
         pos = Position(
             direction=1,
             contracts=1,
@@ -181,7 +157,7 @@ class TestResolveExitPrice:
         assert price == 110.0, f"Expected take_profit=110.0, got {price}"
 
     def test_max_holding_returns_close(self):
-        bt = _make_backtester_for_unit_test()
+        bt = make_minimal_backtester()
         pos = Position(
             direction=1,
             contracts=1,
@@ -195,7 +171,7 @@ class TestResolveExitPrice:
         assert price == 102.0, f"Expected close=102.0, got {price}"
 
     def test_signal_reversal_returns_close(self):
-        bt = _make_backtester_for_unit_test()
+        bt = make_minimal_backtester()
         pos = Position(
             direction=1,
             contracts=1,
@@ -210,7 +186,7 @@ class TestResolveExitPrice:
 
     def test_stop_loss_none_falls_back_to_close(self):
         """Legacy mode: stop_loss is None, should return close."""
-        bt = _make_backtester_for_unit_test()
+        bt = make_minimal_backtester()
         pos = Position(
             direction=1,
             contracts=1,

@@ -117,6 +117,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "slow: long-running test (> 30 s): trains models end to end; deselect with -m 'not slow'",
+    "unit: fast, isolated test (tests/unit/, applied automatically by directory)",
+    "integration: several components wired together (tests/integration/, automatic)",
+    "e2e: full pipeline runs (tests/e2e/, automatic)",
 ]
 
 [tool.black]

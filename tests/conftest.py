@@ -1,16 +1,34 @@
 """
 Pytest configuration and shared fixtures.
 
-Provides common test fixtures for backtesting tests.
+Layout: ``tests/unit/<area>/`` (fast, isolated, mirrors ``src/``), ``tests/integration/``
+(components wired together) and ``tests/e2e/`` (full pipeline runs). The directory sets the
+``unit`` / ``integration`` / ``e2e`` marker automatically; tests over 30 s carry ``slow``.
+Shared plain helpers live in ``tests/helpers.py``.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+
+_LAYERS = ("unit", "integration", "e2e")
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Mark each test with its layer (first directory under tests/)."""
+    tests_dir = Path(__file__).parent
+    for item in items:
+        path = Path(str(item.path))
+        if not path.is_relative_to(tests_dir):
+            continue
+        parts = path.relative_to(tests_dir).parts
+        if parts[0] in _LAYERS:
+            item.add_marker(getattr(pytest.mark, parts[0]))
 
 
 @pytest.fixture
@@ -21,12 +39,12 @@ def sample_prices() -> pd.DataFrame:
     Returns:
         DataFrame with 100 bars of synthetic price data.
     """
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     n_bars = 100
 
     # Start price and random walk
     start_price = 4500.0
-    returns = np.random.normal(0, 0.002, n_bars)
+    returns = rng.normal(0, 0.002, n_bars)
     prices = start_price * np.cumprod(1 + returns)
 
     # Generate OHLCV
@@ -35,11 +53,11 @@ def sample_prices() -> pd.DataFrame:
     df = pd.DataFrame(
         {
             "timestamp": timestamps,
-            "open": prices * (1 + np.random.uniform(-0.001, 0.001, n_bars)),
-            "high": prices * (1 + np.random.uniform(0, 0.003, n_bars)),
-            "low": prices * (1 - np.random.uniform(0, 0.003, n_bars)),
+            "open": prices * (1 + rng.uniform(-0.001, 0.001, n_bars)),
+            "high": prices * (1 + rng.uniform(0, 0.003, n_bars)),
+            "low": prices * (1 - rng.uniform(0, 0.003, n_bars)),
             "close": prices,
-            "volume": np.random.randint(1000, 5000, n_bars),
+            "volume": rng.integers(1000, 5000, n_bars),
         }
     )
 
@@ -57,17 +75,17 @@ def sample_predictions(sample_prices: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with predictions (-1, 0, 1).
     """
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     n = len(sample_prices)
 
     # Generate random signals with some structure
-    predictions = np.random.choice([-1, 0, 1], size=n, p=[0.2, 0.6, 0.2])
+    predictions = rng.choice([-1, 0, 1], size=n, p=[0.2, 0.6, 0.2])
 
     df = pd.DataFrame(
         {
             "timestamp": sample_prices["timestamp"],
             "prediction": predictions,
-            "confidence": np.random.uniform(0.5, 1.0, n),
+            "confidence": rng.uniform(0.5, 1.0, n),
         }
     )
 

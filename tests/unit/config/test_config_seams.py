@@ -21,30 +21,13 @@ Optuna tuner are monkeypatched to capture their configs).
 
 from __future__ import annotations
 
-import numpy as np
-
 from src.config.experiment import ExperimentConfig
 from src.config.training import OptunaConfig
-from src.data.adapters.preparation import PreparedData
+from tests.helpers import tiny_prepared_data
 
 # =============================================================================
 # HELPERS
 # =============================================================================
-
-
-def _tiny_prepared_data(n_train: int = 120, n_val: int = 40, n_features: int = 4) -> PreparedData:
-    """Build a tiny 2D PreparedData for xgboost-style tabular training."""
-    rng = np.random.RandomState(42)
-    return PreparedData(
-        X_train=rng.normal(size=(n_train, n_features)).astype(np.float32),
-        y_train=rng.choice([-1, 0, 1], size=n_train).astype(np.int64),
-        X_val=rng.normal(size=(n_val, n_features)).astype(np.float32),
-        y_val=rng.choice([-1, 0, 1], size=n_val).astype(np.int64),
-        model_name="xgboost",
-        adapter_type="tabular",
-        data_rank=2,
-        feature_names=[f"f{i}" for i in range(n_features)],
-    )
 
 
 class _FakeTrainer:
@@ -76,7 +59,7 @@ def _run_train_model(monkeypatch, tmp_path, *, patience, optimize_hyperparams=Fa
     request = ModelTrainingRequest(
         model_name="xgboost",
         horizon=5,
-        prepared_data=_tiny_prepared_data(),
+        prepared_data=tiny_prepared_data(),
         output_dir=tmp_path / "out",
         max_epochs=100,
         early_stopping_patience=patience,
@@ -146,7 +129,7 @@ class TestOptunaTimeoutThreading:
         request = ht.TuningRequest(
             model_name="xgboost",
             horizon=5,
-            prepared_data=_tiny_prepared_data(),
+            prepared_data=tiny_prepared_data(),
             n_splits=2,
             n_trials=1,
         )
@@ -176,7 +159,7 @@ class TestOptunaTimeoutThreading:
         request = ModelTrainingRequest(
             model_name="xgboost",
             horizon=5,
-            prepared_data=_tiny_prepared_data(),
+            prepared_data=tiny_prepared_data(),
             optuna_timeout=1234,
         )
         assert request.optuna_timeout == 1234

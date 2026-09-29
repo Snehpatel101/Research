@@ -282,6 +282,19 @@ registration. Phase 114 took the safe quick wins only.
 
 ## 11. Phase-regression tests that grep source text
 
+> **RESOLVED in Phase 117 (2026-09-29):** option A, done in one pass. Every test that
+> asserted on source text (`inspect.getsource`, reading `src/*.py`, AST scans, comment
+> checks) was replaced by a behavioral assertion (19 tests: e.g. the tuner's strided
+> subsample and scaled embargo are observed through the rows a fold model receives; the
+> Kelly warm-up and `confidence=0.0` through the inputs the position sizer gets; class
+> weights + sample weights through the loss `_train_epoch` computes; fold scaling from
+> raw data through the values a fold model sees) or deleted where it pinned nothing
+> behavioral (5 tests: a memory-only `.copy()` check, two single-class-definition AST
+> scans, a dead-file scan, and stop-loss slippage, which was already covered
+> behaviorally; plus 3 list-slicing tautologies in d3). `test_phases_1_3.py` / `test_phases_4_11.py` no longer exist; the
+> phase-named test files were renamed by behavior and grouped into
+> `tests/{unit/<area>,integration,e2e}/`. No test reads `src/` as text.
+
 **What:** ~20 remaining assertions in the phase-regression tier
 (`test_phases_1_3.py`, `test_phases_4_11.py`, parts of d3) verify fixes by
 `inspect.getsource(...)` substring checks — including asserting comments exist —
@@ -381,7 +394,7 @@ and add tests. **Recommendation:** delete — the supported serving API is
 | 8 | to_*_config methods | ✅ Resolved (Phase 116) | — | — |
 | 9 | Dead config layer/yaml | ✅ Resolved (Phase 116) | — | — |
 | 10 | Import SCC | 4–5s imports, GPU-stack coupling | Staged lazy break | 3–5 days |
-| 11 | Source-grep tests | Documentation-grade tests stay | Replace opportunistically | rolling |
+| 11 | Source-grep tests | ✅ Resolved (Phase 117: behavioral tests, layout by behavior) | — | — |
 | 12 | uv adoption | ✅ Resolved (Phase 116: uv venv, lock regenerated, CI on uv) | — | — |
 | 13 | Second data pipeline | Broken parallel pipeline stays | Re-point CLI at MLFactory, delete runner | 2–3 days |
 | 14 | Unused public-API modules | ✅ Resolved (Phase 117) | — | — |

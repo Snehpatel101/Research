@@ -22,9 +22,9 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.slow
+from tests.helpers import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.slow
 
 
 def _load_harness():

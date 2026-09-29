@@ -143,16 +143,16 @@ class TestRegimeSelection:
     @pytest.fixture
     def regime_df(self) -> pd.DataFrame:
         """Create a DataFrame with close prices and features for regime testing."""
-        np.random.seed(42)
+        rng = np.random.default_rng(42)
         n = 1000
-        close = 100 + np.cumsum(np.random.randn(n) * 0.5)
+        close = 100 + np.cumsum(rng.standard_normal(n) * 0.5)
         df = pd.DataFrame(
             {
                 "close": close,
-                "feat_a": np.random.randn(n),
-                "feat_b": np.random.randn(n),
-                "feat_c": np.random.randn(n),
-                "label_h1": np.random.choice([0, 1, 2], size=n),
+                "feat_a": rng.standard_normal(n),
+                "feat_b": rng.standard_normal(n),
+                "feat_c": rng.standard_normal(n),
+                "label_h1": rng.choice([0, 1, 2], size=n),
             }
         )
         return df
@@ -197,7 +197,6 @@ class TestRegimeSelection:
 
     def test_compute_regime_importance_insufficient_data(self) -> None:
         """Too few samples should return None."""
-        np.random.seed(42)
         df = pd.DataFrame(
             {
                 "close": [100, 101, 102, 103, 104],

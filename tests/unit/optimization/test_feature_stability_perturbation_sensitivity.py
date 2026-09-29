@@ -21,26 +21,11 @@ from src.optimization.feature_selection.param_sensitivity import (
     ParameterSensitivityTester,
     SensitivityResult,
 )
+from tests.helpers import make_signal_features
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
-
-
-def _make_data(
-    n_samples: int = 500,
-    n_features: int = 10,
-    seed: int = 42,
-    informative: int = 3,
-) -> tuple[pd.DataFrame, pd.Series]:
-    rng = np.random.RandomState(seed)
-    X = pd.DataFrame(
-        rng.randn(n_samples, n_features),
-        columns=[f"feat_{i}" for i in range(n_features)],
-    )
-    signal = X.iloc[:, :informative].sum(axis=1)
-    y = pd.Series((signal > 0).astype(int), name="label")
-    return X, y
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +37,7 @@ class TestBootstrapStability:
     """Bootstrap feature stability testing."""
 
     def test_evaluate_returns_results(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         assert isinstance(results, list)
@@ -60,21 +45,21 @@ class TestBootstrapStability:
         assert all(isinstance(r, BootstrapStabilityResult) for r in results)
 
     def test_selection_frequency_range(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         for r in results:
             assert 0.0 <= r.selection_frequency <= 1.0
 
     def test_sorted_by_frequency_descending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         freqs = [r.selection_frequency for r in results]
         assert freqs == sorted(freqs, reverse=True)
 
     def test_get_stable_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         tester = BootstrapFeatureStability(
             n_bootstrap=5,
             top_k=3,
@@ -112,7 +97,7 @@ class TestBootstrapStability:
 
     def test_top_k_larger_than_features(self) -> None:
         """If top_k > n_features, all features should be in top-K every time."""
-        X, y = _make_data(n_samples=200, n_features=3)
+        X, y = make_signal_features(n_samples=200, n_features=3)
         tester = BootstrapFeatureStability(n_bootstrap=5, top_k=10, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         for r in results:
@@ -128,7 +113,7 @@ class TestLabelPerturbation:
     """Label perturbation testing for feature robustness."""
 
     def test_evaluate_returns_results(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         rng = np.random.RandomState(99)
         y2 = pd.Series((X.iloc[:, :3].sum(axis=1) + rng.randn(300) * 0.5 > 0).astype(int))
         tester = LabelPerturbationTester(n_estimators=10, n_repeats=2)
@@ -138,7 +123,7 @@ class TestLabelPerturbation:
         assert all(isinstance(r, PerturbationResult) for r in results)
 
     def test_sorted_by_rank_change_ascending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         rng = np.random.RandomState(99)
         y2 = pd.Series((X.iloc[:, :2].sum(axis=1) + rng.randn(300) * 2 > 0).astype(int))
         tester = LabelPerturbationTester(n_estimators=10, n_repeats=2)
@@ -147,7 +132,7 @@ class TestLabelPerturbation:
         assert changes == sorted(changes)
 
     def test_get_robust_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         y2 = y.copy()  # Same labels — all features should be robust
         tester = LabelPerturbationTester(rank_change_threshold=5, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, {"baseline": y, "same": y2})
@@ -156,7 +141,7 @@ class TestLabelPerturbation:
         assert len(robust) == 5  # All should be robust (same labels)
 
     def test_single_variant(self) -> None:
-        X, y = _make_data(n_samples=200, n_features=3)
+        X, y = make_signal_features(n_samples=200, n_features=3)
         tester = LabelPerturbationTester(n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, {"only_one": y})
         assert len(results) == 3
@@ -185,7 +170,7 @@ class TestParameterSensitivity:
     """Parameter sensitivity testing for feature stability."""
 
     def test_evaluate_returns_results(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         rng = np.random.RandomState(99)
         X2 = X + rng.randn(*X.shape) * 0.1  # Slightly different feature values
         tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
@@ -195,7 +180,7 @@ class TestParameterSensitivity:
         assert all(isinstance(r, SensitivityResult) for r in results)
 
     def test_sorted_by_cv_ascending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         rng = np.random.RandomState(99)
         X2 = X + rng.randn(*X.shape) * 0.5
         tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
@@ -204,7 +189,7 @@ class TestParameterSensitivity:
         assert cvs == sorted(cvs)
 
     def test_get_stable_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         # Same data for both variants — should be perfectly stable
         tester = ParameterSensitivityTester(cv_threshold=0.5, n_estimators=10, n_repeats=2)
         results = tester.evaluate({"v1": X, "v2": X}, y)
@@ -215,7 +200,7 @@ class TestParameterSensitivity:
             assert r.cv < 0.01 or r.mean_importance == 0.0
 
     def test_single_variant(self) -> None:
-        X, y = _make_data(n_samples=200, n_features=3)
+        X, y = make_signal_features(n_samples=200, n_features=3)
         tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
         results = tester.evaluate({"only": X}, y)
         assert len(results) == 3

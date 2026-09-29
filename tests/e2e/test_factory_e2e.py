@@ -22,6 +22,7 @@ import pytest
 
 from src.config.experiment import ExperimentConfig
 from src.factory import ExperimentResult, MLFactory
+from tests.helpers import make_intraday_ohlcv
 
 pytestmark = pytest.mark.slow
 
@@ -30,27 +31,6 @@ pytestmark = pytest.mark.slow
 # ---------------------------------------------------------------------------
 
 N_ROWS = 2500
-
-
-def _make_synthetic_ohlcv(n_rows: int = N_ROWS, seed: int = 7) -> pd.DataFrame:
-    """Synthetic 5-min OHLCV: random-walk close, high/low bracket open/close."""
-    rng = np.random.RandomState(seed)
-    idx = pd.date_range("2024-01-02 09:30", periods=n_rows, freq="5min")
-
-    close = 5000.0 + np.cumsum(rng.normal(0, 2.0, n_rows))
-    open_ = np.roll(close, 1) + rng.normal(0, 0.5, n_rows)
-    open_[0] = close[0]
-    eps = np.abs(rng.normal(0, 0.5, n_rows)) + 0.25
-    high = np.maximum(open_, close) + eps
-    low = np.minimum(open_, close) - eps
-    volume = rng.randint(100, 5000, n_rows).astype(float)
-
-    df = pd.DataFrame(
-        {"open": open_, "high": high, "low": low, "close": close, "volume": volume},
-        index=idx,
-    )
-    df.index.name = "datetime"
-    return df
 
 
 def _make_config(data_path: Path, output_dir: Path) -> ExperimentConfig:
@@ -87,7 +67,7 @@ def _make_config(data_path: Path, output_dir: Path) -> ExperimentConfig:
 @pytest.fixture(scope="module")
 def data_parquet(tmp_path_factory: pytest.TempPathFactory) -> Path:
     path = tmp_path_factory.mktemp("data") / "mes_5min.parquet"
-    _make_synthetic_ohlcv().to_parquet(path)
+    make_intraday_ohlcv(N_ROWS, seed=7).to_parquet(path)
     return path
 
 
