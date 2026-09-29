@@ -12,7 +12,9 @@ Usage:
     python scripts/mix_match.py meta                 # every meta-learner on a cross-family set
     python scripts/mix_match.py modes                # every training mode on a cross-family set
     python scripts/mix_match.py modes-solo           # every model alone in each non-standard mode
+    python scripts/mix_match.py binary               # binary labels x meta-learners x modes
     python scripts/mix_match.py all-in               # all base models in one ensemble
+    python scripts/mix_match.py report               # render docs/MIX_AND_MATCH.md from results
     python scripts/mix_match.py custom xgboost,lstm --meta stacking --mode standard
 
 Options:
@@ -139,6 +141,7 @@ def run_one(spec: dict, data_path: Path, out_dir: Path) -> dict:
     data_path = Path(spec.get("data") or data_path)
     cfg.data.data_path = data_path
     cfg.data.bar_timeframe = spec.get("bar_timeframe")
+    cfg.data.labeling.binary_mode = bool(spec.get("binary"))
     cfg.data.mtf.enabled = spec.get("mtf", False)
 
     cfg.training.models = models
@@ -198,12 +201,17 @@ def run_one(spec: dict, data_path: Path, out_dir: Path) -> dict:
             problems.append("no ensemble metrics")
         problems.extend(_check_ensemble_alignment(result))
         problems.extend(_check_prediction_parity(result, data_path))
-        if not record["backtest_keys"]:
+        problems.extend(_check_universal_pipeline(result, data_path))
+        if not record["backtest_keys"] and not spec.get("binary"):
             problems.append("empty backtest metrics")
         if not result.deploy_path:
             problems.append("no deploy artifact")
         else:
-            problems.extend(_check_deploy_predict(Path(result.deploy_path), data_path))
+            problems.extend(
+                _check_deploy_predict(
+                    Path(result.deploy_path), data_path, 2 if spec.get("binary") else 3
+                )
+            )
         record["problems"] = problems
         record["ok"] = not problems
     except BaseException as exc:  # noqa: BLE001 - harness must report every failure
@@ -294,7 +302,37 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
     return problems
 
 
-def _check_deploy_predict(deploy_path: Path, data_path: Path) -> list[str]:
+def _check_universal_pipeline(result, data_path: Path) -> list[str]:
+    """UniversalInferencePipeline.from_experiment serves every model and the ensemble."""
+    import pandas as pd
+
+    from src.inference import UniversalInferencePipeline
+
+    tr = result.training_result
+    if tr is None:
+        return []
+    try:
+        pipeline = UniversalInferencePipeline.from_experiment(tr.config)
+    except Exception as exc:  # noqa: BLE001
+        # Experiments with only regime / meta-labeling bundles have nothing to load here
+        if "No valid bundles" in str(exc):
+            return []
+        return [f"universal pipeline load failed: {type(exc).__name__}: {exc}"]
+    raw = pd.read_parquet(data_path)
+    raw = raw.iloc[len(raw) // 2 :]
+    served = pipeline.predict_all(raw)
+    problems = []
+    if len(served) != pipeline.n_models:
+        problems.append(f"universal pipeline served {len(served)}/{pipeline.n_models} models")
+    if pipeline.has_ensemble:
+        try:
+            pipeline.predict_ensemble(raw)
+        except Exception as exc:  # noqa: BLE001
+            problems.append(f"universal pipeline ensemble failed: {type(exc).__name__}: {exc}")
+    return problems
+
+
+def _check_deploy_predict(deploy_path: Path, data_path: Path, n_classes: int = 3) -> list[str]:
     """Reload the deploy artifact, predict on raw OHLCV, and check feature parity."""
     import numpy as np
     import pandas as pd
@@ -311,7 +349,7 @@ def _check_deploy_predict(deploy_path: Path, data_path: Path) -> list[str]:
         n = len(pred.class_predictions)
         if n == 0:
             problems.append("deploy predict returned no rows")
-        elif pred.class_probabilities.shape != (n, 3):
+        elif pred.class_probabilities.shape != (n, n_classes):
             problems.append(f"bad proba shape {pred.class_probabilities.shape} for {n} rows")
         elif not np.isfinite(pred.class_probabilities).all():
             problems.append("non-finite deploy probabilities")
@@ -364,6 +402,15 @@ def build_specs(kind: str, args: argparse.Namespace) -> list[dict]:
         for mode in TRAINING_MODES[1:]:
             for m in BASE_MODELS:
                 specs.append({"name": f"mode_{mode}_{m}", "models": [m], "mode": mode})
+    elif kind == "binary":
+        for meta in META_LEARNERS:
+            specs.append(
+                {"name": f"binary_{meta}", "models": CROSS_FAMILY, "meta": meta, "binary": True}
+            )
+        for mode in TRAINING_MODES[1:]:
+            specs.append(
+                {"name": f"binary_{mode}", "models": CROSS_FAMILY, "mode": mode, "binary": True}
+            )
     elif kind == "all-in":
         specs.append({"name": "all_in", "models": BASE_MODELS, "meta": args.meta})
     elif kind == "custom":
@@ -373,6 +420,7 @@ def build_specs(kind: str, args: argparse.Namespace) -> list[dict]:
                 "name": f"custom_{'+'.join(models)}_{args.meta}_{args.mode}",
                 "data": args.data or None,
                 "bar_timeframe": args.bar_timeframe or None,
+                "binary": args.binary,
                 "models": models,
                 "meta": args.meta,
                 "mode": args.mode,
@@ -381,6 +429,84 @@ def build_specs(kind: str, args: argparse.Namespace) -> list[dict]:
     else:
         raise SystemExit(f"unknown kind: {kind}")
     return specs
+
+
+def write_report(out_dir: Path, report_path: Path) -> None:
+    """Render every summary_<kind>.json into a markdown verification report."""
+    from datetime import date
+
+    sections = [
+        ("solo", "Every base model alone"),
+        ("pairs", "Every pair of base models (stacking ensemble)"),
+        ("meta", f"Every meta-learner on a cross-family ensemble ({' + '.join(CROSS_FAMILY)})"),
+        ("modes", f"Every training mode on a cross-family ensemble ({' + '.join(CROSS_FAMILY)})"),
+        ("modes-solo", "Every base model in every non-standard training mode"),
+        ("binary", "Binary labels: every meta-learner and every non-standard mode"),
+        ("all-in", "All base models in one ensemble"),
+    ]
+    lines = [
+        "# Mix-and-Match Verification Matrix",
+        "",
+        f"Generated {date.today().isoformat()} by `python scripts/mix_match.py report` from the",
+        "results of `python scripts/mix_match.py {solo,pairs,meta,modes,modes-solo,binary,all-in}`.",
+        "",
+        "Every run is a full `MLFactory.run()` on synthetic 5-minute OHLCV (4,000 bars,",
+        "1 epoch, CPU): features -> labels -> per-model feature selection -> training ->",
+        "OOF -> stacking ensemble -> backtest -> bundles -> deploy artifact -> reload ->",
+        "`predict_from_raw`. A run passes only if **all** of these hold:",
+        "",
+        "- training succeeds and every model reports metrics (plus ensemble metrics for >1 model)",
+        "- stacking rows pair every model's OOF prediction with the label of the *same* bar",
+        "- the deployed bundle reproduces the trained model's validation probabilities",
+        "  (re-prepared validation split vs `predict_from_raw` on raw bars)",
+        "- features recomputed from raw OHLCV equal the training features",
+        "- the backtest produces metrics and the deploy artifact reloads and predicts",
+        "",
+        "## Building blocks",
+        "",
+        f"- **Base models ({len(BASE_MODELS)}):** " + ", ".join(f"`{m}`" for m in BASE_MODELS),
+        f"- **Meta-learners ({len(META_LEARNERS)}):** "
+        + ", ".join(f"`{m}`" for m in META_LEARNERS),
+        f"- **Training modes ({len(TRAINING_MODES)}):** "
+        + ", ".join(f"`{m}`" for m in TRAINING_MODES),
+        "",
+    ]
+    total = passed = 0
+    for kind, title in sections:
+        path = out_dir / f"summary_{kind}.json"
+        if not path.exists():
+            continue
+        records = json.loads(path.read_text())
+        n_pass = sum(bool(r.get("ok")) for r in records)
+        total += len(records)
+        passed += n_pass
+        lines += [f"## {title} — {n_pass}/{len(records)} pass", ""]
+        if kind == "pairs":
+            ok = {tuple(r["name"].removeprefix("pair_").split("+")): r.get("ok") for r in records}
+            lines.append("| | " + " | ".join(BASE_MODELS) + " |")
+            lines.append("|---" * (len(BASE_MODELS) + 1) + "|")
+            for a in BASE_MODELS:
+                cells = []
+                for b in BASE_MODELS:
+                    if a == b:
+                        cells.append("—")
+                    else:
+                        res = ok.get((a, b), ok.get((b, a)))
+                        cells.append("✅" if res else ("❌" if res is not None else "·"))
+                lines.append(f"| **{a}** | " + " | ".join(cells) + " |")
+        else:
+            lines += ["| Run | Result | Seconds |", "|---|---|---|"]
+            for r in records:
+                detail = (
+                    "PASS"
+                    if r.get("ok")
+                    else (r.get("exception") or "; ".join(r.get("problems", [])))[:120]
+                )
+                lines.append(f"| `{r['name']}` | {detail} | {r.get('seconds', 0)} |")
+        lines.append("")
+    lines.insert(8, f"**Overall: {passed}/{total} runs pass.**\n")
+    report_path.write_text("\n".join(lines))
+    print(f"Wrote {report_path} ({passed}/{total} pass)")
 
 
 def main() -> None:
@@ -395,6 +521,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--data", default="", help="OHLCV file to use instead of synthetic data")
     parser.add_argument("--bar-timeframe", default="", help="resample input bars, e.g. 5min")
+    parser.add_argument("--binary", action="store_true", help="binary labels (move vs no move)")
     parser.add_argument("--out", default=str(REPO_ROOT / "experiments" / "mix_match"))
     parser.add_argument("--only", default="", help="comma-separated spec names to run")
     parser.add_argument("--_child", default="", help=argparse.SUPPRESS)
@@ -408,6 +535,10 @@ def main() -> None:
         spec = json.loads(args._child)
         record = run_one(spec, data_path, out_dir / "runs")
         (out_dir / "results" / f"{spec['name']}.json").write_text(json.dumps(record, indent=2))
+        return
+
+    if args.kind == "report":
+        write_report(out_dir, REPO_ROOT / "docs" / "MIX_AND_MATCH.md")
         return
 
     if not data_path.exists():

@@ -460,7 +460,7 @@ else:
     # Fallback to pure Python
     triple_barrier_numba = _triple_barrier_python
 
-    def triple_barrier_numba_with_costs(
+    def _triple_barrier_with_costs_python(
         close: np.ndarray,
         high: np.ndarray,
         low: np.ndarray,
@@ -475,6 +475,8 @@ else:
         return _triple_barrier_python(
             close, high, low, atr, k_up + cost_in_atr, k_down + cost_in_atr, max_bars
         )
+
+    triple_barrier_numba_with_costs = _triple_barrier_with_costs_python
 
 
 # =============================================================================

@@ -121,6 +121,7 @@ class TrainingOpsMixin:
                     cv_method=self.config.cv_method,
                     embargo_bars=getattr(self.config, "embargo_bars", None),
                     purge_bars=getattr(self.config, "purge_bars", None),
+                    n_classes=getattr(self.config, "n_classes", 3),
                     early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
                     optuna_timeout=getattr(self.config, "optuna_timeout", None),
                 )
@@ -270,6 +271,7 @@ class TrainingOpsMixin:
             cv_method=self.config.cv_method,
             embargo_bars=getattr(self.config, "embargo_bars", None),
             purge_bars=getattr(self.config, "purge_bars", None),
+            n_classes=getattr(self.config, "n_classes", 3),
             early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
             optuna_timeout=getattr(self.config, "optuna_timeout", None),
         )
@@ -308,6 +310,7 @@ class TrainingOpsMixin:
                 batch_size=reduced_batch,
                 embargo_bars=getattr(self.config, "embargo_bars", None),
                 purge_bars=getattr(self.config, "purge_bars", None),
+                n_classes=getattr(self.config, "n_classes", 3),
                 early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
                 optuna_timeout=getattr(self.config, "optuna_timeout", None),
             )

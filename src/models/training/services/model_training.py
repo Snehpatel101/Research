@@ -39,6 +39,7 @@ class ModelTrainingRequest:
     batch_size: int | None = None  # Override batch size (used by OOM retry)
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
     purge_bars: int | None = None  # Pipeline purge (feature-selection CV)
+    n_classes: int = 3  # 2 = binary labels, 3 = short/neutral/long
     early_stopping_patience: int | None = None  # None = TrainerConfig default
     optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
 
@@ -118,7 +119,8 @@ class ModelTrainingService:
 
         # Create trainer config with training params in model_config
         # so neural models receive max_epochs, batch_size etc. via model.fit()
-        _model_config = {}
+        # n_classes is the problem definition: every model must agree with it
+        _model_config: dict[str, Any] = {"n_classes": request.n_classes}
         if request.max_epochs is not None:
             _model_config["max_epochs"] = request.max_epochs
         if request.early_stopping_patience is not None:

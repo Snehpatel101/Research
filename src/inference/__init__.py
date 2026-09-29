@@ -105,6 +105,8 @@ from src.inference.deploy import (
     DeployManifest,
     HorizonArtifactEntry,
     HorizonManifest,
+    describe_bundle,
+    load_bundle,
     load_deploy_artifact,
     select_deploy_artifact,
     validate_deploy_artifact,
@@ -223,6 +225,8 @@ __all__ = [
     "DEPLOY_MANIFEST_FILE",
     "DEPLOY_VERSION",
     "load_deploy_artifact",
+    "load_bundle",
+    "describe_bundle",
     "select_deploy_artifact",
     "validate_deploy_artifact",
     # Inference errors

@@ -222,16 +222,10 @@ class ModelBundle:
         >>> bundle = ModelBundle.load("./bundles/xgb_h20")
         >>> predictions = bundle.predict(X_test)
 
-        >>> # With preprocessing graph for raw OHLCV inference
-        >>> from src.inference import PreprocessingGraph
-        >>> graph = PreprocessingGraph.from_pipeline_config(config)
-        >>> bundle.set_preprocessing_graph(graph)
-        >>> bundle.save("./bundles/xgb_h20_with_graph")
-        >>>
-        >>> # At inference time
-        >>> bundle = ModelBundle.load("./bundles/xgb_h20_with_graph")
-        >>> features = bundle.preprocess(raw_ohlcv_df)
-        >>> predictions = bundle.predict(features)
+        >>> # Bundles built by MLFactory carry a preprocessing graph, so they
+        >>> # predict straight from raw OHLCV (features recomputed exactly as
+        >>> # in training; result.metadata["timestamps"] gives each row's bar)
+        >>> result = bundle.predict_from_raw(raw_ohlcv_df)
     """
 
     def __init__(

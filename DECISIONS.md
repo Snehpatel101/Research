@@ -38,6 +38,13 @@ predict"; the HTTP layer can be rebuilt against a stable pipeline later.
 
 ## 2. Phase 52 special-mode inference bundles — wire or delete (~1,200 lines)
 
+> **RESOLVED in Phase 115 (2026-09-29):** option A for regime-aware and
+> meta-labeling (`RegimeBundle` with per-bar routing, `MetaLabelingBundle`,
+> both built by `BundleBuilder` and loaded by `load_deploy_artifact`); option B
+> for walk-forward (`walk_forward_bundle.py` and the duplicate
+> `inference/regime_detector.py` deleted — walk-forward deploys a standard
+> bundle). "All training modes deployable" is now true and matrix-verified.
+
 **What:** `walk_forward_bundle.py`, `regime_bundle.py`, `meta_labeling_bundle.py`,
 `regime_detector.py` in `src/inference/`. Built in Phase 52 so non-standard
 training modes would be deployable — but `BundleBuilder` never creates them and
@@ -165,6 +172,11 @@ contracts layer for everything.
 
 ## 8. `ExperimentConfig.to_trainer_config / to_backtest_config / to_bundle_config` — adopt or delete
 
+> **Partly addressed in Phase 115:** `data.start_date` / `data.end_date` are now
+> honored by `MLFactory` (raw bars filtered before features), and the new
+> `data.bar_timeframe`, `training.regime` and `training.meta_labeling` settings
+> flow to the pipeline. The three `to_*_config` methods remain unused.
+
 **What:** Three conversion methods with **zero callers**. Everything wired only
 through them is dead config: CalibrationConfig details, CheckpointConfig,
 ScalerConfig, SplitConfig, start/end dates, and part of FeatureConfig's
@@ -242,6 +254,10 @@ worth a dedicated phase.
 
 ## 12. Python environment: adopt uv or drop the lockfile
 
+> **Phase 115 note:** development/verification now runs in `uv venv .venv`
+> (Python 3.11, CPU torch, pandas 3.0) — no apt/pip shadowing issues were hit.
+> `uv.lock` itself was not regenerated; that part of the decision is still open.
+
 **What:** `uv.lock` is checked in, but the actual dev environment is system
 Python 3.12 with pip packages in `~/.local` (`--break-system-packages`).
 The lockfile is stale fiction; reproducibility currently rests on
@@ -263,7 +279,7 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 | # | Decision | Default if you do nothing | Recommended | Effort |
 |---|----------|---------------------------|-------------|--------|
 | 1 | Serving/monitoring chain | Dead code + crashing server stays | Delete | ~0.5 day |
-| 2 | Special-mode bundles | "All modes deployable" stays false | Wire if used, else delete | 2–3 days / 2 h |
+| 2 | Special-mode bundles | ✅ Resolved (Phase 115) | — | — |
 | 3 | Governance modules | Tests-only forever | Wire lifecycle+registry, park rest | 1–2 days |
 | 4 | Contract seq_len | TCN under-windowed, mode skew | Honor contracts (results change) | 1–2 days + eval |
 | 5 | 5-D Optuna island | Dead code pinned by tests | Delete + replacement test | ~0.5 day |

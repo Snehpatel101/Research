@@ -87,6 +87,11 @@ class OOFGenerationService:
         )
         return PurgedKFold(cv_config)
 
+    @staticmethod
+    def _model_config(request: OOFRequest) -> dict[str, Any]:
+        """Fold-model config: the run's class count is part of the problem definition."""
+        return {**(request.model_config or {}), "n_classes": request.n_classes}
+
     def generate_oof(self, request: OOFRequest) -> OOFPrediction | None:
         """
         Generate out-of-fold predictions for a model.
@@ -189,7 +194,7 @@ class OOFGenerationService:
         oof_predictions = oof_generator.generate_oof_predictions(
             X=X_train_df,
             y=y_train,
-            model_configs={model_name: request.model_config or {}},
+            model_configs={model_name: self._model_config(request)},
             use_cache=True,
         )
 
@@ -298,7 +303,7 @@ class OOFGenerationService:
                 logger.debug(f"  Using cached fold model for fold {fold_idx + 1}")
             else:
                 # Fallback: train from scratch (no cached models available)
-                model = ModelRegistry.create(model_name, config=request.model_config or {})
+                model = ModelRegistry.create(model_name, config=self._model_config(request))
                 training_metrics = model.fit(
                     X_train=X_train_fold,
                     y_train=y_train_fold,

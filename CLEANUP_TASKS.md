@@ -1,7 +1,36 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 114 complete (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
-**Last Updated:** 2026-08-20
+**Status:** All phases through 115 complete (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
+**Last Updated:** 2026-09-29
+
+---
+
+## Phase 115: Mix-and-Match Every Model — COMPLETE (2026-09-29)
+
+| # | Task | Location | Status |
+|:-:|------|----------|:------:|
+| 1 | Positional label rows from every adapter; global val/test indices | `src/data/adapters/{tabular,sequence,base,preparation}.py` | ✅ |
+| 2 | OOF re-indexed to source rows; 3D uses windowed OOF path | `src/validation/cv/oof_core.py`, `src/models/training/services/oof_generation.py` | ✅ |
+| 3 | Shared feature code + spec; graph replays it | `src/data/pipeline/stages/features/engineer.py`, `src/inference/preprocessing_graph.py` | ✅ |
+| 4 | Bar timeframe detect/resample; start/end dates | `src/factory.py::_load_raw_bars`, `src/core/common/timeframes.py::detect_timeframe` | ✅ |
+| 5 | Scaler recorded on every trainer; fitted columns recorded | `src/models/training/services/model_training.py`, `trainer.py` | ✅ |
+| 6 | One feature-selection mechanism | `training_ops.py::_trainer_feature_selection`, `features.py` (`feature_set=None`) | ✅ |
+| 7 | Ensemble bundle build/load, timestamp alignment | `src/inference/{builder,ensemble_bundle}.py` | ✅ |
+| 8 | `safe_pickle_dump` for all meta/classical models | `src/core/utils/safe_pickle.py`, `src/models/{ensemble,classical}/` | ✅ |
+| 9 | `voting_meta` meta-learner | `src/models/ensemble/voting_meta.py` | ✅ |
+| 10 | Walk-forward deploy model + row-aligned OOF | `training_ops.py::_train_walk_forward` | ✅ |
+| 11 | Regime: canonical training, routed OOF, `RegimeBundle` | `regime_trainer.py`, `training_ops.py::_record_regime_model`, `src/inference/regime_bundle.py` | ✅ |
+| 12 | Meta-labeling: any primary, CV'd filter, `MetaLabelingBundle` | `training_ops.py::_train_meta_labeling_for_horizon`, `src/inference/meta_labeling_bundle.py` | ✅ |
+| 13 | `describe_bundle`/`load_bundle`; deploy scan | `src/inference/deploy.py`, `src/factory.py::_create_deploy` | ✅ |
+| 14 | pandas 3 fixes (pywt, MDA, OOF, lookahead audit) | `wavelets.py`, `walk_forward.py`, `ohlcv_selector.py`, `fold_scaling.py`, `lookahead_audit.py` | ✅ |
+| 15 | SampEn caps + causal ffill; feature cache version | `entropy.py`, `engineer.py` | ✅ |
+| 16 | Inline labeling ATR | `src/factory.py`, `src/data/labeling/triple_barrier.py` | ✅ |
+| 17 | CPU DataLoader/TFT defaults | `global.yaml`, `trainer_config.py`, `base_rnn.py`, `device.py` | ✅ |
+| 18 | Config/CLI/notebook surface | `experiment.py` (`regime`, `meta_labeling`, `bar_timeframe`), `cli/commands/pipeline.py`, notebooks | ✅ |
+| 19 | Verification harness + tests + README | `scripts/mix_match.py`, `tests/test_mix_and_match_{units,e2e}.py`, `README.md`, `docs/MIX_AND_MATCH.md` | ✅ |
+
+**Verify:** `pytest tests/test_mix_and_match_units.py tests/test_mix_and_match_e2e.py`;
+`python scripts/mix_match.py {solo,pairs,meta,modes,modes-solo,all-in}` then `python scripts/mix_match.py report`.
 
 ---
 
@@ -92,12 +121,12 @@ See **COMPLETION.md** for full task details and implementation information.
 
 **No active phases.** All phases through 114 are complete. See COMPLETION.md for full details.
 
-### Open Decisions (Phase 115 candidates, pending user)
+### Open Decisions (Phase 116+ candidates, pending user — see DECISIONS.md)
 
 | # | Item | Notes |
 |:-:|------|-------|
 | 1 | Serving/monitoring chain | `src/inference/server.py` + `validation/monitoring` — unreachable, server has known crashes; wire or delete |
-| 2 | Phase 52 special-mode bundles | No producer/consumer; wire into `BundleBuilder` or delete |
+| 2 | ~~Phase 52 special-mode bundles~~ | ✅ Resolved in Phase 115 (regime + meta-labeling wired, walk-forward bundle deleted) |
 | 3 | Phase 99-102 governance modules | Tests-only; wire into pipeline or move to experimental |
 | 4 | ModelContract `sequence_length` not honored in standard mode | C4 — contract 64/128 vs config 60, cross-mode inconsistency |
 | 5 | 5d-optimization island | `five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver` — tests-only |

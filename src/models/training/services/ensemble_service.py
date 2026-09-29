@@ -70,7 +70,6 @@ class EnsembleService:
 
     def __init__(self) -> None:
         """Initialize EnsembleService."""
-        self._aligner = OOFAligner()
 
     def build_ensemble(
         self,
@@ -131,7 +130,9 @@ class EnsembleService:
 
         # Align OOF predictions
         try:
-            aligned = self._aligner.align(oof_results, strategy="intersection")
+            # Aligner must match the run's class count (binary mode uses 2)
+            aligner = OOFAligner(n_classes=getattr(config, "n_classes", 3))
+            aligned = aligner.align(oof_results, strategy="intersection")
         except ValueError as e:
             logger.error(f"Failed to align OOF predictions: {e}")
             return EnsembleServiceResult(

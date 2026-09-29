@@ -4,6 +4,49 @@
 
 ---
 
+## Phase 115: Mix-and-Match Every Model | 2026-09-29 | COMPLETE
+
+**Impact:** Every base model (16), stacking meta-learner (5) and training mode (4) can now be combined freely and runs the full product path — features → labels → per-model selection → training → OOF → stacking ensemble → backtest → bundles → deploy → reload → `predict_from_raw` — with the deployed bundle **proven** to reproduce the trained model (prediction parity on the validation split). Verified by the new `scripts/mix_match.py` matrix (MATRIX_RESULTS) and 27 new tests; full suite, ruff, black and pyright (0 errors) clean. Also verified on real MES 1-minute data (native 1-min and resampled to 5-min).
+
+### Correctness fixes (all were silent — no error, wrong results)
+
+| # | Fix | Description |
+|:-:|-----|-------------|
+| 1 | Stacking misalignment across input ranks | Adapters reported sample positions inconsistently (tabular: none; sequence: raw timestamps; multi-stream: positions), and OOF was indexed by sample. A 3D/4D model's sample 0 is bar `seq_len-1`, so cross-family ensembles paired predictions from **different bars** and sequence-model backtests were shifted by 59 bars. `AdapterResult.original_indices` is now always the positional label row; `PreparedData` val/test indices are global rows; OOF of every rank is re-indexed to source rows (`reindex_oof_to_rows`). |
+| 2 | 3D OOF windows-of-windows | The OOF service flattened `(n, 60, F)` windows to 2D and the sequence OOF path re-windowed them: OOF models trained on `(60, 60*F)` inputs (60x memory, ~6 GB for 4k rows, OOM in parallel) and differed from the deployed model. 3D now uses the windowed (4D-style) path. LSTM run 295s → ~65s. |
+| 3 | Second feature engine at inference | `PreprocessingGraph` re-implemented features (different set, hard-coded 1min→5min resample, MTF always on). Now it replays `FeatureEngineer.compute_features` from a recorded spec (`FeatureEngineer.to_spec/from_spec`); bar timeframe auto-detected or `data.bar_timeframe` resampling, shared by training and inference. |
+| 4 | 2D bundles missing the scaler | Every model is fit on PreparedData's scaled features, but the tabular path never recorded the scaler — deployed `logistic`/`svm` predicted on unscaled input (probabilities off by up to 0.997). |
+| 5 | Triple feature selection | Trainer re-selected features (and applied a named feature-set filter) after the orchestrator's train-only per-model selection, so OOF models, final model and bundle used different columns. One mechanism now; walk-forward windows keep per-window selection. |
+| 6 | Mid-series NaN rows dropped | Sample entropy returned NaN when no templates matched and MTF bars had gaps; row-wise NaN dropping removed ~20% of bars mid-series, so sequence windows silently skipped time. SampEn caps instead of NaN; causal forward-fill of intermittent NaNs in the shared feature code. Feature cache key now includes `FEATURE_ENGINE_VERSION`. |
+| 7 | Ensembles not deployable | Factory never built an ensemble bundle; `EnsembleBundle.load` would unpickle the raw sklearn model; base predictions were aligned by array position. Ensemble bundles are built, loaded through the meta-learner class, and base models aligned on bar timestamps. |
+| 8 | Nothing saved with joblib was loadable | Every meta-learner and classical model saved with `joblib.dump` but loaded with `pickle.load`. New canonical `safe_pickle_dump`. |
+| 9 | Calibration always skipped | Orchestrator required `trainer.predict_proba` (Trainer has none); now reuses the Trainer's calibrator. |
+| 10 | pandas 3 | PyWavelets rejects read-only buffers → **all 21 wavelet features were 100% NaN**; MDA ranking and tabular OOF crashed on read-only arrays; int→float upcast in lookahead audit. |
+| 11 | Labels on native 1-min data crashed | Labeling required the `atr_14` feature column (period scaling renamed it). Labels now compute Wilder ATR inline, same as the backtest. |
+| 12 | CPU memory | `global.yaml` forced 4 persistent forked DataLoader workers per loader on CPU (5.6 GB each, OOM kills); `num_workers`/`pin_memory` now auto. TFT uses its smallest architecture on CPU. |
+
+### Training modes — all deployable
+
+- **walk_forward:** evaluation windows (honest OOS → backtest, stacking); deployable model trained like standard mode; OOF row-aligned.
+- **regime_aware:** per-regime models via the canonical training service (was a container path that re-windowed sequences); regime-routed OOF (backtest + stacking); `RegimeBundle` routes each bar to its regime's model using the training `RegimeDetector` config. Regime models can be stacked.
+- **meta_labeling:** any primary model (`models[0]`, any rank), primary OOF from the standard path, cross-validated meta filter for the system OOF, `MetaLabelingBundle` (primary bundle + meta estimator + threshold).
+- `ExperimentConfig.training.regime` / `.meta_labeling` sections (were unreachable from the factory).
+
+### New
+
+- `voting_meta` (soft-vote) meta-learner; meta-learner names canonical in `MODEL_FAMILIES["meta_learner"]`
+- `describe_bundle` / `load_bundle` (every bundle kind), `ModelBundle.model_input` / `raw_to_input`, predictions carry `metadata["timestamps"]`
+- `detect_timeframe` (canonical), `NumpyEncoder` in `core.utils`, `merge_oof_predictions`
+- CLI `--meta-learner`, `--bar-timeframe`, `--purge-bars`, `--embargo-bars`; notebooks honor `TARGET_TIMEFRAME`
+- `scripts/mix_match.py` matrix runner + `docs/MIX_AND_MATCH.md` report; `README.md`
+- Tests: `test_mix_and_match_units.py` (20), `test_mix_and_match_e2e.py` (7 full-pipeline combinations)
+
+### Removed
+
+`src/inference/regime_detector.py` (duplicate detector), `src/inference/walk_forward_bundle.py` (walk-forward deploys standard bundles), the re-implemented feature code in `PreprocessingGraph`, dead `to_ensemble_result`, `OOFGenerationService._flatten_to_2d`, duplicate `_detect_timeframe`, second `NumpyEncoder`.
+
+---
+
 ## Phase 114: Repository Rehabilitation | 2026-08-20 | COMPLETE
 
 **Impact:** Full-repository rehabilitation session — restored label/backtest parity on the canonical MLFactory path, fixed a bug where backtest metrics were ALWAYS silently empty, completed binary-mode (n_classes=2) threading end-to-end, closed several config seams that left production runs unbounded or silently misconfigured, deleted 21,193 lines of grep-verified dead code across 124 files, and added a pyright baseline (1,234 errors → 0) plus ~125 new behavioral tests. Suite grew 475 → ~600 tests, all passing; ruff + black clean.

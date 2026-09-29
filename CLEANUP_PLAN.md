@@ -1,7 +1,32 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 114 COMPLETE (Repository Rehabilitation). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
-**Last Updated:** 2026-08-20
+**Status:** Phase 115 COMPLETE (Mix-and-Match Every Model). Phase 114 COMPLETE (Repository Rehabilitation). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
+**Last Updated:** 2026-09-29
+
+---
+
+## Phase 115: Mix-and-Match Every Model — COMPLETE (2026-09-29)
+
+**Goal:** any subset of base models × any meta-learner × any training mode trains,
+ensembles, backtests, deploys and serves — with the deployed artifact proven equal
+to the trained model.
+
+```
+raw OHLCV ──► _load_raw_bars (detect/resample bar_timeframe) ──► FeatureEngineer.compute_features ◄── same spec ── PreprocessingGraph (inference)
+          ──► labels (inline Wilder ATR) ──► per-model train-only selection (ONE mechanism)
+          ──► PreparedData (positional row indices, global for val/test)
+          ──► model fit (2D/3D/4D) ──► OOF re-indexed to source rows ──► stacking (5 meta-learners)
+          ──► bundles: model | ensemble | regime (per-bar routing) | meta_labeling ──► deploy ──► load_bundle
+```
+
+**Rationale:** the pieces existed but were silently inconsistent — ranks were stacked
+at mismatched bars, inference computed different features, scalers/meta-learners
+were not persisted or not loadable. Verification is behavioral: `scripts/mix_match.py`
+runs every combination through the real `MLFactory` and checks alignment, feature
+parity and prediction parity.
+
+**Validation:** mix-and-match matrix (see `docs/MIX_AND_MATCH.md`), full pytest
+suite, ruff + black + pyright (0 errors), real MES 1-min data (native + 5-min resample).
 
 ---
 
@@ -164,10 +189,10 @@ See **COMPLETION.md** for full details on all completed phases.
 
 **No active phases.** All phases through 114 are complete. See COMPLETION.md for full details.
 
-### Open Decisions (Phase 115 candidates, pending user)
+### Open Decisions (Phase 116+ candidates, pending user — see DECISIONS.md)
 
 - Serving/monitoring chain (`src/inference/server.py` + `validation/monitoring`) — unreachable, server has known crashes; wire or delete
-- Phase 52 special-mode bundles (WalkForward/Regime/MetaLabeling) — no producer/consumer; wire into `BundleBuilder` or delete
+- ~~Phase 52 special-mode bundles~~ — resolved in Phase 115 (regime + meta-labeling wired, walk-forward bundle deleted)
 - Phase 99-102 governance modules — tests-only; wire into pipeline or move to experimental
 - `ModelContract.sequence_length` not honored in standard mode (contract 64/128 vs config 60)
 - 5d-optimization island (`five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver`) — tests-only

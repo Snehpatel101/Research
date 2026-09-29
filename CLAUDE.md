@@ -621,6 +621,14 @@ src/
 - Verification infra: `pyrightconfig.json` added (1,234 errors → 0, real sites fixed not suppressed), 8 new behavioral test files (~125 tests: E2E, bundle roundtrip, WF OOF schema, barrier parity, calibrator flow, config seams, scaler persistence, CLI smoke); suite grew 475 → ~600 tests, ruff + black clean
 - OPEN DECISIONS pending user: **see DECISIONS.md** (root) — 12 items with options, recommendations, and effort estimates (serving chain, special-mode bundles, governance modules, contract seq_len, 5d island, AdapterResult/TrainingResult dedup, to_*_config methods, dead config layer, import SCC, source-grep tests, uv adoption)
 
+**Phase 115: COMPLETE — Mix-and-Match Every Model (2026-09-29)**
+- Any subset of the 16 base models × 5 meta-learners (`voting_meta` new) × 4 training modes runs the full path through deploy + `predict_from_raw`, verified by `scripts/mix_match.py` (report: `docs/MIX_AND_MATCH.md`) incl. prediction parity (deployed bundle == trained model)
+- Silent correctness fixes: cross-rank stacking misalignment (3D/4D OOF offset by seq_len-1), 3D OOF windows-of-windows, inference used a divergent second feature engine (now replays `FeatureEngineer` spec), 2D bundles missing scaler, triple feature selection, ~20% bars dropped mid-series (SampEn NaN), wavelets 100% NaN on pandas 3, joblib/pickle save-load mismatch, calibration always skipped
+- All modes deployable: walk-forward (standard deploy model), regime-aware (`RegimeBundle`, per-bar routing), meta-labeling (`MetaLabelingBundle`, any primary = `models[0]`)
+- `data.bar_timeframe` resampling; `training.regime` / `training.meta_labeling` config sections; CLI `--meta-learner --bar-timeframe --purge-bars --embargo-bars`
+- Dev env: `uv venv .venv` (Python 3.11, CPU torch, pandas 3); run black via `uv tool run --python 3.12 black` (py312 target)
+- See COMPLETION.md Phase 115 for the full list
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -712,6 +720,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-08-20*
+*Last updated: 2026-09-29*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

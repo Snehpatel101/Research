@@ -148,7 +148,12 @@ class AlignedOOFResult:
             List of feature names corresponding to stacking_features columns.
         """
         names = []
-        class_names = list(LABEL_CLASSES.values())  # ["short", "neutral", "long"]
+        # ["short", "neutral", "long"] for 3 classes; "0", "1" for binary
+        class_names = (
+            list(LABEL_CLASSES.values())
+            if self.n_classes == len(LABEL_CLASSES)
+            else [str(i) for i in range(self.n_classes)]
+        )
 
         # Probability columns
         for model in self.model_names:

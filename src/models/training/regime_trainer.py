@@ -417,6 +417,7 @@ class RegimeAwareTrainer:
                         cv_method=self.config.cv_method,
                         embargo_bars=self.config.embargo_bars,
                         purge_bars=self.config.purge_bars,
+                        n_classes=getattr(self.config, "n_classes", 3),
                         early_stopping_patience=getattr(
                             self.config, "early_stopping_patience", None
                         ),

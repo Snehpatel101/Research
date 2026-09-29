@@ -22,12 +22,15 @@ from src.models.ensemble import VotingMetaLearner, get_meta_learner
 N_CLASSES = 3
 
 
-def _stacking_data(n: int, n_models: int = 3, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
-    """OOFAligner-shaped stacking features: n_models*3 probability cols + 3 derived."""
+def _stacking_data(
+    n: int, n_models: int = 3, seed: int = 0, n_classes: int = N_CLASSES
+) -> tuple[np.ndarray, np.ndarray]:
+    """OOFAligner-shaped stacking features: n_models*n_classes probability cols + 3 derived."""
     rng = np.random.default_rng(seed)
-    probs = rng.dirichlet(np.ones(N_CLASSES), size=(n, n_models)).reshape(n, -1)
+    probs = rng.dirichlet(np.ones(n_classes), size=(n, n_models)).reshape(n, -1)
     derived = rng.random((n, 3))
-    y = rng.integers(-1, 2, size=n)
+    # Labels: {-1, 0, 1} for 3 classes, {0, 1} for binary
+    y = rng.integers(-1, 2, size=n) if n_classes == 3 else rng.integers(0, 2, size=n)
     return np.hstack([probs, derived]).astype(np.float64), y
 
 
@@ -54,15 +57,19 @@ def _ohlcv(n: int, freq: str, seed: int = 3) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("n_classes", [3, 2], ids=["3class", "binary"])
 @pytest.mark.parametrize("name", MODEL_FAMILIES["meta_learner"])
-def test_every_meta_learner_fits_saves_loads_and_predicts_identically(name, tmp_path) -> None:
-    X_train, y_train = _stacking_data(300, seed=1)
-    X_val, y_val = _stacking_data(80, seed=2)
+def test_every_meta_learner_fits_saves_loads_and_predicts_identically(
+    name, n_classes, tmp_path
+) -> None:
+    X_train, y_train = _stacking_data(300, seed=1, n_classes=n_classes)
+    X_val, y_val = _stacking_data(80, seed=2, n_classes=n_classes)
 
-    meta = get_meta_learner(name, n_classes=N_CLASSES)
+    meta = get_meta_learner(name, n_classes=n_classes)
     meta.fit(X_train, y_train, X_val, y_val)
     before = meta.predict(X_val)
-    assert before.class_probabilities.shape == (len(X_val), N_CLASSES)
+    assert before.class_probabilities.shape == (len(X_val), n_classes)
+    assert set(np.unique(before.class_predictions)) <= set(np.unique(y_train))
     np.testing.assert_allclose(before.class_probabilities.sum(axis=1), 1.0, atol=1e-6)
 
     meta.save(tmp_path / name)

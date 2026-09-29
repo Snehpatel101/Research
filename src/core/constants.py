@@ -36,9 +36,6 @@ BASE_TIMEFRAME: str = "1min"
 # All other modules should import from here
 DEFAULT_MTF_TIMEFRAMES: list[str] = ["1min", "5min", "15min", "60min"]
 
-# Raw bar columns every data source must provide
-OHLCV_COLUMNS: tuple[str, ...] = ("open", "high", "low", "close", "volume")
-
 
 # =============================================================================
 # HORIZONS - Prediction horizons (in bars)

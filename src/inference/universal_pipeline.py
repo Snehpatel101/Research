@@ -172,7 +172,8 @@ class UniversalInferencePipeline:
         """Reconstruct pipeline from an experiment directory.
 
         Scans ``config.output_dir / "bundles"`` for saved model bundles
-        and an optional ensemble bundle.
+        and an optional ensemble bundle (regime / meta-labeling bundles are
+        served by ``load_bundle`` / ``load_deploy_artifact``).
 
         Args:
             config: PipelineConfig whose *output_dir* contains bundles.
@@ -186,27 +187,29 @@ class UniversalInferencePipeline:
                 f"No bundles directory at {bundle_dir}. " "Train models first or check output_dir."
             )
 
+        from src.inference.deploy import describe_bundle
+
         bundles: list[ModelBundle] = []
         ensemble_bundle: EnsembleBundle | None = None
 
         for child in sorted(bundle_dir.iterdir()):
-            if not child.is_dir():
+            info = describe_bundle(child) if child.is_dir() else None
+            if info is None:
                 continue
-            manifest = child / "manifest.json"
-            if not manifest.exists():
-                continue
-            # Distinguish ensemble bundles from model bundles
-            if (child / "meta_learner").is_dir():
-                try:
-                    ensemble_bundle = EnsembleBundle.load(child)
-                    logger.info("Loaded ensemble bundle from %s", child)
-                except Exception as exc:
-                    logger.warning("Failed to load ensemble bundle %s: %s", child, exc)
+            if info.kind == "ensemble":
+                ensemble_bundle = EnsembleBundle.load(child)
+                logger.info("Loaded ensemble bundle from %s", child)
+            elif info.kind == "model":
+                bundles.append(ModelBundle.load(child))
             else:
-                try:
-                    bundles.append(ModelBundle.load(child))
-                except Exception as exc:
-                    logger.warning("Failed to load bundle %s: %s", child, exc)
+                # Regime / meta-labeling bundles are served by load_bundle();
+                # an ensemble over regime models still works via predict_ensemble
+                logger.warning(
+                    "Skipping %s bundle %s: load it with src.inference.load_bundle "
+                    "or load_deploy_artifact",
+                    info.kind,
+                    child,
+                )
 
         if not bundles and ensemble_bundle is None:
             raise InferenceError(f"No valid bundles found in {bundle_dir}.")

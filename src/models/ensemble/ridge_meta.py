@@ -192,7 +192,7 @@ class RidgeMetaLearner(BaseModel):
             X_scaled = self._scaler.transform(X)
 
         # Get decision function and convert to pseudo-probabilities
-        decision = self._model.decision_function(X_scaled)
+        decision = self._decision_matrix(X_scaled)
 
         # Convert decision function to probabilities using softmax
         probabilities = softmax(decision)
@@ -269,11 +269,21 @@ class RidgeMetaLearner(BaseModel):
         """Set feature names for interpretability."""
         self._feature_names = names
 
+    def _decision_matrix(self, X: np.ndarray) -> np.ndarray:
+        """(n, n_classes) decision scores; binary RidgeClassifier returns 1-D scores."""
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
+        decision = np.asarray(self._model.decision_function(X))
+        if decision.ndim == 1:
+            # Score is the class-1 logit: [0, d] softmaxes to sigmoid(d)
+            decision = np.column_stack([np.zeros_like(decision), decision])
+        return decision
+
     def _compute_loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """Compute hinge-like loss from decision function."""
         if self._model is None:
             raise RuntimeError("Meta model is not fitted")
-        decision = self._model.decision_function(X)
+        decision = self._decision_matrix(X)
         # Use negative log softmax as loss proxy
         probs = softmax(decision)
         return float(log_loss(y, probs))

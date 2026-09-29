@@ -41,6 +41,10 @@ def _build_ml_config(
     data_path: Path,
     output_dir: Path,
     config_path: Path | None,
+    meta_learner: str = "ridge_meta",
+    bar_timeframe: str | None = None,
+    purge_bars: int | None = None,
+    embargo_bars: int | None = None,
 ):
     """Build ExperimentConfig from arguments for ML pipeline."""
     from src.config.experiment import DataSection, ExperimentConfig, TrainingSection
@@ -50,6 +54,12 @@ def _build_ml_config(
         return ExperimentConfig.from_yaml(config_path)
 
     n_trials = 100 if optimize_features else 0
+    # CV gaps are in bars; only override the TrainingSection defaults when given
+    cv_gaps = {
+        k: v
+        for k, v in {"purge_bars": purge_bars, "embargo_bars": embargo_bars}.items()
+        if v is not None
+    }
 
     return ExperimentConfig(
         name=f"{symbol}_pipeline",
@@ -57,13 +67,16 @@ def _build_ml_config(
         data=DataSection(
             symbol=symbol,
             data_path=data_path,
+            bar_timeframe=bar_timeframe,
         ),
         training=TrainingSection(
             models=models,
             horizons=horizons,
             training_mode=training_mode,
             build_ensemble=build_ensemble,
+            meta_learner=meta_learner,
             optuna=OptunaConfig(n_trials=n_trials),
+            **cv_gaps,
         ),
     )
 
@@ -106,6 +119,20 @@ def run_pipeline(
     build_ensemble: bool = typer.Option(
         False, "--build-ensemble", help="Build ensemble from base models"
     ),
+    meta_learner: str = typer.Option(
+        "ridge_meta",
+        "--meta-learner",
+        help="Stacking meta-learner: ridge_meta, xgboost_meta, mlp_meta, calibrated_meta, voting_meta",
+    ),
+    bar_timeframe: str | None = typer.Option(
+        None, "--bar-timeframe", help="Resample input bars before training, e.g. 5min"
+    ),
+    purge_bars: int | None = typer.Option(
+        None, "--purge-bars", help="CV purge gap in bars (default 60)"
+    ),
+    embargo_bars: int | None = typer.Option(
+        None, "--embargo-bars", help="CV embargo gap in bars (default 1440 = 1 day of 1-min bars)"
+    ),
     optimize_features: bool = typer.Option(
         False, "--optimize-features", help="Run feature optimization"
     ),
@@ -115,7 +142,9 @@ def run_pipeline(
     output_dir: Path = typer.Option(
         Path("./experiments"), "--output-dir", "-o", help="Output directory for results"
     ),
-    config: Path | None = typer.Option(None, "--config", "-c", help="Path to JSON config file"),
+    config: Path | None = typer.Option(
+        None, "--config", "-c", help="Path to ExperimentConfig YAML file"
+    ),
     resume: bool = typer.Option(
         False, "--resume", help="Resume from the last MLFactory checkpoint in output dir"
     ),
@@ -128,6 +157,10 @@ def run_pipeline(
 
     Example:
         pipeline run --symbol MES --data-path ./data/mes.parquet --output-dir ./exp
+
+        # Mix and match: tabular + sequence + multi-stream models, soft-vote ensemble
+        pipeline run -d ./data/mes_1m.parquet --bar-timeframe 5min --embargo-bars 288 \\
+            -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta
     """
     from src.factory import MLFactory
 
@@ -146,6 +179,10 @@ def run_pipeline(
             data_path=data_path,
             output_dir=output_dir,
             config_path=config,
+            meta_learner=meta_learner,
+            bar_timeframe=bar_timeframe,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
         )
     except (FileNotFoundError, ValueError) as e:
         show_error(f"Configuration error: {e}")

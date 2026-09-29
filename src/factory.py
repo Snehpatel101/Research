@@ -855,16 +855,8 @@ class MLFactory:
 
         # Binary mode: remap {-1, 0, 1} -> {0, 1} (significant move vs no move)
         if self.config.data.labeling.binary_mode:
-            import warnings
-
-            warnings.warn(
-                "Binary mode (n_classes=2) is EXPERIMENTAL. The model layer, OOF system, "
-                "and ensemble stacking still assume 3 classes internally. Binary mode "
-                "works for label generation and metrics, but full end-to-end support "
-                "requires Phase 86 (n_classes threading). Use with caution.",
-                UserWarning,
-                stacklevel=2,
-            )
+            # Binary labels: 1 = barrier hit either way (a move), 0 = time-out.
+            # They carry no direction, so the directional backtest is skipped.
             label_remap = {-1: 1, 0: 0, 1: 1, -99: -99}
             label_cols = [f"label_h{h}" for h in self.config.training.horizons] + ["label"]
             for col in label_cols:
@@ -953,6 +945,11 @@ class MLFactory:
         """
         if not self.config.evaluation.run_backtest:
             self._log("  Backtest disabled, skipping")
+            return {}
+        if self.config.data.labeling.binary_mode:
+            # Binary labels are {0: no move, 1: move}; they carry no direction,
+            # so there is no long/short signal to backtest.
+            logger.warning("Binary mode: directional backtest skipped (labels carry no direction)")
             return {}
 
         try:
