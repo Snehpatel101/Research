@@ -121,3 +121,6 @@ experiments/
 catboost_info/
 .venv312/
 .claude/worktrees/
+
+# Built documentation site (mkdocs build)
+/site/

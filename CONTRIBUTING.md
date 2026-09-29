@@ -37,6 +37,24 @@ interrupted run).
 4. Run `python scripts/mix_match.py custom <your_model>,xgboost` — it must pass
    training, stacking, deploy and prediction-parity checks.
 
+The full walkthrough is in [docs/mix-and-match.md](docs/mix-and-match.md#adding-a-model).
+
+## Documentation
+
+User docs live in `docs/` and build into a site with mkdocs-material
+(`mkdocs.yml`); the API reference is generated from docstrings.
+
+```bash
+make docs-gen             # regenerate docs/configuration.md and docs/cli.md from the code
+make docs                 # fail on stale generated pages, then mkdocs build --strict
+make docs-serve           # live preview on http://127.0.0.1:8000
+python scripts/check_md_links.py   # every relative link in every *.md resolves
+```
+
+Changing `ExperimentConfig` or a CLI option? Run `make docs-gen` and commit the
+regenerated pages — CI fails when they are stale. Historical audits and phase
+reports go to `docs/archive/` (excluded from the site), not the repository root.
+
 ## Project documents
 
 `CLAUDE.md` (status and conventions) · `DIRECTION.md` (architecture) ·

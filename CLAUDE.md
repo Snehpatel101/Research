@@ -385,7 +385,7 @@ src/
 - Added `logloss_unweighted` and `logloss_weighted` to compute_classification_metrics() (flows to ExperimentResult.metrics)
 - Binary classification mode: `LabelingConfig(binary_mode=True)` remaps {-1,0,+1} → {0,1} (no move vs significant move)
 - Dynamic label mapping (n_classes=2/3), n_classes threaded ExperimentConfig → PipelineConfig
-- All 17 audit items from AUDIT_2026-02-26.md now fully addressed
+- All 17 audit items from docs/archive/AUDIT_2026-02-26.md now fully addressed
 - 7 files + notebook modified, 212/212 tests still passing
 
 **Phase 85: COMPLETE — Full Audit Fixes (8-agent audit + 7 fixes)**

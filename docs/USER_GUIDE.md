@@ -2,6 +2,11 @@
 
 **A complete guide to training ML trading ensembles using Google Colab with VS Code.**
 
+> This guide covers the Colab notebook (`notebooks/ml_factory_colab.ipynb`) and
+> its variables. For the Python API and CLI see [Getting started](getting-started.md);
+> every `ExperimentConfig` field is in the [configuration reference](configuration.md)
+> and the methodology in [Concepts](concepts.md).
+
 ---
 
 ## Table of Contents
@@ -54,6 +59,8 @@
 ---
 
 ## Setup Options
+
+<a id="option-a-vs-code--colab-extension-recommended"></a>
 
 ### Option A: VS Code + Colab Extension (Recommended)
 

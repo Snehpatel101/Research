@@ -18,6 +18,19 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   positions, derived purge/embargo, exact PSR/DSR, CSCV PBO, CPCV path assembly.
 - CI on uv (ruff, black, pyright, vulture, fast tests; weekly slow tests),
   `make check`, pre-commit, `slow` test marker.
+- Documentation site (mkdocs-material + mkdocstrings, `make docs` /
+  `make docs-serve`, `docs` extra, CI `docs` job with `--strict`): getting
+  started, concepts (the methodology and why each piece exists), mix and match,
+  deploy and serve, API reference; configuration and CLI reference pages
+  generated from the code (`scripts/gen_config_docs.py`,
+  `scripts/gen_cli_docs.py`); Markdown link checker (`scripts/check_md_links.py`).
+- `examples/`: quickstart, 2D+3D+4D ensemble, walk-forward + meta-labeling —
+  each runs in a few minutes on a CPU on synthetic bars.
+
+### Changed
+- Historical audits, investigation notes and phase reports moved from the
+  repository root and `docs/` to `docs/archive/` (history kept with `git mv`);
+  `COMMANDS.md` moved to the root.
 
 ### Fixed
 - Backtest filled at the open of the bar whose close produced the signal

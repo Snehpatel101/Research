@@ -292,7 +292,7 @@ Exports added to `src/data/pipeline/config/__init__.py` and `src/config/pipeline
 
 ## Phase 84: Signal Quality — Logloss Metrics + Binary Classification Mode | 2026-02-28 | COMPLETE
 
-**Impact:** Completes all 17 audit items from AUDIT_2026-02-26.md. (1) Added `logloss_unweighted` and `logloss_weighted` metrics to `compute_classification_metrics()` — both now flow through to ExperimentResult.metrics, enabling users to see whether class weights are masking poor signal. (2) Added binary classification mode (`binary_mode=True` in LabelingConfig) that remaps triple-barrier labels {-1,0,+1} to {0,1} (no move vs significant move). Dynamic label mapping supports both n_classes=2 and n_classes=3. n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added. **7 files + notebook modified. 212/212 tests still passing.**
+**Impact:** Completes all 17 audit items from docs/archive/AUDIT_2026-02-26.md. (1) Added `logloss_unweighted` and `logloss_weighted` metrics to `compute_classification_metrics()` — both now flow through to ExperimentResult.metrics, enabling users to see whether class weights are masking poor signal. (2) Added binary classification mode (`binary_mode=True` in LabelingConfig) that remaps triple-barrier labels {-1,0,+1} to {0,1} (no move vs significant move). Dynamic label mapping supports both n_classes=2 and n_classes=3. n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added. **7 files + notebook modified. 212/212 tests still passing.**
 
 ### Changes (2)
 
