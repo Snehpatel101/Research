@@ -140,10 +140,9 @@ PARAM_SPACES: dict[str, dict[str, dict[str, Any]]] = {
     },
     "logistic": {
         "C": {"type": "float", "low": 0.001, "high": 100.0, "log": True},
-        "penalty": {"type": "categorical", "choices": ["l1", "l2", "elasticnet"]},
-        "solver": {"type": "categorical", "choices": ["lbfgs", "saga"]},
         "max_iter": {"type": "int", "low": 100, "high": 1000},
-        "l1_ratio": {"type": "float", "low": 0.0, "high": 1.0},  # Only for elasticnet
+        # 0 = L2, 1 = L1, between = elastic net; the model always uses the saga solver
+        "l1_ratio": {"type": "float", "low": 0.0, "high": 1.0},
     },
     "svm": {
         "C": {"type": "float", "low": 0.001, "high": 100.0, "log": True},

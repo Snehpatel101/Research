@@ -47,7 +47,7 @@ class TimeSeriesOptunaTuner:
         cv: PurgedKFold,
         n_trials: int = 50,
         direction: str = "maximize",
-        metric: str = "f1",
+        metric: str = "f1_weighted",
         pruner: Any | None = None,
         max_epochs: int | None = None,
         n_startup_trials: int = _DEFAULT_N_STARTUP_TRIALS,
@@ -192,8 +192,28 @@ class TimeSeriesOptunaTuner:
         else:
             self._precomputed_splits = list(self.cv.split(X, y))
 
+        # A fold whose train or validation labels hold fewer than two classes
+        # carries no hyperparameter signal: a constant predictor scores a
+        # perfect F1 on it, so the trial would look like the best one found.
+        # Labels are fixed across trials, so the check runs once; every trial
+        # then scores the worst possible value and no model is fit.
+        y_arr = np.asarray(y)
+        degenerate_folds = [
+            fold_idx
+            for fold_idx, (train_idx, val_idx) in enumerate(self._precomputed_splits)
+            if np.unique(y_arr[train_idx]).size < 2 or np.unique(y_arr[val_idx]).size < 2
+        ]
+        worst_value = float("-inf") if self.direction == "maximize" else float("inf")
+        if degenerate_folds:
+            logger.warning(
+                f"  Degenerate labels: folds {degenerate_folds} have fewer than 2 classes "
+                f"in train or validation — every trial scores {worst_value}"
+            )
+
         def objective(trial: optuna.Trial) -> float:
             params = self._sample_params(trial, param_space)
+            if degenerate_folds:
+                return worst_value
 
             scores = []
             for fold_idx, (train_idx, val_idx) in enumerate(self._precomputed_splits):
@@ -264,6 +284,17 @@ class TimeSeriesOptunaTuner:
             show_progress_bar=False,
             callbacks=[_trial_cleanup_callback],
         )
+
+        if not np.isfinite(study.best_value):
+            # Only degenerate trials completed — their params carry no signal,
+            # so callers keep the model defaults.
+            logger.warning("  No trial produced a finite score; keeping default hyperparameters")
+            return {
+                "best_params": {},
+                "best_value": study.best_value,
+                "n_trials": len(study.trials),
+                "skipped": True,
+            }
 
         # Compute Deflated Sharpe Ratio to correct for selection bias
         # DSR is only valid for Sharpe-like metrics (unbounded ratios).
