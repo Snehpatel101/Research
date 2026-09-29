@@ -4,10 +4,7 @@ Runtime defaults and helper utilities for Phase 1 configuration.
 
 from __future__ import annotations
 
-import random
 from pathlib import Path
-
-import numpy as np
 
 from src.core.common.horizon_config import HORIZONS, auto_scale_purge_embargo
 from src.core.common.split_ratios import (
@@ -69,8 +66,9 @@ PURGE_BARS, EMBARGO_BARS = auto_scale_purge_embargo(HORIZONS)
 
 def set_global_seeds(seed: int) -> None:
     """Set random seeds across common RNGs for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
+    from src.core.reproducibility import set_all_seeds
+
+    set_all_seeds(seed)
 
 
 def validate_config() -> None:

@@ -132,7 +132,7 @@ def set_all_seeds(seed: int, deterministic: bool = False) -> ReproducibilityInfo
     _seed_state["python_set"] = True
 
     # Set NumPy random seed
-    np.random.seed(seed)
+    np.random.seed(seed)  # noqa: NPY002 - global state for third-party code
     _seed_state["numpy_set"] = True
 
     # Set PyTorch seeds
@@ -329,7 +329,7 @@ def get_worker_init_fn(seed: int):
     def worker_init_fn(worker_id: int) -> None:
         worker_seed = seed + worker_id
         random.seed(worker_seed)
-        np.random.seed(worker_seed)
+        np.random.seed(worker_seed)  # noqa: NPY002 - per-worker global state
         try:
             import torch
 

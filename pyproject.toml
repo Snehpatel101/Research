@@ -159,6 +159,7 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
     "SIM", # flake8-simplify
+    "NPY", # numpy: seeded Generator API instead of legacy global RNG
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)

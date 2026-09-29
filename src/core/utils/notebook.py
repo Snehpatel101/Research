@@ -42,16 +42,9 @@ def setup_notebook(
         warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
         warnings.filterwarnings("ignore", message=".*pynvml.*")
 
-    # Set random seeds
-    np.random.seed(seed)
-    try:
-        import torch
+    from src.core.reproducibility import set_all_seeds
 
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-    except ImportError:
-        pass
+    set_all_seeds(seed)
 
     # Configure pandas display
     pd.set_option("display.max_rows", max_display_rows)
@@ -185,16 +178,17 @@ def download_sample_data(
         n_bars = 50000  # About 6 months of 5-min data
 
         # Generate base price with trend and noise
-        np.random.seed(hash(symbol) % (2**31))
+        # hash() is salted per process; derive a stable seed from the symbol text
+        rng = np.random.default_rng(sum(symbol.encode()))
         base_price = 4000  # Starting price
-        returns = np.random.normal(0.0001, 0.001, n_bars)
+        returns = rng.normal(0.0001, 0.001, n_bars)
         prices = base_price * np.exp(np.cumsum(returns))
 
         # Generate OHLCV
         volatility = prices * 0.001
-        high = prices + np.abs(np.random.normal(0, 1, n_bars)) * volatility
-        low = prices - np.abs(np.random.normal(0, 1, n_bars)) * volatility
-        open_prices = prices + np.random.normal(0, 0.5, n_bars) * volatility
+        high = prices + np.abs(rng.normal(0, 1, n_bars)) * volatility
+        low = prices - np.abs(rng.normal(0, 1, n_bars)) * volatility
+        open_prices = prices + rng.normal(0, 0.5, n_bars) * volatility
 
         # Ensure OHLC consistency
         high = np.maximum(high, np.maximum(open_prices, prices))
@@ -203,7 +197,7 @@ def download_sample_data(
         # Generate volume with intraday pattern
         hours = np.arange(n_bars) % 78  # 78 bars per day (6.5 hours)
         volume_pattern = 1 + 0.5 * np.sin(np.pi * hours / 78)
-        volume = (1000 + np.random.exponential(500, n_bars)) * volume_pattern
+        volume = (1000 + rng.exponential(500, n_bars)) * volume_pattern
 
         # Create datetime index
         start_date = pd.Timestamp("2023-01-01 09:30:00")

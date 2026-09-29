@@ -223,10 +223,10 @@ def _generate_post_training_report(
                     prices = val_df[price_col].values
                     timestamps = val_df.index
 
-        # Use dummy prices if none available
         if prices is None:
-            prices = np.cumsum(np.random.randn(len(val_predictions)) * 0.001) + 100
-            logger.warning("No price data found, using simulated prices for report")
+            # A P&L report on made-up prices would be fiction; skip it instead
+            logger.warning("No price column in the validation split; financial report skipped")
+            return
 
         # Generate report
         output_path = PROJECT_ROOT / results["output_path"] / "reports"

@@ -427,8 +427,8 @@ def compute_data_hash(
     # Sample indices (deterministic based on size)
     n_samples = X_shape[0]
     if n_samples > sample_size:
-        np.random.seed(42)  # Deterministic sampling
-        sample_idx = np.random.choice(n_samples, sample_size, replace=False)
+        rng = np.random.default_rng(42)  # Deterministic sampling
+        sample_idx = rng.choice(n_samples, sample_size, replace=False)
         sample_idx.sort()
     else:
         sample_idx = np.arange(n_samples)

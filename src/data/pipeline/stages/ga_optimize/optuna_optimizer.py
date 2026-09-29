@@ -10,7 +10,6 @@ Public API:
 """
 
 import logging
-import random
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +20,7 @@ import pandas as pd
 from optuna.samplers import TPESampler
 
 from src.core.common.split_ratios import DEFAULT_TRAIN_RATIO
+from src.core.reproducibility import set_all_seeds
 from src.data.pipeline.stages.labeling import triple_barrier_numba
 
 from .fitness import calculate_fitness
@@ -294,8 +294,7 @@ def run_optuna_optimization(
     convergence_record : ConvergenceRecord for plotting
     """
     # Set random seeds
-    random.seed(seed)
-    np.random.seed(seed)
+    set_all_seeds(seed)
 
     logger.info(f"\nOptimizing parameters for {symbol} horizon {horizon} (Optuna TPE)")
     logger.info(f"  Trials: {n_trials}, Startup: {n_startup_trials}")

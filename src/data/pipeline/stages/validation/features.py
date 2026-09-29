@@ -142,9 +142,9 @@ def compute_feature_importance(
         return [], False
 
     # Sample data for speed
-    np.random.seed(seed)
     actual_sample_size = min(sample_size, len(df))
-    sample_idx = np.random.choice(len(df), size=actual_sample_size, replace=False)
+    rng = np.random.default_rng(seed)
+    sample_idx = rng.choice(len(df), size=actual_sample_size, replace=False)
     X_sample = feature_df.iloc[sample_idx].values
     y_sample = df[label_col].iloc[sample_idx].values
 
