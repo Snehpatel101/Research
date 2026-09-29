@@ -6,7 +6,7 @@
 
 ## Phase 116: Correctness Audit + Repo Hygiene | 2026-09-29 | COMPLETE
 
-**Impact:** Four parallel research audits (financial-ML validation per López de Prado, stacking/calibration literature, reference implementations of every neural architecture, Python tooling practice) found defects that made results optimistic or meaningless while everything still "passed". Every confirmed defect was reproduced, fixed in an isolated worktree, pinned by a regression test and merged; the full mix-and-match matrix was then rerun on the final code (MATRIX2_RESULTS). Suite: ~830 tests (net −25k lines across the phase), ruff + black + pyright (0 errors) + vulture clean, new uv-based CI.
+**Impact:** Four parallel research audits (financial-ML validation per López de Prado, stacking/calibration literature, reference implementations of every neural architecture, Python tooling practice) found defects that made results optimistic or meaningless while everything still "passed". Every confirmed defect was reproduced, fixed in an isolated worktree, pinned by a regression test and merged; the full mix-and-match matrix was then rerun on the final code (MATRIX2_RESULTS). Suite: 848 tests (net −25k lines across the phase), ruff + black + pyright (0 errors) + vulture clean, new uv-based CI.
 
 ### Correctness fixes (before → after)
 
@@ -43,6 +43,14 @@
 - **Config honesty:** `ExperimentConfig` fields that never reached the pipeline were wired (splits, calibration, verbose) or removed; `from_dict` warns on and ignores unknown keys.
 - **Reproducibility:** seeded `np.random.default_rng` everywhere (ruff NPY rules on), one global seeder (`set_all_seeds`), CLI report no longer uses simulated prices.
 - **Tooling:** Python 3.11 targets (black/ruff/pyright), CI on uv with CPU torch (ruff, black, pyright, vulture, `pytest -m "not slow" -n auto`; weekly slow job), `slow` marker, Makefile `check`/`matrix` targets, pre-commit, `uv.lock` regenerated.
+
+### Adversarial review round (two independent reviewers of the merged code)
+
+- **Every horizon trained on the first horizon's labels** (pre-existing): data preparation always used the `label` column (= `label_h{first}`), and the prepared-data cache key had no horizon, so with the default horizons `[5, 10, 15, 20]` the "h20" models and bundles were h5 models. Each horizon now prepares its own `label_h{h}` and label spans in every mode; the cache key includes the horizon; `best_model` ranks `horizons[0]` (`best_model_for(h)` for others). Pinned by a 2-horizon end-to-end test.
+- **OOF config parity:** meta-labeling and regime OOF fold models were built from registry defaults instead of the deployed model's config; since OOF probabilities are meta-labeling features, that was train/serve skew. Walk-forward windows now use the run/tuned config too.
+- **Headline backtest = deployed strategy:** with an ensemble, the backtest used a tie-biased majority vote (ties → short) of base OOF predictions; it now replays the stacking meta-learner's purged-holdout signals (`strategy="stacking_holdout"`), otherwise the primary model's OOF (`"oof:<model>"`).
+- **Tuner** early-stopped on the fold it scored → purged early-stopping tail of the fold's train rows. **MDA selection** now purges on label spans and drops invalid labels.
+- **Gaps and bars:** val→test gap is `max(purge, embargo)`; the backtest lays predictions onto the full price series (gaps between OOF segments no longer collapse, holding/stops count real bars, ATR on the full series); label cost calibrated on the training rows only (Phase 96's "expanding median" note was inaccurate — it was a global median); walk-forward windows scale only with per-window scalers.
 
 ### Code-review follow-ups
 

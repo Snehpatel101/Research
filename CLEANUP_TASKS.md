@@ -31,6 +31,7 @@
 | 20 | Notebooks: calibration/coverage against `y_true` with one valid-row mask (never predictions); PURGE/EMBARGO default None (derived); optimal notebook calibration + leakage cells re-synced with colab | `notebooks/ml_factory_{colab,optimal}.ipynb` | ✅ |
 | 21 | ridge_meta config surfaces use `C`/`class_weight`; EnsembleBundle format 2.0.0 refuses 1.x bundles | `cv/param_spaces.py`, `ensemble/meta_factory.py`, `inference/ensemble_bundle.py`, `docs/USER_GUIDE.md` | ✅ |
 | 22 | Stale scripts fixed (batch_inference ensemble mode, compatibility_test, test_all_models, benchmark_ensemble, verify_optuna) or deleted (phase3_validation); `scripts` in pyright include | `scripts/`, `pyrightconfig.json` | ✅ |
+| 23 | Per-horizon labels + spans end to end; OOF config parity (meta-labeling/regime/walk-forward); backtest replays the deployed strategy; tuner early-stopping tail; MDA label spans; val→test gap; backtest on full price series; train-only cost calibration; per-window-only walk-forward scaling | `unified_orchestrator.py`, `training_ops.py`, `modes/walk_forward.py`, `ensemble_service.py`, `factory.py`, `cv_tuner.py`, `feature_selection.py`, `preparation.py`, `backtest.py`, `triple_barrier.py`, `tests/test_ml_integrity_fixes.py`, `tests/test_multi_horizon_e2e.py` | ✅ |
 
 ## Phase 115: Mix-and-Match Every Model — COMPLETE (2026-09-29)
 
