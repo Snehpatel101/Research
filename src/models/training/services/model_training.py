@@ -352,6 +352,7 @@ class ModelTrainingService:
             embargo_bars=request.embargo_bars,
             purge_bars=request.purge_bars,
             optuna_timeout=request.optuna_timeout,
+            n_classes=request.n_classes,
         )
 
         result = tuning_service.optimize(tuning_request)

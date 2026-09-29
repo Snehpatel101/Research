@@ -48,12 +48,7 @@ def validate_stacking_consistency(
     ref_n_samples = len(reference.predictions)
 
     # Check for NaN patterns to detect sequence model gaps
-    ref_pred_col = (
-        "prediction"
-        if "prediction" in reference.predictions.columns
-        else reference.predictions.columns[0]
-    )
-    ref_valid_mask = ~reference.predictions[ref_pred_col].isna()
+    ref_valid_mask = ~reference.predictions[f"{first_key}_pred"].isna()
 
     for model_name, result in oof_predictions.items():
         # Check sample count matches
@@ -66,12 +61,7 @@ def validate_stacking_consistency(
             )
 
         # Check valid samples align (important for sequence models with different seq_len)
-        pred_col = (
-            "prediction"
-            if "prediction" in result.predictions.columns
-            else result.predictions.columns[0]
-        )
-        valid_mask = ~result.predictions[pred_col].isna()
+        valid_mask = ~result.predictions[f"{model_name}_pred"].isna()
 
         if not np.array_equal(ref_valid_mask.values, valid_mask.values):
             # Count mismatches for more informative warning

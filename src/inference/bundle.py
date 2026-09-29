@@ -365,6 +365,8 @@ class ModelBundle:
             training_metrics=training_metrics or {},
             extra=extra_metadata or {},
             feature_names=list(feature_columns),
+            # Neural network definition version (BaseRNNModel.ARCH_VERSION); "" otherwise
+            arch_version=str(getattr(model, "ARCH_VERSION", "")),
         )
 
         return cls(
@@ -1000,7 +1002,9 @@ class ModelBundle:
         if self.metadata.requires_4d:
             # Auto-generate MTF DataFrames when not provided
             if additional_dfs is None:
-                additional_dfs = self._generate_mtf_dataframes(raw_df)
+                additional_dfs = self._generate_mtf_dataframes(
+                    self._anchor_bars(raw_df, skip_cleaning)
+                )
             return self._apply_adapter(
                 features_2d=pd.DataFrame(),
                 raw_df=raw_df,
@@ -1057,28 +1061,23 @@ class ModelBundle:
         # Tabular 2D — pass through unchanged
         return features_2d, pd.DatetimeIndex(features_2d.index)
 
-    def _generate_mtf_dataframes(
-        self,
-        raw_1min_df: pd.DataFrame,
-    ) -> dict[str, pd.DataFrame]:
-        """Resample 1-minute OHLCV data to multiple timeframes.
-
-        Generates the ``additional_dfs`` dict that ``_build_4d_input``
-        requires, using standard OHLCV aggregation rules.
+    def _generate_mtf_dataframes(self, anchor_bars: pd.DataFrame) -> dict[str, pd.DataFrame]:
+        """The higher-timeframe streams of a 4D model, built like training builds them.
 
         Args:
-            raw_1min_df: Raw 1-minute OHLCV DataFrame.  Must have a
-                DatetimeIndex (or a ``datetime`` column that can be
-                converted) and columns: open, high, low, close, volume.
+            anchor_bars: OHLCV at the training bar timeframe with a DatetimeIndex
+                (``_anchor_bars``): training resamples its streams from these
+                bars, never from finer raw input.
 
         Returns:
-            Dict mapping timeframe strings (e.g. ``"5min"``) to
-            resampled DataFrames.
+            Dict mapping timeframe keys (``metadata.extra['mtf_timeframes']``) to
+            lagged OHLCV DataFrames (``resample_higher_timeframes``).
 
         Raises:
-            ValueError: If ``mtf_timeframes`` is not set in bundle
-                metadata or if required OHLCV columns are missing.
+            ValueError: If ``mtf_timeframes`` is not set in bundle metadata.
         """
+        from src.data.adapters import resample_higher_timeframes
+
         mtf_timeframes: list[str] = self.metadata.extra.get("mtf_timeframes", [])
         if not mtf_timeframes:
             raise ValueError(
@@ -1087,40 +1086,7 @@ class ModelBundle:
                 f"is not set. Either pass additional_dfs explicitly or save "
                 f"mtf_timeframes in the bundle's extra metadata."
             )
-
-        # Ensure we have a DatetimeIndex for resample()
-        df = raw_1min_df.copy()
-        if not isinstance(df.index, pd.DatetimeIndex):
-            if "datetime" in df.columns:
-                df = df.set_index("datetime")
-            else:
-                raise ValueError("raw_1min_df must have a DatetimeIndex or a 'datetime' column.")
-
-        required_cols = {"open", "high", "low", "close", "volume"}
-        missing = required_cols - set(df.columns)
-        if missing:
-            raise ValueError(f"raw_1min_df is missing OHLCV columns: {sorted(missing)}")
-
-        ohlcv_agg = {
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last",
-            "volume": "sum",
-        }
-
-        result: dict[str, pd.DataFrame] = {}
-        for tf in mtf_timeframes:
-            resampled = df.resample(tf, closed="left", label="left").agg(ohlcv_agg).dropna()
-            # Anti-lookahead: shift(1) ensures bar N only sees the COMPLETED
-            # higher-TF bar (bar N-1), matching factory.py training path.
-            resampled = resampled.shift(1).dropna()
-            result[tf] = resampled
-            logger.debug(
-                f"_generate_mtf_dataframes: resampled 1min → {tf} " f"({len(resampled)} bars)"
-            )
-
-        return result
+        return resample_higher_timeframes(anchor_bars, mtf_timeframes)
 
     def _build_3d_input(self, features_2d: pd.DataFrame) -> np.ndarray:
         """Build 3D sequence input from 2D feature DataFrame.

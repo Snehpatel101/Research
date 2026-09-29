@@ -18,7 +18,11 @@ import torch
 from torch import nn
 
 from src.models import ModelRegistry
-from src.models.neural.tft_model import GatedResidualNetwork, VariableGRNs
+from src.models.neural.tft_model import (
+    GatedResidualNetwork,
+    VariableGRNs,
+    convert_tft_state_dict_v1,
+)
 
 D = 8
 N_FEATURES = 37  # not a multiple of 16: exercises a ragged last chunk
@@ -119,7 +123,36 @@ def test_per_variable_init_matches_independent_linears() -> None:
     assert torch.equal(batched.norm_weight, torch.ones(200, 64))
 
 
-def test_tft_refuses_architecture_1_checkpoint(tmp_path: Path) -> None:
+def test_empty_batch() -> None:
+    batched = VariableGRNs(N_FEATURES, D).train()
+    out = batched(torch.zeros(0, N_FEATURES))
+    assert out.shape == (0, N_FEATURES, D)
+    out.sum().backward()
+
+
+def _v1_fragment(embedding: nn.Linear, grns: nn.ModuleList) -> dict[str, torch.Tensor]:
+    """The architecture-1.0 state-dict keys of the embedding and per-feature GRNs."""
+    fragment = {f"input_embedding.{k}": v for k, v in embedding.state_dict().items()}
+    for i, grn in enumerate(grns):
+        fragment |= {f"vsn.feature_grns.{i}.{k}": v for k, v in grn.state_dict().items()}
+    return fragment
+
+
+def test_v1_conversion_reproduces_the_independent_grns() -> None:
+    embedding, grns = _reference(N_FEATURES, D)
+    converted = convert_tft_state_dict_v1(_v1_fragment(embedding, grns), N_FEATURES)
+    batched = VariableGRNs(N_FEATURES, D, dropout=0.0).eval()
+    batched.load_state_dict(
+        {k.removeprefix("vsn.variable_grns."): v for k, v in converted.items()}, strict=True
+    )
+    x = torch.randn(30, N_FEATURES)
+    with torch.no_grad():
+        torch.testing.assert_close(
+            batched(x), _reference_forward(embedding, grns, x), atol=1e-5, rtol=1e-5
+        )
+
+
+def _small_tft(tmp_path: Path):  # noqa: ANN202
     rng = np.random.default_rng(0)
     X = rng.standard_normal((64, 20, 5)).astype(np.float32)
     y = rng.integers(-1, 2, size=64)
@@ -138,7 +171,61 @@ def test_tft_refuses_architecture_1_checkpoint(tmp_path: Path) -> None:
     model.save(tmp_path)
     checkpoint = torch.load(tmp_path / "model.pt", weights_only=False)
     assert checkpoint["arch_version"] == "2.0"
+    return model, X, checkpoint
+
+
+def _as_v1(state_dict: dict[str, torch.Tensor], n_features: int) -> dict[str, torch.Tensor]:
+    """Rewrite a 2.0 state dict in the 1.0 layout (one GRN module per feature)."""
+    prefix = "vsn.variable_grns."
+    names = {
+        "fc1_weight": ("fc1.weight", True),
+        "fc1_bias": ("fc1.bias", False),
+        "fc2_weight": ("fc2.weight", True),
+        "fc2_bias": ("fc2.bias", False),
+        "glu_weight": ("glu.linear.weight", True),
+        "glu_bias": ("glu.linear.bias", False),
+        "norm_weight": ("layer_norm.weight", False),
+        "norm_bias": ("layer_norm.bias", False),
+    }
+    v1: dict[str, torch.Tensor] = {}
+    for key, value in state_dict.items():
+        if key.startswith(prefix + "embedding."):
+            v1["input_embedding." + key.removeprefix(prefix + "embedding.")] = value
+        elif key.startswith(prefix):
+            param, transpose = names[key.removeprefix(prefix)]
+            for i in range(n_features):
+                v1[f"vsn.feature_grns.{i}.{param}"] = value[i].t() if transpose else value[i]
+        else:
+            v1[key] = value
+    return v1
+
+
+def test_tft_converts_architecture_1_checkpoint(tmp_path: Path) -> None:
+    model, X, checkpoint = _small_tft(tmp_path)
+    expected = model.predict(X[48:]).class_probabilities
+    checkpoint["model_state_dict"] = _as_v1(checkpoint["model_state_dict"], 5)
     checkpoint["arch_version"] = "1.0"
+    torch.save(checkpoint, tmp_path / "model.pt")
+
+    loaded = ModelRegistry.create("tft", config={"device": "cpu"})
+    loaded.load(tmp_path)
+    np.testing.assert_array_equal(loaded.predict(X[48:]).class_probabilities, expected)
+
+
+def test_tft_refuses_unknown_architecture(tmp_path: Path) -> None:
+    _, _, checkpoint = _small_tft(tmp_path)
+    checkpoint["arch_version"] = "0.9"
     torch.save(checkpoint, tmp_path / "model.pt")
     with pytest.raises(ValueError, match="architecture version"):
         ModelRegistry.create("tft", config={"device": "cpu"}).load(tmp_path)
+
+
+def test_bundle_records_the_architecture_version(tmp_path: Path) -> None:
+    from src.inference.bundle import ModelBundle
+
+    model, _, _ = _small_tft(tmp_path)
+    bundle = ModelBundle.from_training(
+        model, None, [f"f{i}" for i in range(5)], horizon=5, model_name="tft"
+    )
+    assert bundle.metadata.arch_version == "2.0"
+    assert bundle.metadata.to_dict()["arch_version"] == "2.0"

@@ -22,7 +22,11 @@ from src.core.label_spans import LabelSpans
 from src.data.adapters import PreparedData
 from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
-from src.validation.cv.oof_core import merge_oof_predictions, reindex_oof_to_rows
+from src.validation.cv.oof_core import (
+    get_prob_column_names,
+    merge_oof_predictions,
+    reindex_oof_to_rows,
+)
 
 from .services import ModelTrainingRequest, OOFRequest
 
@@ -490,8 +494,6 @@ class TrainingOpsMixin:
 
         # Prepare data per-model so each model gets data matching its own
         # contract (rank, sequence length, feature mode, etc.).
-        class_names = ["short", "neutral", "long"]
-
         for model_name in self.config.models:
             # Walk-forward windows select features on their own training data
             # (B08 fix), so they see every feature column. They also fit their
@@ -668,27 +670,12 @@ class TrainingOpsMixin:
                         # prediction) and original_indices marks the valid rows.
                         # Consumers index it positionally with original_indices,
                         # so a compact frame would raise IndexError downstream.
-                        preds = pred_df[pred_col].values.astype(float)
-                        confidence = pred_df[conf_col].values.astype(float)
-                        y_true_oof = pred_df["y_true"].values.astype(float)
-
-                        prob_cols_wf = [
-                            c
-                            for c in pred_df.columns
-                            if c.startswith(f"{result_model_name}_prob_class")
-                        ]
-                        oof_data: dict[str, Any] = {
-                            f"{result_model_name}_pred": preds,
-                            f"{result_model_name}_confidence": confidence,
-                            "y_true": y_true_oof,
-                        }
-                        for i, col_wf in enumerate(prob_cols_wf):
-                            oof_col = (
-                                f"{result_model_name}_prob_{class_names[i]}"
-                                if i < len(class_names)
-                                else f"{result_model_name}_prob_class{i}"
-                            )
-                            oof_data[oof_col] = pred_df[col_wf].values
+                        # The walk-forward trainer emits the standard OOF frame
+                        # (build_oof_frame); keep its prediction columns
+                        prob_cols = get_prob_column_names(result_model_name, self.config.n_classes)
+                        oof_frame = pred_df[[pred_col, conf_col, "y_true", *prob_cols]].astype(
+                            float
+                        )
 
                         fold_info = []
                         for wr in wf_result.window_results:
@@ -707,7 +694,7 @@ class TrainingOpsMixin:
                         oof = reindex_oof_to_rows(
                             OOFPrediction(
                                 model_name=result_model_name,
-                                predictions=pd.DataFrame(oof_data),
+                                predictions=oof_frame,
                                 fold_info=fold_info,
                                 coverage=len(valid_indices) / n_all,
                                 original_indices=valid_indices,

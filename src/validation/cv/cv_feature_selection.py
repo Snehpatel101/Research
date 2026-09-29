@@ -241,7 +241,13 @@ def run_cv_with_per_fold_feature_selection(
 
     # Same schema as every other OOF producer: stacking datasets combine them
     oof_df = build_oof_frame(
-        model_name, X, y, oof_probabilities, oof_predictions, oof_confidence, oof_fold_ids
+        model_name,
+        X.index,
+        y.values,
+        oof_probabilities,
+        oof_predictions,
+        oof_confidence,
+        oof_fold_ids,
     )
 
     oof_prediction = OOFPrediction(

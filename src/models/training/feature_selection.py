@@ -662,7 +662,7 @@ class FeatureSelectionMixin:
             analyzer = DiversityAnalyzer(
                 min_diversity_threshold=0.3,
                 correlation_threshold=0.8,
-                n_classes=3,
+                n_classes=self.config.n_classes,
             )
             metrics = analyzer.analyze(
                 base_predictions=base_predictions,

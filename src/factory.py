@@ -244,6 +244,7 @@ class MLFactory:
         self._feature_pipeline: dict[str, Any] | None = None
         # (purge_bars, embargo_bars) resolved once the labeled frame is known
         self._cv_gaps: tuple[int, int] | None = None
+        self._warned_dropped_streams = False
 
         # Backtest artifacts (populated by _run_evaluation)
         self._last_equity_curve: Any = None
@@ -562,8 +563,8 @@ class MLFactory:
         # (cached data_pipeline.parquet has features/labels, not raw OHLCV)
         if self.config.data.data_path and Path(self.config.data.data_path).exists():
             self._log("  No cached MTF data — regenerating from raw OHLCV source")
-            raw_df, _bar_tf = self._load_raw_bars()
-            return self._generate_additional_dfs(raw_df)
+            raw_df, bar_tf = self._load_raw_bars()
+            return self._generate_additional_dfs(raw_df, bar_tf)
 
         self._log("  WARNING: 4D models need MTF data but none available")
         return None
@@ -600,12 +601,46 @@ class MLFactory:
                 continue
         return False
 
-    def _generate_additional_dfs(self, raw_df: pd.DataFrame) -> dict[str, pd.DataFrame] | None:
+    def _multi_stream_timeframes(self, bar_timeframe: str) -> list[str]:
+        """
+        Streams of the multi-stream (4D) models: the training bars, then every
+        configured ``data.mtf.timeframes`` entry COARSER than them.
+
+        A configured timeframe equal to the bar timeframe is the anchor itself; a
+        finer one cannot be built from the training bars and is dropped with a
+        warning. Serving rebuilds the same streams from the bundle's recorded
+        ``timeframe_names``.
+        """
+        from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
+
+        anchor = normalize_timeframe(bar_timeframe)
+        base_minutes = get_timeframe_minutes(anchor)
+        streams: list[str] = []
+        dropped: list[str] = []
+        for tf in self.config.data.mtf.timeframes:
+            key = normalize_timeframe(tf)
+            if get_timeframe_minutes(key) > base_minutes:
+                streams.append(key)
+            elif get_timeframe_minutes(key) < base_minutes:
+                dropped.append(key)
+            # a timeframe equal to the bars is the anchor stream itself
+        if dropped and not self._warned_dropped_streams:
+            logger.warning(
+                f"Multi-stream timeframes {dropped} are not coarser than the {anchor} "
+                f"training bars and are dropped; 4D models use {[anchor, *streams]}"
+            )
+            self._warned_dropped_streams = True
+        return [anchor, *streams]
+
+    def _generate_additional_dfs(
+        self, raw_df: pd.DataFrame, bar_timeframe: str | None = None
+    ) -> dict[str, pd.DataFrame] | None:
         """
         Generate resampled OHLCV DataFrames for multi-stream transformer models.
 
         Args:
-            raw_df: Raw OHLCV DataFrame with DatetimeIndex
+            raw_df: OHLCV bars at the training bar timeframe (DatetimeIndex)
+            bar_timeframe: Their timeframe (detected from ``raw_df`` when None)
 
         Returns:
             Dict mapping timeframe strings to resampled DataFrames, or None
@@ -613,35 +648,17 @@ class MLFactory:
         if not self._needs_multi_stream():
             return None
 
-        timeframes = self.config.data.mtf.timeframes
+        from src.core.common.timeframes import detect_timeframe
+        from src.data.adapters import resample_higher_timeframes
+
+        bar_timeframe = bar_timeframe or detect_timeframe(raw_df)
+        if bar_timeframe is None:
+            raise ValueError("Could not detect the bar timeframe of the multi-stream input")
+        timeframes = self._multi_stream_timeframes(bar_timeframe)[1:]
         self._log(f"  Generating multi-stream data for timeframes: {timeframes}")
-
-        ohlcv_agg = {
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last",
-            "volume": "sum",
-        }
-
-        from src.core.common.timeframes import normalize_timeframe
-
-        additional_dfs: dict[str, pd.DataFrame] = {}
-        for tf in timeframes:
-            resampled = (
-                raw_df[list(ohlcv_agg.keys())]
-                .resample(tf, closed="left", label="left")
-                .agg(ohlcv_agg)
-                .dropna()
-            )
-            # Shift by 1 bar to prevent lookahead: bar N should only see
-            # the COMPLETED higher-TF bar (bar N-1), not the current one
-            # which may contain up to 59 minutes of future data.
-            resampled = resampled.shift(1).dropna()
-            normalized_key = normalize_timeframe(tf)
-            additional_dfs[normalized_key] = resampled
-            self._log(f"    {normalized_key}: {len(resampled)} bars (shifted)")
-
+        additional_dfs = resample_higher_timeframes(raw_df, timeframes)
+        for key, frame in additional_dfs.items():
+            self._log(f"    {key}: {len(frame)} bars (shifted)")
         return additional_dfs
 
     def _validate_data_sufficiency(self, df: pd.DataFrame) -> None:
@@ -705,7 +722,12 @@ class MLFactory:
                 f"{self.config.label_span_bars()} bars), embargo_bars={self._cv_gaps[1]} "
                 f"(bar timeframe {self._bar_timeframe()})"
             )
-        return self.config.to_pipeline_config(cv_gaps=self._cv_gaps)
+        pipeline_config = self.config.to_pipeline_config(cv_gaps=self._cv_gaps)
+        bar_timeframe = self._bar_timeframe()
+        if bar_timeframe and self._needs_multi_stream():
+            # The streams the multi-stream adapter builds: anchor first
+            pipeline_config.mtf_timeframes = self._multi_stream_timeframes(bar_timeframe)
+        return pipeline_config
 
     def _bar_timeframe(self) -> str | None:
         """Training bar timeframe recorded by the data pipeline (None before it ran)."""
@@ -806,7 +828,7 @@ class MLFactory:
 
         # Generate additional_dfs for multi-stream models BEFORE feature engineering
         # (needs raw OHLCV with DatetimeIndex)
-        additional_dfs = self._generate_additional_dfs(raw_df)
+        additional_dfs = self._generate_additional_dfs(raw_df, bar_timeframe)
 
         # =====================================================================
         # STEP 1: Feature Engineering

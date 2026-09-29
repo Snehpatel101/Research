@@ -21,7 +21,7 @@ from .oof_alignment import (
     OOFAlignmentResult,
     OOFAlignmentValidator,
 )
-from .oof_core import OOFPrediction, _get_prob_column_names
+from .oof_core import OOFPrediction, get_prob_column_names
 from .timestamp_alignment import (
     align_predictions_on_datetime,
     get_datetime_alignment_report,
@@ -302,7 +302,7 @@ class StackingDatasetBuilder:
         # Collect per-model probability arrays: (n_samples, n_classes) each
         all_probs = []
         for model in model_names:
-            probs = df[_get_prob_column_names(model, self.n_classes)].values
+            probs = df[get_prob_column_names(model, self.n_classes)].values
             all_probs.append(probs)
 
         # Stack: (n_models, n_samples, n_classes)

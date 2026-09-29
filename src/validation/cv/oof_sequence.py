@@ -324,7 +324,7 @@ class SequenceOOFGenerator:
         valid_indices = np.where(~np.isnan(oof_preds))[0]
 
         oof_df = build_oof_frame(
-            model_name, X, y, oof_probs, oof_preds, oof_confidence, oof_fold_ids
+            model_name, X.index, y.values, oof_probs, oof_preds, oof_confidence, oof_fold_ids
         )
 
         return OOFPrediction(

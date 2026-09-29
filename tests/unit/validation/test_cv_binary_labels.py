@@ -85,3 +85,58 @@ def test_cv_and_stacking_follow_the_container_class_count(
 def test_container_rejects_unknown_class_count() -> None:
     with pytest.raises(ValueError, match="n_classes"):
         _container(4)
+
+
+def test_tuner_trials_build_binary_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.validation.cv.cv_tuner as cv_tuner
+    from src.models.registry import ModelRegistry
+
+    built: list[int] = []
+    original_create = ModelRegistry.create
+
+    def recording_create(name: str, config: dict | None = None):  # noqa: ANN202
+        built.append((config or {}).get("n_classes", 3))
+        return original_create(name, config=config)
+
+    monkeypatch.setattr(cv_tuner.ModelRegistry, "create", staticmethod(recording_create))
+    X, y, _ = _container(2).get_sklearn_arrays("train", return_df=True)
+    cv = PurgedKFold(PurgedKFoldConfig(n_splits=3, purge_bars=6, embargo_bars=6))
+    result = cv_tuner.TimeSeriesOptunaTuner(
+        model_name="logistic", cv=cv, n_trials=2, scale_per_fold=True, n_classes=2
+    ).tune(X, y)
+    assert built and set(built) == {2}
+    assert result["best_value"] > 0.4  # a 3-class model on {0, 1} labels scored ~0.27
+
+
+def test_cpcv_rejects_binary_labels() -> None:
+    from src.cli.commands.evaluate import _run_cpcv_for_model
+
+    with pytest.raises(ValueError, match="binary labels"):
+        _run_cpcv_for_model(
+            container=_container(2),
+            model_name="logistic",
+            cpcv_config=None,
+            forward_returns=np.zeros(N),
+            cost_per_turnover=np.zeros(N),
+            groups=None,
+        )
+
+
+def test_cpcv_pbo_command_exits_1_on_binary_labels(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from types import SimpleNamespace
+
+    from typer.testing import CliRunner
+
+    import src.cli.commands.evaluate as evaluate
+    from src.cli.unified_cli import app
+
+    def _load(**kwargs):  # noqa: ANN202
+        return SimpleNamespace(cv_gaps=(6, 6)), {HORIZON: _container(2)}, tmp_path
+
+    monkeypatch.setattr(evaluate, "_load_evaluation_data", _load)
+    args = ["cpcv-pbo", "-d", str(tmp_path / "x.parquet"), "-m", "logistic", "-h", str(HORIZON)]
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 1
+    assert "binary labels" in result.output

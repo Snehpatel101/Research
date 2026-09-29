@@ -26,7 +26,7 @@ from .purged_kfold import PurgedKFold
 logger = logging.getLogger(__name__)
 
 
-def _get_prob_column_names(model_name: str, n_classes: int) -> list[str]:
+def get_prob_column_names(model_name: str, n_classes: int) -> list[str]:
     """Return probability column names based on n_classes.
 
     n_classes=3: prob_short, prob_neutral, prob_long (backward compatible)
@@ -44,25 +44,32 @@ def _get_prob_column_names(model_name: str, n_classes: int) -> list[str]:
 
 def build_oof_frame(
     model_name: str,
-    X: pd.DataFrame,
-    y: pd.Series,
+    index: pd.Index,
+    y_true: np.ndarray,
     probabilities: np.ndarray,
     predictions: np.ndarray,
     confidence: np.ndarray,
     fold_ids: np.ndarray,
 ) -> pd.DataFrame:
-    """The OOFPrediction frame: one row per sample of ``X``, NaN where not predicted.
+    """The OOFPrediction frame: one row per sample, NaN where not predicted.
 
-    Columns: ``datetime`` (bar times of a DatetimeIndex, else row positions),
-    ``y_true``, one ``{model}_prob_*`` column per class (see
-    ``_get_prob_column_names``), ``{model}_pred``, ``{model}_confidence``, ``fold_id``.
+    Every OOF producer (tabular, sequence, windowed, per-fold feature selection,
+    walk-forward) emits this schema. Columns: ``datetime`` (``index`` when it is
+    a DatetimeIndex, else row positions), ``y_true``, one ``{model}_prob_*``
+    column per class (``get_prob_column_names``), ``{model}_pred``,
+    ``{model}_confidence``, ``fold_id`` (fold / window of each prediction, -1
+    where none).
+
+    Args:
+        index: The samples' index (bar times when available).
+        y_true: Labels, one per sample.
     """
     n_classes = probabilities.shape[1]
     oof_data: dict[str, Any] = {
-        "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-        "y_true": y.values,
+        "datetime": index if isinstance(index, pd.DatetimeIndex) else range(len(index)),
+        "y_true": np.asarray(y_true),
     }
-    for i, col_name in enumerate(_get_prob_column_names(model_name, n_classes)):
+    for i, col_name in enumerate(get_prob_column_names(model_name, n_classes)):
         oof_data[col_name] = probabilities[:, i]
     oof_data[f"{model_name}_pred"] = predictions
     oof_data[f"{model_name}_confidence"] = confidence
@@ -163,7 +170,7 @@ class OOFPrediction:
         present (3-class), otherwise any {model}_prob_* columns in frame
         order (e.g. prob_0/prob_1 in binary mode).
         """
-        canonical = _get_prob_column_names(self.model_name, 3)
+        canonical = get_prob_column_names(self.model_name, 3)
         if all(c in self.predictions.columns for c in canonical):
             cols: list[str] = canonical
         else:
@@ -439,7 +446,7 @@ class CoreOOFGenerator:
             )
 
         oof_df = build_oof_frame(
-            model_name, X, y, oof_probs, oof_preds, oof_confidence, oof_fold_ids
+            model_name, X.index, y.values, oof_probs, oof_preds, oof_confidence, oof_fold_ids
         )
 
         return OOFPrediction(

@@ -218,7 +218,7 @@ class VariableGRNs(nn.Module):
 
     def chunk_size(self, rows: int, element_size: int) -> int:
         """Variables per chunk for ``rows`` rows: about ``CHUNK_BYTES`` per activation."""
-        per_variable = rows * self.d_model * element_size
+        per_variable = max(1, rows * self.d_model * element_size)
         return max(1, min(self.n_features, self.CHUNK_BYTES // per_variable))
 
     def _chunk(self, xt: torch.Tensor, start: int, stop: int) -> torch.Tensor:
@@ -582,6 +582,61 @@ class TFTNetwork(nn.Module):
         return weights
 
 
+_V1_GRN_PARAMS = {
+    # 1.0 per-feature GRN parameter -> (stacked 2.0 parameter, transpose weight)
+    "fc1.weight": ("fc1_weight", True),
+    "fc1.bias": ("fc1_bias", False),
+    "fc2.weight": ("fc2_weight", True),
+    "fc2.bias": ("fc2_bias", False),
+    "glu.linear.weight": ("glu_weight", True),
+    "glu.linear.bias": ("glu_bias", False),
+    "layer_norm.weight": ("norm_weight", False),
+    "layer_norm.bias": ("norm_bias", False),
+}
+
+
+def convert_tft_state_dict_v1(
+    state_dict: dict[str, torch.Tensor], n_features: int
+) -> dict[str, torch.Tensor]:
+    """
+    Architecture 1.0 -> 2.0 TFTNetwork state dict (exact re-parameterization).
+
+    1.0 embedded each feature with ``input_embedding`` (``Linear(1, d)``) and ran
+    one ``GatedResidualNetwork`` module per feature (``vsn.feature_grns.{i}``);
+    2.0 holds the same weights stacked along a variable axis in
+    ``vsn.variable_grns`` (``nn.Linear`` weights transposed to (in, out)).
+    Every other parameter, including ``vsn.weight_grn``, is unchanged.
+
+    Raises:
+        ValueError: If a per-feature GRN has parameters 2.0 cannot hold
+            (skip or context projections) or a feature's weights are missing.
+    """
+    prefix = "vsn.feature_grns."
+    stacked: dict[str, list[torch.Tensor | None]] = {
+        name: [None] * n_features for name, _ in _V1_GRN_PARAMS.values()
+    }
+    converted: dict[str, torch.Tensor] = {}
+    for key, value in state_dict.items():
+        if key.startswith("input_embedding."):
+            converted["vsn.variable_grns.embedding." + key.removeprefix("input_embedding.")] = value
+        elif key.startswith(prefix):
+            index, param = key.removeprefix(prefix).split(".", 1)
+            if param not in _V1_GRN_PARAMS:
+                raise ValueError(f"TFT 1.0 checkpoint has unsupported parameter {key}")
+            name, transpose = _V1_GRN_PARAMS[param]
+            stacked[name][int(index)] = value.t() if transpose else value
+        else:
+            converted[key] = value
+    for name, per_feature in stacked.items():
+        missing = [i for i, t in enumerate(per_feature) if t is None]
+        if missing:
+            raise ValueError(f"TFT 1.0 checkpoint lacks {name} of features {missing[:5]}")
+        converted[f"vsn.variable_grns.{name}"] = torch.stack(
+            [t.contiguous() for t in per_feature if t is not None]
+        )
+    return converted
+
+
 @register(
     name="tft",
     family="neural",
@@ -711,6 +766,21 @@ class TFTModel(BaseRNNModel):
             n_classes=self._n_classes,
             use_gradient_checkpointing=self._config.get("gradient_checkpointing", False),
         )
+
+    def _upgrade_checkpoint(
+        self, checkpoint: dict[str, Any], saved_version: str
+    ) -> dict[str, Any] | None:
+        """1.0 checkpoints (one GRN module per feature) convert exactly to 2.0."""
+        if saved_version != "1.0":
+            return None
+        state_dict = {
+            k.removeprefix("_orig_mod."): v for k, v in checkpoint["model_state_dict"].items()
+        }
+        return {
+            **checkpoint,
+            "model_state_dict": convert_tft_state_dict_v1(state_dict, checkpoint["n_features"]),
+            "arch_version": self.ARCH_VERSION,
+        }
 
     def _get_model_type(self) -> str:
         """Return model type string."""
@@ -915,5 +985,6 @@ __all__ = [
     "GatedResidualNetwork",
     "VariableGRNs",
     "VariableSelectionNetwork",
+    "convert_tft_state_dict_v1",
     "InterpretableMultiHeadAttention",
 ]
