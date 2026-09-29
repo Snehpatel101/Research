@@ -57,10 +57,17 @@ def _make_predictions(
 
 
 def _barrier_config(**overrides) -> BacktestConfig:
-    """BacktestConfig with barriers enabled and market hours filter off."""
+    """BacktestConfig with barriers enabled and market hours filter off.
+
+    The labeler's cost term is switched off (barrier_cost_in_atr=0.0) so the
+    barriers sit exactly k * ATR from entry; cost parity is covered by
+    tests/test_backtest_realism.py. With the default MARKET_ON_OPEN model the
+    bar-20 signal fills at bar 21's open and bar 21's range is watched.
+    """
     defaults = {
         "barrier_k_up": 1.5,
         "barrier_k_down": 1.5,
+        "barrier_cost_in_atr": 0.0,
         "enable_market_hours_filter": False,
         "initial_equity": 100_000.0,
         "position_sizing": "fixed_contracts",
@@ -261,7 +268,7 @@ class TestBarrierExitLongStopLoss:
         assert len(result.trades) >= 1, "Expected at least one trade"
         trade = result.trades[0]
 
-        # Entry was on bar 20 at close ~ 100.0
+        # Signal on bar 20, filled at bar 21's open ~ 99.0
         # ATR(14) on these bars ~ 2.0 (true range is high-low = 2.0 each bar)
         # stop_loss = entry_price - k_down * ATR ~ 100 - 1.5*2.0 = 97.0
         # Bar 21 low=90 << 97 → stop triggered

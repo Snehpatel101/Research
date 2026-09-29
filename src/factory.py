@@ -237,6 +237,9 @@ class MLFactory:
         # Backtest artifacts (populated by _run_evaluation)
         self._last_equity_curve: Any = None
         self._last_backtest_trades: list = []
+        # Barrier cost term (ATR units) the labeler applied per horizon, handed
+        # to the backtester so its stop/TP distances equal the label barriers
+        self._label_cost_in_atr: dict[int, float] = {}
 
         # Save config
         config_path = self.output_dir / "experiment_config.yaml"
@@ -841,7 +844,10 @@ class MLFactory:
                 symbol=symbol,
             )
             labeler = TripleBarrierLabeler(label_config)
-            labels = labeler.create_labels(df_features)
+            label_result = labeler.compute_labels(df_features, horizon=max_bars)
+            labels = pd.Series(label_result.labels, index=df_features.index, name="label")
+            cost_meta = label_result.metadata.get("cost_in_atr")
+            self._label_cost_in_atr[horizon] = float(cost_meta[0]) if cost_meta is not None else 0.0
             df_features[f"label_h{horizon}"] = labels
             self._log(
                 f"    label_h{horizon}: k_up={k_up} k_down={k_down} "
@@ -1018,6 +1024,10 @@ class MLFactory:
                 bt_kwargs["barrier_k_up"] = k_up
                 bt_kwargs["barrier_k_down"] = k_down
                 bt_kwargs["max_holding_period"] = max_bars
+                # Same cost term the labeler added (None when labeling was
+                # restored from a checkpoint: the backtester then derives it
+                # with the labeler's own helper)
+                bt_kwargs["barrier_cost_in_atr"] = self._label_cost_in_atr.get(first_horizon)
 
             backtest_config = BacktestConfig.from_symbol_config(
                 sym_config,

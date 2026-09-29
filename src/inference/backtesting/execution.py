@@ -12,13 +12,10 @@ Includes:
 from __future__ import annotations
 
 from datetime import datetime, time
-from typing import TYPE_CHECKING
 
+import numpy as np
+import pandas as pd
 import pytz
-
-if TYPE_CHECKING:
-    pass
-
 
 # Per-contract liquid session times (Eastern Time)
 # Equity micros: NYSE cash session 9:30-16:00 ET
@@ -39,6 +36,14 @@ NY_SESSION_END = time(16, 0)  # 4:00 PM ET
 
 # Eastern timezone
 ET_TZ = pytz.timezone("US/Eastern")
+
+
+def to_eastern(timestamps: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """Convert bar timestamps to US/Eastern (naive timestamps are taken as UTC)."""
+    idx = pd.DatetimeIndex(timestamps)
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return idx.tz_convert(ET_TZ)
 
 
 class MarketHoursFilter:
@@ -131,6 +136,22 @@ class MarketHoursFilter:
         current_time = et_time.time()
         return self._session_start <= current_time < self._session_end
 
+    def tradeable_mask(self, timestamps: pd.DatetimeIndex) -> np.ndarray:
+        """Vectorized ``is_tradeable_time`` over a whole bar index."""
+        n = len(timestamps)
+        if not self.enable_market_hours_filter:
+            return np.ones(n, dtype=bool)
+        et = to_eastern(timestamps)
+        minutes = et.hour * 60 + et.minute
+        start = self._session_start.hour * 60 + self._session_start.minute
+        end = self._session_end.hour * 60 + self._session_end.minute
+        in_session = np.asarray((minutes >= start) & (minutes < end))
+        weekday = np.asarray(et.weekday < 5)
+        dates = et.date
+        holiday_by_date = {d: self.calendar.is_holiday(d) for d in set(dates)}
+        not_holiday = np.fromiter((not holiday_by_date[d] for d in dates), dtype=bool, count=n)
+        return in_session & weekday & not_holiday
+
     def apply_adverse_selection(
         self,
         signal_price: float,
@@ -159,15 +180,15 @@ class MarketHoursFilter:
         vol_ratio = realized_volatility / self.base_volatility if self.base_volatility > 0 else 1.0
         adverse_ticks = self.adverse_base_ticks + self.adverse_vol_scale * vol_ratio
 
-        # Get tick value for contract
-        tick_value = self._get_tick_value()
+        # Ticks -> price units via the contract's tick size
+        tick_size = self._get_tick_size()
 
         # Apply adverse selection in direction of trade
         # Long = we pay more, Short = we receive less
         if signal_direction > 0:  # Long
-            return signal_price + adverse_ticks * tick_value
+            return signal_price + adverse_ticks * tick_size
         else:  # Short
-            return signal_price - adverse_ticks * tick_value
+            return signal_price - adverse_ticks * tick_size
 
     def calculate_max_position_size(
         self,
@@ -192,9 +213,9 @@ class MarketHoursFilter:
         max_contracts = int(avg_volume * participation)
         return max(1, max_contracts)  # At least 1 contract
 
-    def _get_tick_value(self) -> float:
-        """Get tick value for the contract."""
-        tick_values = {
+    def _get_tick_size(self) -> float:
+        """Get the tick size (minimum price increment, price units) for the contract."""
+        tick_sizes = {
             "MES": 0.25,  # Micro E-mini S&P 500
             "MGC": 0.10,  # Micro Gold
             "MNQ": 0.25,  # Micro E-mini Nasdaq-100
@@ -202,7 +223,7 @@ class MarketHoursFilter:
             "NQ": 0.25,  # E-mini Nasdaq-100
             "GC": 0.10,  # Gold
         }
-        return tick_values.get(self.contract.upper(), 0.25)
+        return tick_sizes.get(self.contract.upper(), 0.25)
 
 
 class CMECalendar:
@@ -263,4 +284,5 @@ __all__ = [
     "DEFAULT_SESSION",
     "NY_SESSION_START",
     "NY_SESSION_END",
+    "to_eastern",
 ]
