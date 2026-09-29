@@ -187,6 +187,10 @@ class PipelineConfig:
     # diagnostics can relabel with scaled barriers. Keys are strings (JSON-safe).
     label_barriers: dict[str, dict[str, float]] = field(default_factory=dict)
 
+    # Training bar timeframe (e.g. "5min"); None = input bars as-is. Context only:
+    # identifies the experiment for the governance registry.
+    bar_timeframe: str | None = None
+
     # Window length for sequence models; None = each model's contract length
     sequence_length: int | None = None
 

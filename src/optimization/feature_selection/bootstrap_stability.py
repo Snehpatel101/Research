@@ -6,28 +6,31 @@ of them. An i.i.d. bootstrap is wrong for bars: rows are autocorrelated and
 overlapping labels share outcomes, so resampling single rows leaks duplicates
 across the train/test halves of any CV inside the replicate. Replicates here are
 random CONTIGUOUS blocks (a fixed fraction of the rows, random start), so each
-one is a plausible alternative history; the base ranking (purged-CV
-out-of-sample permutation importance, computed by the caller through
-``rank_fn``) is what enforces purge/embargo inside the block.
+one is a plausible alternative history.
 
-The class only does the bookkeeping: draw blocks, rank, count how often each
-feature lands in the top-K. It never sees data, so it cannot leak anything.
+The base selector is the caller's: ``block_fn(start, stop)`` replays the ACTUAL
+selection on that block (purged-CV MDA ranking, budget, filters, decorrelation,
+per-model cut) and returns the features each model would keep. Stability is then
+"how often does the real pipeline keep this feature", not "how often is it
+top-ranked" -- decorrelation deliberately keeps lower-ranked cluster
+representatives, which a raw top-K test would misreport as unstable.
+
+The class only does the bookkeeping, so it cannot leak anything.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 
 import numpy as np
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# rank_fn(start, stop) -> importance per feature on rows [start, stop), or None
+# block_fn(start, stop) -> {model: features it keeps on rows [start, stop)}, or None
 # when the block cannot be ranked (too few rows, single class, CV failure).
-RankFn = Callable[[int, int], "pd.Series | None"]
+BlockFn = Callable[[int, int], "Mapping[str, Sequence[str]] | None"]
 
 
 @dataclass
@@ -35,10 +38,19 @@ class BootstrapStabilityResult:
     """Stability of a single feature across block subsamples."""
 
     feature_name: str
-    selection_frequency: float  # share of usable blocks with the feature in the top-K
-    mean_rank: float  # average rank (1 = most important)
-    rank_std: float  # standard deviation of the rank
-    is_stable: bool  # selection_frequency >= stability_threshold
+    selection_frequency: float  # share of usable blocks where ANY model keeps it
+    group_frequency: dict[str, float] = field(default_factory=dict)  # per model
+    is_stable: bool = False  # selection_frequency >= stability_threshold
+    group_stable: dict[str, bool] = field(default_factory=dict)  # per model
+
+
+@dataclass
+class StabilitySummary:
+    """Per-feature results plus how many blocks actually contributed."""
+
+    results: list[BootstrapStabilityResult]
+    n_blocks_drawn: int
+    n_blocks_used: int
 
 
 class BootstrapFeatureStability:
@@ -46,7 +58,6 @@ class BootstrapFeatureStability:
 
     Args:
         n_bootstrap: Number of blocks to draw.
-        top_k: A feature is "selected" in a block when it ranks within the top-K.
         stability_threshold: Minimum selection frequency to call a feature stable
             (Meinshausen & Buhlmann suggest 0.6-0.9).
         window_fraction: Block length as a share of the rows (0 < f <= 1).
@@ -58,7 +69,6 @@ class BootstrapFeatureStability:
     def __init__(
         self,
         n_bootstrap: int = 8,
-        top_k: int = 30,
         stability_threshold: float = 0.6,
         window_fraction: float = 0.5,
         min_window_rows: int = 300,
@@ -71,7 +81,6 @@ class BootstrapFeatureStability:
         if not 0.0 < stability_threshold <= 1.0:
             raise ValueError(f"stability_threshold must be in (0, 1], got {stability_threshold}")
         self.n_bootstrap = n_bootstrap
-        self.top_k = top_k
         self.stability_threshold = stability_threshold
         self.window_fraction = window_fraction
         self.min_window_rows = min_window_rows
@@ -90,67 +99,75 @@ class BootstrapFeatureStability:
         self,
         feature_names: Sequence[str],
         n_rows: int,
-        rank_fn: RankFn,
-    ) -> list[BootstrapStabilityResult]:
-        """Rank features on each block and summarise how consistently they place.
+        block_fn: BlockFn,
+    ) -> StabilitySummary:
+        """Replay the selection on each block and count how often each feature is kept.
 
         Args:
-            feature_names: Candidate features (the ranking must cover them).
+            feature_names: Candidate features.
             n_rows: Rows available (blocks are drawn inside ``[0, n_rows)``).
-            rank_fn: Importance per feature on rows ``[start, stop)`` (or None).
+            block_fn: Features each model keeps on rows ``[start, stop)`` (or None).
 
         Returns:
-            Results sorted by selection frequency (desc) then mean rank; empty
-            when no block could be ranked.
+            A summary sorted by union selection frequency (desc); no results when
+            no block could be ranked.
         """
         names = list(feature_names)
+        windows = self.draw_windows(n_rows)
         if not names:
-            return []
-        top_k = min(self.top_k, len(names))
+            return StabilitySummary([], len(windows), 0)
 
-        ranks_by_feature: dict[str, list[float]] = {f: [] for f in names}
-        n_usable = 0
-        for i, (start, stop) in enumerate(self.draw_windows(n_rows)):
-            importance = rank_fn(start, stop)
-            if importance is None or importance.empty:
+        union_hits = dict.fromkeys(names, 0)
+        group_hits: dict[str, dict[str, int]] = {}
+        n_used = 0
+        for i, (start, stop) in enumerate(windows):
+            kept = block_fn(start, stop)
+            if not kept:
                 logger.info("  Stability block %d [%d:%d) skipped (no ranking)", i + 1, start, stop)
                 continue
-            n_usable += 1
-            # Features missing from the ranking count as least important; ties share
-            # their average rank so an all-zero ranking cannot put everything in the top-K
-            ranks = (
-                importance.reindex(names).fillna(-np.inf).rank(ascending=False, method="average")
-            )
-            for f in names:
-                ranks_by_feature[f].append(float(ranks[f]))
+            n_used += 1
+            in_block: set[str] = set()
+            for group, features in kept.items():
+                hits = group_hits.setdefault(group, dict.fromkeys(names, 0))
+                for f in features:
+                    if f in hits:
+                        hits[f] += 1
+                        in_block.add(f)
+            for f in in_block:
+                union_hits[f] += 1
 
-        if n_usable == 0:
+        if n_used == 0:
             logger.warning("Feature stability: no block could be ranked; no stability scores")
-            return []
+            return StabilitySummary([], len(windows), 0)
 
+        thr = self.stability_threshold
         results = []
         for f in names:
-            ranks = np.asarray(ranks_by_feature[f], dtype=float)
-            freq = float(np.mean(ranks <= top_k))
+            freq = union_hits[f] / n_used
+            group_freq = {g: hits[f] / n_used for g, hits in group_hits.items()}
             results.append(
                 BootstrapStabilityResult(
                     feature_name=f,
                     selection_frequency=freq,
-                    mean_rank=float(ranks.mean()),
-                    rank_std=float(ranks.std()),
-                    is_stable=freq >= self.stability_threshold,
+                    group_frequency=group_freq,
+                    is_stable=freq >= thr,
+                    group_stable={g: v >= thr for g, v in group_freq.items()},
                 )
             )
-        results.sort(key=lambda r: (-r.selection_frequency, r.mean_rank))
+        results.sort(key=lambda r: -r.selection_frequency)
         logger.info(
-            "Feature stability: %d/%d features stable over %d blocks (top-%d, threshold %.2f)",
+            "Feature stability: %d/%d features kept in >= %.0f%% of %d blocks",
             sum(r.is_stable for r in results),
             len(results),
-            n_usable,
-            top_k,
-            self.stability_threshold,
+            thr * 100,
+            n_used,
         )
-        return results
+        return StabilitySummary(results, len(windows), n_used)
 
 
-__all__ = ["BootstrapFeatureStability", "BootstrapStabilityResult", "RankFn"]
+__all__ = [
+    "BlockFn",
+    "BootstrapFeatureStability",
+    "BootstrapStabilityResult",
+    "StabilitySummary",
+]

@@ -39,7 +39,11 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 # Result classes - these have no external dependencies
 # Configuration - these have no external dependencies
 # Bootstrap feature stability
-from .bootstrap_stability import BootstrapFeatureStability, BootstrapStabilityResult
+from .bootstrap_stability import (
+    BootstrapFeatureStability,
+    BootstrapStabilityResult,
+    StabilitySummary,
+)
 from .config import (
     FeatureSelectionConfig,
     FeatureSelectorConfig,
@@ -174,6 +178,7 @@ __all__ = [
     # Bootstrap stability
     "BootstrapFeatureStability",
     "BootstrapStabilityResult",
+    "StabilitySummary",
     # Label perturbation
     "LabelPerturbationTester",
     "PerturbationResult",

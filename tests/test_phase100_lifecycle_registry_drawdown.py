@@ -254,10 +254,52 @@ class TestFeatureRegistry:
         path.write_text("{not json")
         reg = FeatureRegistry(registry_path=path)
         assert len(reg) == 0
-        assert (tmp_path / "registry.json.corrupt").read_text() == "{not json"
+        (kept,) = list(tmp_path.glob("registry.json.corrupt.*"))
+        assert kept.read_text() == "{not json"
         reg.register("a")
         reg.save()
         assert len(FeatureRegistry(registry_path=path)) == 1
+        assert not list(tmp_path.glob("*.tmp")), "no temp file left behind"
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "[1, 2, 3]",  # wrong top-level shape
+            '{"version": "1.0", "features": [1]}',  # features not a mapping
+            '{"version": "1.0", "features": {"a": 5}}',  # record not a mapping
+            '{"version": "1.0", "features": {"a": {"state": "bogus"}}}',
+            '{"version": "9.9", "features": {}}',  # unknown version
+            '{"version": "1.0", "recorded_runs": "r1", "features": {}}',
+        ],
+    )
+    def test_wrong_shape_or_version_is_moved_aside(self, tmp_path: Path, content: str) -> None:
+        path = tmp_path / "registry.json"
+        path.write_text(content)
+        assert len(FeatureRegistry(registry_path=path)) == 0
+        assert not path.exists()
+        (kept,) = list(tmp_path.glob("registry.json.corrupt.*"))
+        assert kept.read_text() == content
+
+    def test_repeated_corruption_keeps_every_copy(self, tmp_path: Path) -> None:
+        path = tmp_path / "registry.json"
+        for i in range(2):
+            path.write_text(f"{{bad {i}")
+            FeatureRegistry(registry_path=path)
+        assert len(list(tmp_path.glob("registry.json.corrupt.*"))) == 2
+
+    def test_unknown_record_fields_are_dropped_with_a_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        reg = FeatureRegistry(tmp_path / "registry.json")
+        reg.register("a", mda_score=0.5)
+        data = reg.to_dict()
+        data["features"]["a"]["field_from_the_future"] = 1
+        (tmp_path / "registry.json").write_text(json.dumps(data))
+        with caplog.at_level("WARNING"):
+            loaded = FeatureRegistry(tmp_path / "registry.json")
+        assert loaded.get("a").mda_score == 0.5  # type: ignore[union-attr]
+        assert "field_from_the_future" in caplog.text
+        assert not list(tmp_path.glob("*.corrupt.*"))
 
 
 class TestRegistryRecordRun:
@@ -334,6 +376,85 @@ class TestRegistryRecordRun:
         self._run(reopened, "r2", ["a"], ["a"])
         assert reopened.get("a").state == "active"  # type: ignore[union-attr]
         assert reopened.get("a").last_run_id == "r2"  # type: ignore[union-attr]
+
+    def test_record_run_is_idempotent_even_across_a_reload(self, tmp_path: Path) -> None:
+        path = tmp_path / "reg.json"
+        with FeatureRegistry.transaction(path) as reg:
+            self._run(reg, "r1", ["a"], ["a"])
+        with FeatureRegistry.transaction(path) as reg:
+            first = self._run(reg, "r2", ["a"], ["a"])
+        assert first.skipped is None and reg.get("a").state == "active"  # type: ignore[union-attr]
+
+        # A resumed / re-run "r2" must not advance anything again (active -> degraded here)
+        with FeatureRegistry.transaction(path) as reg:
+            again = self._run(reg, "r2", ["a"], [])
+        assert again.skipped and "already recorded" in again.skipped
+        assert again.transitions == [] and again.n_new == 0
+        reopened = FeatureRegistry(path)
+        assert reopened.get("a").state == "active"  # type: ignore[union-attr]
+        assert len(reopened.get("a").transition_history) == 2  # type: ignore[union-attr]
+
+    def test_context_change_is_skipped_not_judged_as_decay(self) -> None:
+        reg = FeatureRegistry()
+        mes = {"symbol": "MES", "bar_timeframe": "5min", "models": ["xgboost"]}
+        self._run(reg, "r1", ["a"], ["a"], context=mes)
+        self._run(reg, "r2", ["a"], ["a"], context=dict(reversed(list(mes.items()))))
+        assert reg.get("a").state == "active"  # type: ignore[union-attr]
+
+        other = {**mes, "bar_timeframe": "15min"}
+        update = self._run(reg, "r3", ["a", "z"], [], context=other)
+        assert update.skipped and "context changed" in update.skipped
+        assert reg.get("a").state == "active"  # not degraded by the changed setup
+        assert reg.get("z") is None, "nothing from a different context is recorded"
+        # The same experiment can still continue afterwards
+        assert self._run(reg, "r4", ["a"], [], context=mes).skipped is None
+        assert reg.get("a").state == "degraded"  # type: ignore[union-attr]
+
+    def test_context_persists_and_pins_the_registry(self, tmp_path: Path) -> None:
+        path = tmp_path / "reg.json"
+        with FeatureRegistry.transaction(path) as reg:
+            self._run(reg, "r1", ["a"], ["a"], context={"symbol": "MES"})
+        assert json.loads(path.read_text())["context"] == {"symbol": "MES"}
+        with FeatureRegistry.transaction(path) as reg:
+            skipped = self._run(reg, "r2", ["a"], ["a"], context={"symbol": "MGC"})
+        assert skipped.skipped
+
+    def test_failed_transaction_saves_nothing(self, tmp_path: Path) -> None:
+        path = tmp_path / "reg.json"
+        with pytest.raises(RuntimeError), FeatureRegistry.transaction(path) as reg:
+            self._run(reg, "r1", ["a"], ["a"])
+            raise RuntimeError("boom")
+        assert not path.exists()
+
+
+def _registry_worker(args: tuple[str, int, int]) -> None:
+    """Process target: record ``n`` distinct runs, each inside one locked transaction."""
+    path, worker, n = args
+    for k in range(n):
+        with FeatureRegistry.transaction(path) as reg:
+            reg.record_run(
+                f"w{worker}-r{k}",
+                scores={f"f{worker}": {"mda_score": 0.1}, "shared": {"mda_score": 0.2}},
+                selected=["shared"],
+            )
+
+
+class TestRegistryConcurrency:
+    def test_concurrent_processes_lose_no_updates(self, tmp_path: Path) -> None:
+        import multiprocessing
+
+        path = str(tmp_path / "reg.json")
+        n_workers, n_runs = 4, 6
+        ctx = multiprocessing.get_context("fork")
+        with ctx.Pool(n_workers) as pool:
+            pool.map(_registry_worker, [(path, w, n_runs) for w in range(n_workers)])
+
+        data = json.loads(Path(path).read_text())  # never a torn / partial file
+        assert len(data["recorded_runs"]) == n_workers * n_runs
+        assert len(set(data["recorded_runs"])) == n_workers * n_runs
+        assert set(data["features"]) == {"shared", *(f"f{w}" for w in range(n_workers))}
+        assert not list(Path(path).parent.glob("*.tmp"))
+        assert not list(Path(path).parent.glob("*.corrupt.*"))
 
 
 # ---------------------------------------------------------------------------

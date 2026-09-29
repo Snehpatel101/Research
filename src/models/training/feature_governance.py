@@ -4,10 +4,12 @@ Runs AFTER feature selection and only reads its outcome: it can never change
 which features are selected. Given the train-split frame and the live MDA
 ranking it answers, per candidate feature:
 
-- Is it STABLE? Its rank across random contiguous blocks of the train rows
-  (stability selection with block subsamples, ``BootstrapFeatureStability``).
+- Is it STABLE? How often the REAL selection (ranking, budget, filters,
+  decorrelation, per-model cut -- replayed by ``select_fn``) keeps it across
+  random contiguous blocks of the train rows (stability selection with block
+  subsamples, ``BootstrapFeatureStability``), per model and overall.
 - Is it ROBUST to the label definition? Its rank when the triple-barrier widths
-  are scaled (``LabelPerturbationTester``).
+  are scaled, measured against a x1.0 control relabel (``LabelPerturbationTester``).
 - Where is it in its lifecycle across runs? A ``FeatureRegistry`` persisted next
   to the run directories is updated from this run's selection and verdicts.
 
@@ -34,13 +36,17 @@ import pandas as pd
 from src.core.label_spans import INVALID_LABEL, NO_LABEL_END, frame_label_ends, label_end_positions
 from src.optimization.feature_selection.bootstrap_stability import (
     BootstrapFeatureStability,
-    BootstrapStabilityResult,
+    StabilitySummary,
 )
 from src.optimization.feature_selection.label_perturbation import (
     LabelPerturbationTester,
     PerturbationSummary,
 )
-from src.optimization.feature_selection.registry import FeatureRegistry, RunUpdate
+from src.optimization.feature_selection.registry import (
+    FeatureRegistry,
+    RunUpdate,
+    context_fingerprint,
+)
 from src.optimization.feature_selection.robustness_scoring import RobustnessScorer
 
 if TYPE_CHECKING:
@@ -56,13 +62,34 @@ ImportanceFn = Callable[
 ]
 
 
+# select_fn(block_frame, candidates, importance) -> features each model would keep
+SelectFn = Callable[[pd.DataFrame, list[str], pd.Series], dict[str, list[str]]]
+
+
 def _scale_tag(scale: float) -> str:
     return f"barriers_x{scale:g}"
 
 
-def default_registry_path(config: PipelineConfig) -> Path:
-    """Registry shared by every run of a symbol: next to the run directories."""
-    return Path(config.output_dir).parent / f"feature_registry_{config.symbol.upper()}.json"
+def experiment_context(config: PipelineConfig, label_col: str) -> dict[str, Any]:
+    """The setup a registry's lifecycles are only comparable within.
+
+    A different symbol, bar timeframe, ranking horizon, MTF feature set or model
+    set changes which features exist and get selected; that is a new experiment,
+    not evidence that a feature decayed.
+    """
+    return {
+        "symbol": config.symbol.upper(),
+        "bar_timeframe": config.bar_timeframe,
+        "ranking_label": label_col,
+        "mtf_timeframes": sorted(config.mtf_timeframes) if config.compute_mtf_features else [],
+        "models": sorted(config.models),
+    }
+
+
+def default_registry_path(config: PipelineConfig, context: dict[str, Any]) -> Path:
+    """Registry of one experiment context, next to the run directories."""
+    name = f"feature_registry_{config.symbol.upper()}_{context_fingerprint(context)}.json"
+    return Path(config.output_dir).parent / name
 
 
 class FeatureGovernance:
@@ -72,14 +99,18 @@ class FeatureGovernance:
         config: The run's PipelineConfig (``governance`` holds the switches,
             ``label_barriers`` the resolved barrier params per horizon).
         importance_fn: Purged-CV out-of-sample MDA importance for a frame.
+        select_fn: Replays the live post-ranking selection on a frame.
     """
 
-    def __init__(self, config: PipelineConfig, importance_fn: ImportanceFn) -> None:
+    def __init__(
+        self, config: PipelineConfig, importance_fn: ImportanceFn, select_fn: SelectFn
+    ) -> None:
         from src.config.data import FeatureGovernanceConfig
 
         self.config = config
         self.settings = FeatureGovernanceConfig.from_dict(dict(config.governance))
         self._importance_fn = importance_fn
+        self._select_fn = select_fn
 
     @property
     def enabled(self) -> bool:
@@ -93,7 +124,6 @@ class FeatureGovernance:
         candidates: list[str],
         raw_importance: pd.Series | None,
         selected_by_model: dict[str, list[str]],
-        top_k: int,
     ) -> dict[str, Any]:
         """Build the report (and update the registry); returns the report dict.
 
@@ -104,7 +134,6 @@ class FeatureGovernance:
             raw_importance: The selection's MDA importance (None = it fell back
                 to variance ranking, so there is no importance to compare).
             selected_by_model: Features each model ended up with.
-            top_k: Size of the largest per-model selection (the stability cut).
         """
         cfg = self.settings
         labels = df_train[label_col].to_numpy()
@@ -112,17 +141,24 @@ class FeatureGovernance:
         selected = sorted({f for feats in selected_by_model.values() for f in feats})
 
         stability, stability_status = self._stability(
-            df_train, candidates, labels, label_ends, top_k
+            df_train, candidates, labels, label_ends, raw_importance
         )
         perturbation, perturbation_status = self._label_perturbation(
             df_train, label_col, candidates, raw_importance
         )
 
-        stable_by_feature = {r.feature_name: r.is_stable for r in stability}
+        stable_by_feature = {r.feature_name: r.is_stable for r in stability.results}
         robust_by_feature = (
             {r.feature_name: r.is_robust for r in perturbation.results} if perturbation else {}
         )
-        freq_by_feature = {r.feature_name: r.selection_frequency for r in stability}
+        freq_by_feature = {r.feature_name: r.selection_frequency for r in stability.results}
+        model_freq = {r.feature_name: r.group_frequency for r in stability.results}
+        model_stable = {r.feature_name: r.group_stable for r in stability.results}
+        shift_by_feature = (
+            {r.feature_name: r.max_rank_change for r in perturbation.results}
+            if perturbation
+            else {}
+        )
         scorer = RobustnessScorer(stability_weight=0.5, predictive_weight=0.5, regime_weight=0.0)
         composite = scorer.score_features(
             feature_names=candidates,
@@ -146,7 +182,9 @@ class FeatureGovernance:
                 ),
                 "selected": f in selected,
                 "selection_frequency": freq_by_feature.get(f),
+                "model_frequency": model_freq.get(f),
                 "stable": stable_by_feature.get(f),
+                "label_rank_shift": shift_by_feature.get(f),
                 "label_robust": robust_by_feature.get(f),
                 "composite_score": float(composite.get(f, 0.0)),
             }
@@ -159,23 +197,31 @@ class FeatureGovernance:
             "ranking_method": "MDA" if raw_importance is not None else "variance",
             "train_rows": len(df_train),
             "n_candidates": len(candidates),
-            "top_k": top_k,
             "settings": cfg.to_dict(),
             "selection": {"models": selected_by_model, "union": selected},
             "stability": {
                 "status": stability_status,
                 "threshold": cfg.stability_threshold,
                 "window_fraction": cfg.window_fraction,
+                "n_blocks_drawn": stability.n_blocks_drawn,
+                "n_blocks_used": stability.n_blocks_used,
             },
             "label_perturbation": {
                 "status": perturbation_status,
                 "variants": perturbation.variants_used if perturbation else [],
                 "rank_correlation": perturbation.rank_correlation if perturbation else {},
+                "control_rank_correlation": (
+                    perturbation.control_rank_correlation if perturbation else None
+                ),
             },
             "flags": {
                 "selected_unstable": sorted(
                     f for f in selected if stable_by_feature.get(f) is False
                 ),
+                "selected_unstable_by_model": {
+                    m: sorted(f for f in feats if model_stable.get(f, {}).get(m) is False)
+                    for m, feats in selected_by_model.items()
+                },
                 "selected_label_fragile": sorted(
                     f for f in selected if robust_by_feature.get(f) is False
                 ),
@@ -185,7 +231,13 @@ class FeatureGovernance:
 
         if cfg.registry and selected:
             report["registry"] = self._update_registry(
-                candidates, raw_importance, freq_by_feature, composite, selected, verdicts
+                label_col,
+                candidates,
+                raw_importance,
+                freq_by_feature,
+                composite,
+                selected,
+                verdicts,
             )
         else:
             report["registry"] = {"status": "disabled"}
@@ -201,32 +253,38 @@ class FeatureGovernance:
         candidates: list[str],
         labels: np.ndarray,
         label_ends: np.ndarray | None,
-        top_k: int,
-    ) -> tuple[list[BootstrapStabilityResult], str]:
+        raw_importance: pd.Series | None,
+    ) -> tuple[StabilitySummary, str]:
         cfg = self.settings
+        empty = StabilitySummary([], 0, 0)
         if not cfg.bootstrap_stability:
-            return [], "disabled"
+            return empty, "disabled"
+        if raw_importance is None:
+            # The live selection ranked by variance; a replay would test another procedure
+            return empty, "skipped: MDA ranking unavailable"
         tester = BootstrapFeatureStability(
             n_bootstrap=cfg.n_bootstrap,
-            top_k=top_k,
             stability_threshold=cfg.stability_threshold,
             window_fraction=cfg.window_fraction,
             random_state=self.config.random_state,
         )
 
-        def rank_block(start: int, stop: int) -> pd.Series | None:
+        def replay_block(start: int, stop: int) -> dict[str, list[str]] | None:
+            block = df_train.iloc[start:stop]
             block_ends = None
             if label_ends is not None:
                 # Same bars, block coordinates (ends past the block still purge its tail)
                 block_ends = np.where(
                     label_ends[start:stop] >= 0, label_ends[start:stop] - start, NO_LABEL_END
                 )
-            return self._importance_fn(
-                df_train.iloc[start:stop], candidates, labels[start:stop], block_ends
-            )
+            importance = self._importance_fn(block, candidates, labels[start:stop], block_ends)
+            if importance is None:
+                return None
+            # The live post-ranking path, on this block
+            return self._select_fn(block, candidates, importance)
 
-        results = tester.evaluate(candidates, len(df_train), rank_block)
-        return results, "ok" if results else "skipped: no block could be ranked"
+        summary = tester.evaluate(candidates, len(df_train), replay_block)
+        return summary, "ok" if summary.results else "skipped: no block could be ranked"
 
     def _label_perturbation(
         self,
@@ -247,17 +305,19 @@ class FeatureGovernance:
         if not {"high", "low", "close"} <= set(df_train.columns):
             return None, "skipped: OHLC columns unavailable to relabel"
 
-        variants: dict[str, pd.Series | None] = {}
-        for scale in cfg.barrier_scales:
+        def rank_at(scale: float) -> pd.Series | None:
             try:
                 labels, ends = self._relabel(df_train, barriers, scale)
-                variants[_scale_tag(scale)] = self._importance_fn(
-                    df_train, candidates, labels, ends
-                )
+                return self._importance_fn(df_train, candidates, labels, ends)
             except Exception as exc:
                 logger.warning(f"  Label perturbation x{scale:g} skipped: {exc}")
-                variants[_scale_tag(scale)] = None
-        summary = LabelPerturbationTester().evaluate(raw_importance, variants)
+                return None
+
+        # x1.0 control: relabeled exactly like the variants, so relabeling artifacts
+        # (truncated tail, recalibrated costs) are not blamed on the perturbation
+        control = rank_at(1.0)
+        variants = {_scale_tag(scale): rank_at(scale) for scale in cfg.barrier_scales}
+        summary = LabelPerturbationTester().evaluate(raw_importance, variants, control=control)
         if not summary.variants_used:
             return None, "skipped: no label variant could be ranked"
         return summary, "ok"
@@ -291,6 +351,7 @@ class FeatureGovernance:
 
     def _update_registry(
         self,
+        label_col: str,
         candidates: list[str],
         raw_importance: pd.Series | None,
         freq_by_feature: dict[str, float],
@@ -299,8 +360,12 @@ class FeatureGovernance:
         verdicts: dict[str, bool],
     ) -> dict[str, Any]:
         cfg = self.settings
-        path = Path(cfg.registry_path) if cfg.registry_path else default_registry_path(self.config)
-        registry = FeatureRegistry(path)
+        context = experiment_context(self.config, label_col)
+        path = (
+            Path(cfg.registry_path)
+            if cfg.registry_path
+            else default_registry_path(self.config, context)
+        )
         scores = {
             f: {
                 "mda_score": (
@@ -313,19 +378,24 @@ class FeatureGovernance:
             }
             for f in candidates
         }
-        update: RunUpdate = registry.record_run(
-            Path(self.config.output_dir).name,
-            scores=scores,
-            selected=selected,
-            stable=verdicts,
-            max_degraded_runs=cfg.max_degraded_runs,
-        )
-        registry.save()
-        states = Counter(record.state for record in registry.all_features())
+        # Locked load-modify-save: concurrent runs cannot lose each other's updates
+        with FeatureRegistry.transaction(path) as registry:
+            update: RunUpdate = registry.record_run(
+                Path(self.config.output_dir).name,
+                scores=scores,
+                selected=selected,
+                stable=verdicts,
+                max_degraded_runs=cfg.max_degraded_runs,
+                context=context,
+            )
+            states = Counter(record.state for record in registry.all_features())
+            n_features = len(registry)
         return {
-            "status": "ok",
+            "status": "skipped" if update.skipped else "ok",
+            "skipped_reason": update.skipped,
             "path": str(path),
-            "n_features": len(registry),
+            "context": context,
+            "n_features": n_features,
             "n_new": update.n_new,
             "states": dict(states),
             "transitions": update.transitions,
@@ -341,4 +411,9 @@ class FeatureGovernance:
         return path
 
 
-__all__ = ["GOVERNANCE_DIR", "FeatureGovernance", "default_registry_path"]
+__all__ = [
+    "GOVERNANCE_DIR",
+    "FeatureGovernance",
+    "default_registry_path",
+    "experiment_context",
+]

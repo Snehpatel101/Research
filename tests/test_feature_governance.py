@@ -29,6 +29,7 @@ from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 from src.models.training.feature_governance import (
     FeatureGovernance,
     default_registry_path,
+    experiment_context,
 )
 from src.models.training.feature_selection import FeatureSelectionMixin
 from src.optimization.feature_selection.registry import FeatureRegistry
@@ -110,7 +111,35 @@ def frame() -> pd.DataFrame:
     return _make_frame()
 
 
+@pytest.fixture(autouse=True)
+def single_threaded_selection_forest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the selection's own MDA bit-reproducible so on/off runs can be compared exactly.
+
+    The clustered MDA scores permutations with a multi-threaded RandomForest, whose
+    tree-by-tree probability sums accumulate in thread-completion order. That float noise
+    (~1e-16) is amplified by the within-cluster tie-break normalisation, so two calls on
+    IDENTICAL data can rank near-tied features differently -- with governance off as well
+    (a pre-existing property of the selection, independent of these diagnostics). One
+    thread removes it; anything that still differs between an on and an off run is then
+    caused by governance.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+
+    import src.optimization.feature_selection.walk_forward as walk_forward
+
+    def single_threaded(*args: Any, **kwargs: Any) -> RandomForestClassifier:
+        kwargs["n_jobs"] = 1
+        return RandomForestClassifier(*args, **kwargs)
+
+    monkeypatch.setattr(walk_forward, "RandomForestClassifier", single_threaded)
+
+
 GOV_ON = {"report": True, "n_bootstrap": 3}
+
+
+def _registry_files(tmp_path: Path) -> list[Path]:
+    """Default-location registries created under ``<tmp>/runs``."""
+    return sorted((tmp_path / "runs").glob("feature_registry_MES_*.json"))
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +255,14 @@ class TestGovernanceInSelectionPipeline:
         assert entry["selected"] is (("f0") in selected)
         assert entry["selection_frequency"] is not None
         assert entry["label_robust"] is not None
-        assert set(report["flags"]) == {"selected_unstable", "selected_label_fragile"}
+        assert set(report["flags"]) == {
+            "selected_unstable",
+            "selected_unstable_by_model",
+            "selected_label_fragile",
+        }
+        assert set(entry["model_frequency"]) == {"xgboost"}
+        assert report["stability"]["n_blocks_used"] == 3
+        assert report["registry"]["context"]["ranking_label"] == "label_h5"
         # The informative feature outranks pure noise in the live importance
         imps = {k: v["mda_importance"] for k, v in report["features"].items()}
         assert imps["f0"] > np.median(list(imps.values()))
@@ -235,8 +271,7 @@ class TestGovernanceInSelectionPipeline:
         self, frame: pd.DataFrame, tmp_path: Path
     ) -> None:
         first = self._select(frame, tmp_path / "runs" / "run_1", GOV_ON)
-        registry_path = tmp_path / "runs" / "feature_registry_MES.json"
-        assert registry_path.exists()
+        (registry_path,) = _registry_files(tmp_path)
         selected = set(first._per_model_features["xgboost"])
 
         registry = FeatureRegistry(registry_path)
@@ -258,7 +293,7 @@ class TestGovernanceInSelectionPipeline:
         self, frame: pd.DataFrame, tmp_path: Path
     ) -> None:
         self._select(frame, tmp_path / "runs" / "r1", {**GOV_ON, "registry": False})
-        assert not (tmp_path / "runs" / "feature_registry_MES.json").exists()
+        assert _registry_files(tmp_path) == []
         custom = tmp_path / "elsewhere" / "reg.json"
         self._select(frame, tmp_path / "runs" / "r2", {**GOV_ON, "registry_path": str(custom)})
         assert custom.exists()
@@ -312,7 +347,7 @@ class TestFeatureGovernanceInternals:
         cfg = _pipeline_config(
             tmp_path / "runs" / "run_x", {**GOV_ON, "n_bootstrap": 4, **overrides.pop("gov", {})}
         )
-        gov = FeatureGovernance(cfg, fake_importance)
+        gov = FeatureGovernance(cfg, fake_importance, _Host(cfg)._replay_selection)
         train = frame.iloc[:TRAIN_ROWS]
         names = _feature_names(frame)
         raw = pd.Series(np.linspace(1, 0, len(names)), index=names)
@@ -322,7 +357,6 @@ class TestFeatureGovernanceInternals:
             candidates=names,
             raw_importance=overrides.pop("raw_importance", raw),
             selected_by_model={"xgboost": names[:10]},
-            top_k=10,
         )
         return report, calls
 
@@ -349,14 +383,16 @@ class TestFeatureGovernanceInternals:
         self, frame: pd.DataFrame, tmp_path: Path
     ) -> None:
         report, calls = self._run(frame, tmp_path)
-        variants = [c for c in calls if len(c["rows"]) == TRAIN_ROWS]
-        assert len(variants) == 2
-        base = frame["label_h5"].to_numpy()[:TRAIN_ROWS]
-        for v in variants:
+        relabeled = [c for c in calls if len(c["rows"]) == TRAIN_ROWS]
+        assert len(relabeled) == 3  # x1.0 control + the two scaled variants
+        control, *variants = relabeled
+        for v in relabeled:
             assert len(v["labels"]) == TRAIN_ROWS
-            assert not np.array_equal(v["labels"], base)
             assert np.all(v["ends"][v["ends"] >= 0] >= np.flatnonzero(v["ends"] >= 0))
+        for v in variants:
+            assert not np.array_equal(v["labels"], control["labels"])
         assert report["label_perturbation"]["status"] == "ok"
+        assert report["label_perturbation"]["control_rank_correlation"] is not None
 
     def test_perturbation_skipped_without_mda_baseline_or_barriers(
         self, frame: pd.DataFrame, tmp_path: Path
@@ -368,13 +404,14 @@ class TestFeatureGovernanceInternals:
         cfg = _pipeline_config(tmp_path / "runs" / "run_y", GOV_ON)
         cfg.label_barriers = {}
         names = _feature_names(frame)
-        out = FeatureGovernance(cfg, lambda *a: pd.Series(1.0, index=names)).run(
+        out = FeatureGovernance(
+            cfg, lambda *a: pd.Series(1.0, index=names), _Host(cfg)._replay_selection
+        ).run(
             frame.iloc[:TRAIN_ROWS],
             label_col="label_h5",
             candidates=names,
             raw_importance=pd.Series(1.0, index=names),
             selected_by_model={"xgboost": names},
-            top_k=10,
         )
         assert out["label_perturbation"]["status"].startswith("skipped")
 
@@ -383,20 +420,176 @@ class TestFeatureGovernanceInternals:
         before = train.copy()
         cfg = _pipeline_config(tmp_path / "runs" / "run_z", GOV_ON)
         names = _feature_names(frame)
-        FeatureGovernance(cfg, lambda *a: pd.Series(np.arange(len(names)), index=names)).run(
+        FeatureGovernance(
+            cfg,
+            lambda *a: pd.Series(np.arange(len(names)), index=names),
+            _Host(cfg)._replay_selection,
+        ).run(
             train,
             label_col="label_h5",
             candidates=names,
             raw_importance=pd.Series(np.arange(len(names), dtype=float), index=names),
             selected_by_model={"xgboost": names},
-            top_k=10,
         )
         pd.testing.assert_frame_equal(train, before)
 
-    def test_default_registry_path_is_shared_by_runs_of_a_symbol(self, tmp_path: Path) -> None:
-        a = default_registry_path(_pipeline_config(tmp_path / "runs" / "run_a"))
-        b = default_registry_path(_pipeline_config(tmp_path / "runs" / "run_b"))
-        assert a == b == tmp_path / "runs" / "feature_registry_MES.json"
+    def test_default_registry_path_is_per_context_and_shared_by_its_runs(
+        self, tmp_path: Path
+    ) -> None:
+        def path_for(run: str, **kw: Any) -> Path:
+            cfg = _pipeline_config(tmp_path / "runs" / run, **kw)
+            return default_registry_path(cfg, experiment_context(cfg, "label_h5"))
+
+        a, b = path_for("run_a"), path_for("run_b")
+        assert (
+            a == b and a.parent == tmp_path / "runs" and a.name.startswith("feature_registry_MES_")
+        )
+        assert path_for("run_c", bar_timeframe="15min") != a
+        assert path_for("run_d", mtf_timeframes=["5min"]) != a
+        cfg = _pipeline_config(tmp_path / "runs" / "run_e")
+        assert default_registry_path(cfg, experiment_context(cfg, "label_h20")) != a
+
+    def test_experiment_context_fields(self, tmp_path: Path) -> None:
+        cfg = _pipeline_config(
+            tmp_path / "runs" / "r", bar_timeframe="5min", mtf_timeframes=["15min", "5min"]
+        )
+        assert experiment_context(cfg, "label_h5") == {
+            "symbol": "MES",
+            "bar_timeframe": "5min",
+            "ranking_label": "label_h5",
+            "mtf_timeframes": ["15min", "5min"],
+            "models": ["xgboost"],
+        }
+
+    def test_stability_replays_the_real_selection_not_the_raw_top_k(
+        self, frame: pd.DataFrame, tmp_path: Path
+    ) -> None:
+        """Decorrelation keeps lower-ranked representatives; they must not look unstable."""
+        train = frame.iloc[:TRAIN_ROWS].copy()
+        rng = np.random.default_rng(3)
+        train["f_dup"] = train["f2"] + rng.normal(0, 0.01, len(train))  # ~duplicate of f2
+        names = _feature_names(train)
+        order = ["f2", "f_dup"] + [n for n in names if n not in ("f2", "f_dup")]
+        importance = pd.Series(np.arange(len(order), 0, -1, dtype=float), index=order)
+
+        cfg = _pipeline_config(tmp_path / "runs" / "run_dup", {**GOV_ON, "n_bootstrap": 4})
+        host = _Host(cfg)
+        live = host._select_from_ranking(train, list(order), importance, "MDA")[2]["xgboost"]
+        assert "f_dup" not in live and "f2" in live, "decorrelation keeps the higher-ranked twin"
+        lowest = order[-1]
+        assert lowest in live
+        assert len(live) < order.index(lowest) + 1, "raw top-K over the selection size drops it"
+
+        report = FeatureGovernance(
+            cfg, lambda df, feats, y, ends: importance.copy(), host._replay_selection
+        ).run(
+            train,
+            label_col="label_h5",
+            candidates=list(order),
+            raw_importance=importance,
+            selected_by_model={"xgboost": live},
+        )
+        entry = report["features"][lowest]
+        assert entry["selected"] and entry["stable"] is True
+        assert entry["selection_frequency"] == 1.0
+        assert entry["model_frequency"] == {"xgboost": 1.0}
+        assert lowest not in report["flags"]["selected_unstable"]
+        assert report["flags"]["selected_unstable_by_model"] == {"xgboost": []}
+        # The dropped twin is never kept, and is not flagged (it was never selected)
+        assert report["features"]["f_dup"]["selection_frequency"] == 0.0
+        assert "f_dup" not in report["flags"]["selected_unstable"]
+
+    def test_governance_receives_only_the_train_prefix(
+        self, frame: pd.DataFrame, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: dict[str, Any] = {}
+
+        def spy(self: FeatureGovernance, df_train: pd.DataFrame, **kw: Any) -> dict[str, Any]:
+            seen["rows"] = len(df_train)
+            seen["last_index"] = int(df_train.index[-1])
+            return {}
+
+        monkeypatch.setattr(FeatureGovernance, "run", spy)
+        cfg = _pipeline_config(tmp_path / "runs" / "run_spy", GOV_ON, train_ratio=0.7)
+        host = _Host(cfg)
+        host._run_feature_selection_on_train_data(frame)
+        assert len(frame) == N_ROWS
+        assert seen["rows"] == int(N_ROWS * 0.7) == TRAIN_ROWS
+        assert seen["last_index"] == TRAIN_ROWS - 1
+
+    def test_global_rng_state_is_untouched(self, frame: pd.DataFrame, tmp_path: Path) -> None:
+        import random
+
+        def rng_state(governance: dict[str, Any] | None, run: str) -> tuple[Any, Any]:
+            random.seed(11)
+            np.random.seed(11)  # noqa: NPY002 (legacy global RNG is what is being guarded)
+            self_ = _Host(_pipeline_config(tmp_path / "runs" / run, governance))
+            self_._run_feature_selection_pipeline(frame.iloc[:TRAIN_ROWS], _feature_names(frame))
+            return random.getstate(), np.random.get_state()  # noqa: NPY002
+
+        py_off, np_off = rng_state(None, "off")
+        py_on, np_on = rng_state(GOV_ON, "on")
+        assert py_off == py_on
+        assert np_off[2:] == np_on[2:] and np.array_equal(np_off[1], np_on[1])
+
+    def test_rerun_of_the_same_run_id_is_a_registry_noop(
+        self, frame: pd.DataFrame, tmp_path: Path
+    ) -> None:
+        train = frame.iloc[:TRAIN_ROWS]
+        names = _feature_names(frame)
+        reg = tmp_path / "reg.json"
+
+        def run() -> dict[str, Any]:
+            cfg = _pipeline_config(
+                tmp_path / "runs" / "run_same", {**GOV_ON, "registry_path": str(reg)}
+            )
+            host = _Host(cfg)
+            return FeatureGovernance(
+                cfg,
+                lambda df, f, y, e: pd.Series(np.arange(len(f), 0, -1.0), index=f),
+                host._replay_selection,
+            ).run(
+                train,
+                label_col="label_h5",
+                candidates=names,
+                raw_importance=pd.Series(np.arange(len(names), 0, -1.0), index=names),
+                selected_by_model={"xgboost": names[:40]},
+            )
+
+        first, second = run()["registry"], run()["registry"]
+        assert first["status"] == "ok" and first["n_new"] == N_FEATURES
+        assert second["status"] == "skipped" and "already recorded" in second["skipped_reason"]
+        assert {r.state for r in FeatureRegistry(reg).all_features()} <= {"selected", "candidate"}
+
+    def test_registry_from_a_different_context_is_not_advanced(
+        self, frame: pd.DataFrame, tmp_path: Path
+    ) -> None:
+        reg = tmp_path / "shared.json"
+        gov = {**GOV_ON, "registry_path": str(reg)}
+        self_first = _Host(_pipeline_config(tmp_path / "runs" / "r1", gov))
+        self_first._run_feature_selection_pipeline(frame.iloc[:TRAIN_ROWS], _feature_names(frame))
+        before = json.loads(reg.read_text())
+
+        other = _Host(_pipeline_config(tmp_path / "runs" / "r2", gov, bar_timeframe="15min"))
+        other._run_feature_selection_pipeline(frame.iloc[:TRAIN_ROWS], _feature_names(frame))
+        report = json.loads((tmp_path / "runs/r2/feature_governance/h5.json").read_text())
+        assert report["registry"]["status"] == "skipped"
+        assert "context changed" in report["registry"]["skipped_reason"]
+        assert json.loads(reg.read_text()) == before
+
+    def test_checkpoint_hash_ignores_governance_settings_only(self) -> None:
+        from src.core.checkpoint import compute_config_hash
+
+        cfg = ExperimentConfig(run_id="fixed")
+        base = compute_config_hash(cfg)
+        cfg.data.features.governance.report = True
+        cfg.data.features.governance.n_bootstrap = 20
+        assert compute_config_hash(cfg) == base, "diagnostics must not invalidate checkpoints"
+        cfg.data.features.selection_enabled = False
+        assert compute_config_hash(cfg) != base
+        cfg.data.features.selection_enabled = True
+        cfg.training.n_splits += 1
+        assert compute_config_hash(cfg) != base
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +597,10 @@ class TestFeatureGovernanceInternals:
 # ---------------------------------------------------------------------------
 @pytest.mark.slow
 class TestGovernanceFactoryE2E:
-    def _run(self, data_path: Path, base: Path, governance: bool):
+    def _run(self, data_path: Path, base: Path, governance: bool) -> dict[str, Any]:
+        """Run once and snapshot what parity is judged on (result objects can be shared/mutated)."""
+        import copy
+
         from src.factory import MLFactory
         from tests.test_factory_e2e import _make_config
 
@@ -415,7 +611,13 @@ class TestGovernanceFactoryE2E:
         gov.n_bootstrap = 3
         result = MLFactory(cfg, verbose=0, enable_checkpoints=False).run()
         assert result.success
-        return cfg, result
+        model = next(iter(result.training_result.model_results.values()))
+        return {
+            "cfg": cfg,
+            "features": list(model.trainer.feature_columns),
+            "metrics": copy.deepcopy(result.metrics),
+            "oof_classes": np.array(model.oof_prediction.get_class_predictions()),
+        }
 
     def test_report_present_only_when_enabled_and_features_identical(self, tmp_path: Path) -> None:
         from tests.test_factory_e2e import _make_synthetic_ohlcv
@@ -423,19 +625,28 @@ class TestGovernanceFactoryE2E:
         data_path = tmp_path / "bars.parquet"
         _make_synthetic_ohlcv().to_parquet(data_path)
 
-        cfg_off, res_off = self._run(data_path, tmp_path / "off", governance=False)
-        cfg_on, res_on = self._run(data_path, tmp_path / "on", governance=True)
+        off = self._run(data_path, tmp_path / "off", governance=False)
+        on = self._run(data_path, tmp_path / "on", governance=True)
 
-        assert not (Path(cfg_off.output_dir) / "feature_governance").exists()
-        report_path = Path(cfg_on.output_dir) / "feature_governance" / "h5.json"
+        assert not (Path(off["cfg"].output_dir) / "feature_governance").exists()
+        report_path = Path(on["cfg"].output_dir) / "feature_governance" / "h5.json"
         assert report_path.exists()
         report = json.loads(report_path.read_text())
         assert report["selection"]["models"]["xgboost"]
-        assert (Path(cfg_on.output_dir).parent / "feature_registry_MES.json").exists()
+        assert list(Path(on["cfg"].output_dir).parent.glob("feature_registry_MES_*.json"))
 
-        def features_of(result: Any) -> list[str]:
-            trainer = next(iter(result.training_result.model_results.values())).trainer
-            return list(trainer.feature_columns)
+        assert on["features"] == off["features"]
+        assert sorted(on["features"]) == sorted(report["selection"]["models"]["xgboost"])
 
-        assert features_of(res_on) == features_of(res_off)
-        assert sorted(features_of(res_on)) == sorted(report["selection"]["models"]["xgboost"])
+        # Prediction parity, not just the feature lists: the report changes nothing downstream
+        assert set(on["metrics"]) == set(off["metrics"])
+        for model_key, metrics_off in off["metrics"].items():
+            metrics_on = on["metrics"][model_key]
+            assert set(metrics_on) == set(metrics_off), f"metric keys differ for {model_key}"
+            for name, value_off in metrics_off.items():
+                value_on = metrics_on[name]
+                if isinstance(value_off, float) and np.isnan(value_off):
+                    assert np.isnan(value_on), f"{model_key}.{name}: {value_on} != {value_off}"
+                else:
+                    assert value_on == value_off, f"{model_key}.{name}: {value_on} != {value_off}"
+        np.testing.assert_array_equal(on["oof_classes"], off["oof_classes"])

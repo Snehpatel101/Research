@@ -3,9 +3,12 @@
 A feature whose importance rank collapses when the triple-barrier widths change
 by a modest amount is describing one particular labeling artifact rather than a
 durable relationship. This module compares importance rankings computed under
-the baseline labels and under perturbed label variants (built by the caller
-with the same labeler and purged CV as the baseline) and flags features whose
-rank moves more than a tolerance.
+perturbed label variants (built by the caller with the same labeler and purged
+CV as a x1.0 CONTROL relabel) and flags features whose rank moves more than a
+tolerance. The control is relabeled exactly like the variants, so rank movement
+that the relabeling procedure itself causes (a truncated tail, a re-calibrated
+cost) is measured against the live ranking and never blamed on the perturbation:
+a feature is fragile only when its shift exceeds the control's own shift too.
 
 Only bookkeeping happens here: the importances come in, per-feature rank shifts
 and a rank-correlation summary come out.
@@ -27,9 +30,10 @@ class PerturbationResult:
     """Rank movement of one feature across label variants."""
 
     feature_name: str
-    baseline_rank: int
+    baseline_rank: int  # rank under the reference labels (the control when given)
     perturbed_ranks: list[int]
-    max_rank_change: int
+    max_rank_change: int  # largest |variant rank - reference rank|
+    control_shift: int  # |control rank - live baseline rank| (0 without a control)
     mean_rank: float
     is_robust: bool
 
@@ -39,8 +43,9 @@ class PerturbationSummary:
     """Per-feature results plus how similar each variant's ranking is overall."""
 
     results: list[PerturbationResult]
-    rank_correlation: dict[str, float]  # variant name -> Spearman vs the baseline
+    rank_correlation: dict[str, float]  # variant name -> Spearman vs the reference
     variants_used: list[str]
+    control_rank_correlation: float | None = None  # control vs the live baseline
 
 
 class LabelPerturbationTester:
@@ -64,13 +69,17 @@ class LabelPerturbationTester:
         self,
         baseline: pd.Series,
         variants: dict[str, pd.Series | None],
+        control: pd.Series | None = None,
     ) -> PerturbationSummary:
         """Rank shifts of every baseline feature under each usable variant.
 
         Args:
-            baseline: Importance per feature under the baseline labels.
+            baseline: Importance per feature under the live labels.
             variants: Importance per feature under each perturbed label variant
                 (None = the variant could not be ranked; it is skipped).
+            control: Importance under a x1.0 relabel computed like the variants.
+                When given, shifts are measured against it and a feature is
+                flagged only if its shift also exceeds ``|control - baseline|``.
         """
         names = list(baseline.index)
         threshold = max(self.min_rank_change, int(round(self.rank_change_fraction * len(names))))
@@ -79,27 +88,31 @@ class LabelPerturbationTester:
             return imp.reindex(names).fillna(-np.inf).rank(ascending=False, method="average")
 
         base_ranks = _ranks(baseline)
+        control_ranks = _ranks(control) if control is not None and len(control) else None
+        reference = control_ranks if control_ranks is not None else base_ranks
         used: dict[str, pd.Series] = {
             name: _ranks(imp) for name, imp in variants.items() if imp is not None and len(imp)
         }
 
-        correlation = {
-            name: float(base_ranks.corr(r, method="spearman")) if len(names) > 1 else 1.0
-            for name, r in used.items()
-        }
+        def _spearman(a: pd.Series, b: pd.Series) -> float:
+            return float(a.corr(b, method="spearman")) if len(names) > 1 else 1.0
+
+        correlation = {name: _spearman(reference, r) for name, r in used.items()}
         results = []
         for f in names:
-            b = float(base_ranks[f])
+            ref = float(reference[f])
             perturbed = [float(r[f]) for r in used.values()]
-            max_change = max((abs(p - b) for p in perturbed), default=0.0)
+            max_change = max((abs(p - ref) for p in perturbed), default=0.0)
+            own = abs(ref - float(base_ranks[f])) if control_ranks is not None else 0.0
             results.append(
                 PerturbationResult(
                     feature_name=f,
-                    baseline_rank=int(round(b)),
+                    baseline_rank=int(round(ref)),
                     perturbed_ranks=[int(round(p)) for p in perturbed],
                     max_rank_change=int(round(max_change)),
-                    mean_rank=round(float(np.mean([b, *perturbed])), 2),
-                    is_robust=bool(used) and max_change <= threshold,
+                    control_shift=int(round(own)),
+                    mean_rank=round(float(np.mean([ref, *perturbed])), 2),
+                    is_robust=bool(used) and max_change <= max(threshold, own),
                 )
             )
         results.sort(key=lambda r: r.max_rank_change)
@@ -111,7 +124,12 @@ class LabelPerturbationTester:
             threshold,
         )
         return PerturbationSummary(
-            results=results, rank_correlation=correlation, variants_used=list(used)
+            results=results,
+            rank_correlation=correlation,
+            variants_used=list(used),
+            control_rank_correlation=(
+                _spearman(base_ranks, control_ranks) if control_ranks is not None else None
+            ),
         )
 
 

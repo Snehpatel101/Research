@@ -85,15 +85,20 @@ real deployments; B if standard mode is what you actually ship.
 > out-of-sample MDA.
 > - `bootstrap_stability` — **wired, rewritten**: the i.i.d. row bootstrap was
 >   wrong for autocorrelated bars; now stability selection over random contiguous
->   blocks (selection frequency in the top-K).
+>   blocks that replays the REAL selection (ranking, budget, filters,
+>   decorrelation, per-model cut; the same `_select_from_ranking` the live path
+>   uses) and reports how often each model keeps each feature.
 > - `label_perturbation` — **wired, rewritten**: relabels the train rows with
 >   the triple-barrier widths scaled (default x0.75 / x1.25) and flags features
->   whose MDA rank moves; no duplicate RandomForest, it reuses the live ranking.
+>   whose MDA rank moves more than a x1.0 control relabel moves them; no
+>   duplicate RandomForest, it reuses the live ranking.
 > - `lifecycle` + `registry` — **wired, merged**: one transition table
 >   (the `FeatureLifecycle` class duplicated the registry's history and is gone);
 >   `record_run` advances CANDIDATE -> SELECTED -> ACTIVE <-> DEGRADED ->
->   RETIRED across runs from selection + stability verdicts. Retirement is
->   recorded and reported, never applied.
+>   RETIRED across runs from selection + stability verdicts. Idempotent per run
+>   id, per experiment context (symbol, bar timeframe, ranking horizon, MTF set,
+>   models), atomic and file-locked. Retirement is recorded and reported, never
+>   applied.
 > - `param_sensitivity` — **deleted**: needs the whole feature set recomputed
 >   under parameter variants, which `FeatureEngineer` cannot do generically;
 >   overlaps label perturbation.
@@ -103,7 +108,8 @@ real deployments; B if standard mode is what you actually ship.
 > - `ticker_portability` — **deleted**: needs two symbols in one process and
 >   used a shuffled split; compare two symbols' governance reports instead.
 >
-> Cost when enabled: about `n_bootstrap + 2` extra MDA rankings (default 8 + 2).
+> Cost when enabled: about `n_bootstrap + 3` extra MDA rankings (default 8 + 3).
+> Governance settings are excluded from the checkpoint config hash.
 
 **What:** `bootstrap_stability.py`, `label_perturbation.py`,
 `param_sensitivity.py`, `lifecycle.py`, `registry.py`, `economic_value.py`

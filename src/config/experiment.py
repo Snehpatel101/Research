@@ -588,6 +588,7 @@ class ExperimentConfig:
             n_classes=_n_classes,
             # Opt-in feature-governance diagnostics (never changes the selection)
             atr_period=self.data.labeling.atr_period,
+            bar_timeframe=bar_timeframe or self.data.bar_timeframe,
             governance=governance.to_dict(),
             label_barriers=label_barriers,
         )

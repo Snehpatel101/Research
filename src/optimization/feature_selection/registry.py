@@ -9,19 +9,35 @@ selection + stability verdicts through the lifecycle policy
 ``lifecycle.VALID_TRANSITIONS``.
 
 Persistence is optional: pass a registry_path for JSON file storage,
-or None for in-memory only operation. The file is last-writer-wins: two runs
-sharing one registry concurrently keep only the later save.
+or None for in-memory only operation.
+
+Cross-run safety:
+- ``record_run`` is idempotent per run id (a resumed / re-run run is a no-op).
+- It only advances lifecycles across runs with the same ``context`` fingerprint
+  (symbol, bar timeframe, ranking label, MTF set, models): a changed setup is a
+  different experiment, not feature decay.
+- ``FeatureRegistry.transaction(path)`` serialises load-modify-save between
+  concurrent runs with an advisory file lock, and saves atomically.
 """
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import json
 import logging
 import os
-from collections.abc import Collection, Mapping
-from dataclasses import asdict, dataclass, field
+import tempfile
+from collections.abc import Collection, Iterator, Mapping
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+
+try:  # POSIX advisory locks; without fcntl (Windows) runs are unserialised
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None  # type: ignore[assignment]
 
 from .lifecycle import (
     DEFAULT_MAX_DEGRADED_RUNS,
@@ -34,6 +50,29 @@ logger = logging.getLogger(__name__)
 
 VALID_STATES = frozenset(state.value for state in FeatureLifecycleState)
 _SCORE_FIELDS = frozenset({"composite_score", "mda_score", "stability_score", "regime_score"})
+REGISTRY_VERSION = "1.0"
+
+
+def context_fingerprint(context: Mapping[str, Any]) -> str:
+    """Short stable hash of an experiment context (order-independent)."""
+    payload = json.dumps(context, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+@contextlib.contextmanager
+def _file_lock(lock_path: Path) -> Iterator[None]:
+    """Exclusive advisory lock on ``lock_path`` (no-op where fcntl is unavailable)."""
+    if fcntl is None:  # pragma: no cover
+        logger.debug("fcntl unavailable: registry updates are not serialised")
+        yield
+        return
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def _now_iso() -> str:
@@ -74,6 +113,7 @@ class RunUpdate:
     transitions: list[dict] = field(default_factory=list)
     n_new: int = 0
     retired_but_selected: list[str] = field(default_factory=list)
+    skipped: str | None = None  # why nothing was recorded (duplicate run, context change)
 
 
 class FeatureRegistry:
@@ -86,7 +126,24 @@ class FeatureRegistry:
     def __init__(self, registry_path: Path | str | None = None) -> None:
         self._path: Path | None = Path(registry_path) if registry_path is not None else None
         self._features: dict[str, FeatureRecord] = {}
+        self._recorded_runs: list[str] = []
+        self._context: dict[str, Any] | None = None
+        self._context_fingerprint: str | None = None
         self.load()
+
+    @classmethod
+    @contextlib.contextmanager
+    def transaction(cls, registry_path: Path | str) -> Iterator[FeatureRegistry]:
+        """Load, let the caller modify, then save -- under an exclusive file lock.
+
+        Two runs updating the same registry file cannot lose each other's
+        changes. Nothing is saved if the body raises.
+        """
+        path = Path(registry_path)
+        with _file_lock(path.with_name(path.name + ".lock")):
+            registry = cls(path)
+            yield registry
+            registry.save()
 
     def register(self, feature_name: str, **scores: float) -> FeatureRecord:
         """Add or update a feature in the registry.
@@ -171,6 +228,7 @@ class FeatureRegistry:
         selected: Collection[str],
         stable: Mapping[str, bool] | None = None,
         max_degraded_runs: int = DEFAULT_MAX_DEGRADED_RUNS,
+        context: Mapping[str, Any] | None = None,
     ) -> RunUpdate:
         """Fold one run into the registry: refresh scores, then advance lifecycles.
 
@@ -184,8 +242,30 @@ class FeatureRegistry:
             selected: Features the run's selection kept.
             stable: Stability verdict per feature (missing = not measured).
             max_degraded_runs: Consecutive failing DEGRADED runs before retirement.
+            context: Experiment setup (symbol, bar timeframe, ranking label, MTF
+                set, models). The first recorded context pins the registry;
+                a run with a different one is skipped, not judged as decay.
+
+        Returns:
+            What changed; ``skipped`` is set (and nothing changes) when ``run_id``
+            was already recorded or the context differs from the registry's.
         """
         update = RunUpdate()
+        if run_id in self._recorded_runs:
+            update.skipped = f"run '{run_id}' already recorded"
+            return update
+        fingerprint = context_fingerprint(context) if context is not None else None
+        if fingerprint is not None:
+            if self._context_fingerprint not in (None, fingerprint):
+                update.skipped = (
+                    f"context changed (registry {self._context_fingerprint}, run {fingerprint}); "
+                    "use a separate registry for a different setup"
+                )
+                logger.warning(f"Feature registry: {update.skipped}")
+                return update
+            self._context_fingerprint = fingerprint
+            self._context = dict(context or {})
+        self._recorded_runs.append(run_id)
         selected_set = set(selected)
         stable = stable or {}
         for name, feature_scores in scores.items():
@@ -247,37 +327,62 @@ class FeatureRegistry:
     # -- Persistence ----------------------------------------------------------
 
     def save(self) -> None:
-        """Write registry to JSON file. No-op if no path configured."""
+        """Write registry to JSON file atomically. No-op if no path configured."""
         if self._path is None:
             return
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        data = self.to_dict()
-        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2) + "\n")
-        os.replace(tmp, self._path)
+        payload = json.dumps(self.to_dict(), indent=2) + "\n"
+        # Unique temp file in the same directory, then an atomic replace
+        with tempfile.NamedTemporaryFile(
+            "w", dir=self._path.parent, prefix=self._path.name + ".", suffix=".tmp", delete=False
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+            try:
+                tmp.write(payload)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            except BaseException:
+                tmp_path.unlink(missing_ok=True)
+                raise
+        try:
+            os.replace(tmp_path, self._path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
         logger.info(f"Registry saved: {len(self._features)} features -> {self._path}")
 
     def load(self) -> None:
-        """Read registry from JSON file. No-op if no path or file missing."""
+        """Read registry from JSON file. No-op if no path or file missing.
+
+        An unreadable file (bad JSON, wrong shape, unknown version) is kept as a
+        timestamped ``.corrupt.<ts>`` copy and the registry starts empty.
+        """
         if self._path is None or not self._path.exists():
             return
 
         try:
             data = json.loads(self._path.read_text())
             loaded = FeatureRegistry.from_dict(data, registry_path=self._path)
-            self._features = loaded._features
-            logger.info(f"Registry loaded: {len(self._features)} features from {self._path}")
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-            # Keep the unreadable file for inspection instead of overwriting it on save
-            broken = self._path.with_suffix(self._path.suffix + ".corrupt")
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as exc:
+            stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
+            broken = self._path.with_name(f"{self._path.name}.corrupt.{stamp}")
             os.replace(self._path, broken)
-            logger.warning(f"Unreadable registry {self._path} ({exc}); moved to {broken}")
+            logger.warning(f"Unreadable registry {self._path} ({exc!r}); moved to {broken}")
+            return
+        self._features = loaded._features
+        self._recorded_runs = loaded._recorded_runs
+        self._context = loaded._context
+        self._context_fingerprint = loaded._context_fingerprint
+        logger.info(f"Registry loaded: {len(self._features)} features from {self._path}")
 
     def to_dict(self) -> dict:
         """Serialize registry to a dict suitable for JSON."""
         return {
-            "version": "1.0",
+            "version": REGISTRY_VERSION,
+            "context_fingerprint": self._context_fingerprint,
+            "context": self._context,
+            "recorded_runs": list(self._recorded_runs),
             "features": {name: asdict(record) for name, record in self._features.items()},
         }
 
@@ -286,20 +391,47 @@ class FeatureRegistry:
         """Deserialize a registry from a dict.
 
         Args:
-            data: Dict with 'version' and 'features' keys.
+            data: Dict as produced by ``to_dict``.
             registry_path: Optional path for future saves.
 
+        Raises:
+            ValueError: Unsupported version.
+            TypeError / AttributeError / KeyError: Wrong-shaped content.
+
         Returns:
-            A new FeatureRegistry populated with the data.
+            A new FeatureRegistry populated with the data. Record fields this
+            version does not know are dropped with a warning.
         """
+        version = data.get("version")
+        if version != REGISTRY_VERSION:
+            raise ValueError(f"unsupported registry version {version!r}, want {REGISTRY_VERSION}")
         registry = cls.__new__(cls)
         registry._path = Path(registry_path) if registry_path is not None else None
         registry._features = {}
+        recorded = data.get("recorded_runs", [])
+        if not isinstance(recorded, list):
+            raise TypeError("recorded_runs must be a list")
+        registry._recorded_runs = [str(r) for r in recorded]
+        context = data.get("context")
+        if context is not None and not isinstance(context, dict):
+            raise TypeError("context must be a mapping")
+        registry._context = context
+        registry._context_fingerprint = data.get("context_fingerprint")
 
         features_data = data.get("features", {})
+        if not isinstance(features_data, dict):
+            raise TypeError("features must be a mapping")
+        known = {f.name for f in fields(FeatureRecord)} - {"feature_name"}
         for name, record_dict in features_data.items():
-            record_dict.pop("feature_name", None)
-            registry._features[name] = FeatureRecord(feature_name=name, **record_dict)
+            if not isinstance(record_dict, dict):
+                raise TypeError(f"record for '{name}' must be a mapping")
+            unknown = set(record_dict) - known - {"feature_name"}
+            if unknown:
+                logger.warning(
+                    f"Registry record '{name}': dropping unknown fields {sorted(unknown)}"
+                )
+            kwargs = {k: v for k, v in record_dict.items() if k in known}
+            registry._features[name] = FeatureRecord(feature_name=name, **kwargs)
 
         return registry
 
@@ -310,4 +442,11 @@ class FeatureRegistry:
         return f"FeatureRegistry({len(self._features)} features, path={self._path})"
 
 
-__all__ = ["FeatureRecord", "FeatureRegistry", "RunUpdate", "VALID_STATES"]
+__all__ = [
+    "REGISTRY_VERSION",
+    "VALID_STATES",
+    "FeatureRecord",
+    "FeatureRegistry",
+    "RunUpdate",
+    "context_fingerprint",
+]

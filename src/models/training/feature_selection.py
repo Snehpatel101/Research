@@ -351,8 +351,6 @@ class FeatureSelectionMixin:
         feature_names: list[str],
     ) -> None:
         """Run MDA-first feature selection: MDA ranking -> correlation dedup -> low-variance."""
-        from src.core.contracts import get_model_contract
-
         self._all_feature_names = list(feature_names)
         candidate_features = list(feature_names)
         original_count = len(feature_names)
@@ -373,6 +371,68 @@ class FeatureSelectionMixin:
 
         logger.info(f"  Feature ranking method: {ranking_method}")
 
+        # Steps 1b-4: budget, regime blend, low-variance, decorrelation, per-model head
+        feature_names, ranking, per_model = self._select_from_ranking(
+            df, feature_names, ranking, ranking_method
+        )
+        self._per_model_features.update(per_model)
+        logger.info(f"  Filter result: {original_count} -> {len(feature_names)} features")
+
+        # Step 5: Robustness scoring (diagnostic — logs top features, doesn't change selection)
+        if ranking is not None:
+            try:
+                from src.optimization.feature_selection.robustness_scoring import (
+                    RobustnessScorer,
+                )
+
+                scorer = RobustnessScorer()
+                scores_df = scorer.score_features(
+                    feature_names=feature_names,
+                    mda_importance=ranking,
+                )
+                if len(scores_df) > 0:
+                    top5 = scores_df.head(5)
+                    logger.info("  Robustness scores (top 5):")
+                    for _, row in top5.iterrows():
+                        logger.info(
+                            f"    {row['feature']}: "
+                            f"composite={row['composite_score']:.4f} "
+                            f"(pred={row['predictive_power']:.3f})"
+                        )
+            except Exception as e:
+                logger.debug(f"  Robustness scoring skipped: {e}")
+
+        # Step 6: Opt-in governance report (diagnostic only — selection is final here)
+        self._run_feature_governance(df, candidate_features, mda_importance)
+
+    def _select_from_ranking(
+        self,
+        df: pd.DataFrame,
+        feature_names: list[str],
+        ranking: pd.Series | None,
+        ranking_method: str,
+        *,
+        verbose: bool = True,
+    ) -> tuple[list[str], pd.Series | None, dict[str, list[str]]]:
+        """Everything after the ranking: budget, regime blend, filters, per-model head.
+
+        Pure with respect to the orchestrator (touches no attribute), so the live
+        selection and the governance stability replay run the SAME code.
+
+        Args:
+            df: Frame the filters (variance, correlation, regime) read; TRAIN rows.
+            feature_names: Candidate features the ranking covers.
+            ranking: Importance per feature (MDA, or variance fallback); None = unranked.
+            ranking_method: Label for logs ("MDA" / "variance").
+            verbose: Log the intermediate counts (off for replays inside blocks).
+
+        Returns:
+            (features surviving the filters, ranking re-sliced to them, features per model)
+        """
+        from src.core.contracts import get_model_contract
+
+        info = logger.info if verbose else logger.debug
+        warn = logger.warning if verbose else logger.debug
         # Step 1b: Timeframe competition (E4) — budget MTF features per timeframe
         fs_config = getattr(self.config, "feature_selection", None)
         mtf_budget = getattr(fs_config, "mtf_max_per_timeframe", 8) if fs_config else 8
@@ -386,7 +446,7 @@ class FeatureSelectionMixin:
                     ranking, feature_names, max_per_timeframe=mtf_budget
                 )
                 if len(budgeted) < len(feature_names):
-                    logger.info(
+                    info(
                         f"  Timeframe budget: {len(feature_names)} -> "
                         f"{len(budgeted)} features (max {mtf_budget}/tf)"
                     )
@@ -424,7 +484,7 @@ class FeatureSelectionMixin:
                             )
                             blended = 0.7 * mda_norm + 0.3 * reg_norm
                             ranking = blended.sort_values(ascending=False)
-                            logger.info(
+                            info(
                                 f"  Regime-conditional: blended {len(per_regime)} regimes "
                                 f"into ranking ({len(common)} features)"
                             )
@@ -446,7 +506,7 @@ class FeatureSelectionMixin:
             df[ranked], ranked, variance_threshold=0.01
         )
         if len(kept_after_var) < min_model_features:
-            logger.warning(
+            warn(
                 f"  Low-variance filter would leave {len(kept_after_var)} features "
                 f"(< {min_model_features}); skipped"
             )
@@ -458,69 +518,40 @@ class FeatureSelectionMixin:
             n_min=min_model_features,
             correlation_threshold=0.85,
         )
-        logger.info(
+        info(
             f"  Filter: low-variance removed {len(removed_low_var)}, decorrelation kept "
             f"{len(selected)}/{len(kept_after_var)} (target {max_model_features}, "
             f"min {min_model_features})"
         )
         feature_names = selected
-        logger.info(f"  Filter result: {original_count} -> {len(feature_names)} features")
 
         # Re-slice ranking to surviving features
         if ranking is not None:
             ranking = ranking.loc[ranking.index.isin(feature_names)]
 
         # Per-model feature subset selection
+        per_model: dict[str, list[str]] = {}
         for model_name in self.config.models:
             model_contract = get_model_contract(model_name)
             max_feat = model_contract.max_features
             if len(feature_names) > max_feat and ranking is not None:
                 model_features = ranking.head(int(max_feat)).index.tolist()
-                logger.info(
+                info(
                     f"    {model_name}: selected top {len(model_features)}"
                     f"/{len(feature_names)} features by {ranking_method}"
                     f" (max={max_feat})"
                 )
             else:
                 model_features = list(feature_names)
-            self._per_model_features[model_name] = model_features
+            per_model[model_name] = model_features
 
-        # Step 5: Robustness scoring (diagnostic — logs top features, doesn't change selection)
-        if ranking is not None:
-            try:
-                from src.optimization.feature_selection.robustness_scoring import (
-                    RobustnessScorer,
-                )
-
-                scorer = RobustnessScorer()
-                scores_df = scorer.score_features(
-                    feature_names=feature_names,
-                    mda_importance=ranking,
-                )
-                if len(scores_df) > 0:
-                    top5 = scores_df.head(5)
-                    logger.info("  Robustness scores (top 5):")
-                    for _, row in top5.iterrows():
-                        logger.info(
-                            f"    {row['feature']}: "
-                            f"composite={row['composite_score']:.4f} "
-                            f"(pred={row['predictive_power']:.3f})"
-                        )
-            except Exception as e:
-                logger.debug(f"  Robustness scoring skipped: {e}")
-
-        # Step 6: Opt-in governance report (diagnostic only — selection is final here)
-        # Stability cut = the size of the largest per-model selection ("would this
-        # feature make the cut?"); the raw contract budget can exceed the candidate count
-        selection_size = max((len(v) for v in self._per_model_features.values()), default=0)
-        self._run_feature_governance(df, candidate_features, mda_importance, selection_size)
+        return feature_names, ranking, per_model
 
     def _run_feature_governance(
         self,
         df: pd.DataFrame,
         candidates: list[str],
         raw_importance: pd.Series | None,
-        top_k: int,
     ) -> None:
         """Write the feature-governance report when ``config.governance`` enables it.
 
@@ -538,16 +569,27 @@ class FeatureSelectionMixin:
             if label_col is None:
                 logger.warning("  Feature governance skipped: no label column found")
                 return
-            FeatureGovernance(self.config, self._mda_importance).run(
+            FeatureGovernance(self.config, self._mda_importance, self._replay_selection).run(
                 df,
                 label_col=label_col,
                 candidates=candidates,
                 raw_importance=raw_importance,
                 selected_by_model=self._per_model_features,
-                top_k=top_k,
             )
         except Exception as e:
             logger.warning(f"  Feature governance skipped: {e}")
+
+    def _replay_selection(
+        self,
+        block_df: pd.DataFrame,
+        candidates: list[str],
+        importance: pd.Series,
+    ) -> dict[str, list[str]]:
+        """Per-model selection the live pipeline WOULD make from ``importance`` on ``block_df``."""
+        _, _, per_model = self._select_from_ranking(
+            block_df, list(candidates), importance, "MDA", verbose=False
+        )
+        return per_model
 
     def _validate_contracts(
         self,
