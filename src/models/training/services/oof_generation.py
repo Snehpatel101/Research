@@ -25,6 +25,20 @@ from src.validation.cv.oof_validation import OOFValidator
 logger = logging.getLogger(__name__)
 
 
+def _is_out_of_memory(error: BaseException) -> bool:
+    """True for memory exhaustion (CUDA OOM, host MemoryError), not other failures."""
+    if isinstance(error, MemoryError):
+        return True
+    try:
+        import torch
+
+        if isinstance(error, torch.cuda.OutOfMemoryError):
+            return True
+    except ImportError:
+        pass
+    return isinstance(error, RuntimeError) and "out of memory" in str(error).lower()
+
+
 @dataclass
 class OOFRequest:
     """Request to generate OOF predictions.
@@ -118,70 +132,61 @@ class OOFGenerationService:
         - 2D/3D: Uses the standard OOFGenerator (flatten + tabular/sequence path)
         - 4D: Uses direct 4D OOF generation (samples are already windowed)
 
-        On CUDA OOM the method frees GPU memory and retries once.  If the
-        retry also fails it falls back to CPU so that ensemble stacking
-        always gets the OOF predictions it needs — regardless of GPU size.
+        On out-of-memory the method frees GPU memory and retries once, then
+        falls back to CPU. Only memory exhaustion is survivable: if the CPU
+        attempt also runs out of memory the model has no OOF (None, logged as
+        an error). Every other error (purge/span mismatch, bad config, model
+        bug) propagates, so a model never silently drops out of stacking.
 
         Args:
             request: OOF generation request containing model name, horizon,
                     prepared data, and CV configuration
 
         Returns:
-            OOFPrediction object or None if generation fails
+            OOFPrediction, or None when every attempt ran out of memory
         """
         from src.models.device import release_gpu_memory
 
         try:
             return self._generate_oof_inner(request)
-        except RuntimeError as e:
-            error_msg = str(e).lower()
-            is_cuda_error = any(
-                kw in error_msg for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
-            )
-            if not is_cuda_error:
-                logger.warning(f"Failed to generate OOF for {request.model_name}: {e}")
-                return None
-            # First CUDA error: free GPU memory and retry on same device
+        except Exception as e:
+            if not _is_out_of_memory(e):
+                raise
             logger.warning(
-                f"CUDA error during OOF for {request.model_name} — "
+                f"Out of memory during OOF for {request.model_name} — "
                 "freeing memory and retrying..."
             )
-            release_gpu_memory()
-            try:
-                return self._generate_oof_inner(request)
-            except RuntimeError as e2:
-                error_msg2 = str(e2).lower()
-                is_cuda_error2 = any(
-                    kw in error_msg2 for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
-                )
-                if not is_cuda_error2:
-                    logger.warning(f"OOF retry failed for {request.model_name}: {e2}")
-                    return None
-                # Second CUDA error: fall back to CPU
-                logger.warning(
-                    f"CUDA error persists for {request.model_name} — "
-                    "falling back to CPU for OOF generation"
-                )
-                import os
-
-                prev = os.environ.get("CUDA_VISIBLE_DEVICES")
-                try:
-                    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-                    release_gpu_memory()
-                    return self._generate_oof_inner(request)
-                except Exception as cpu_err:
-                    logger.warning(
-                        f"OOF CPU fallback also failed for {request.model_name}: {cpu_err}"
-                    )
-                    return None
-                finally:
-                    if prev is None:
-                        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-                    else:
-                        os.environ["CUDA_VISIBLE_DEVICES"] = prev
+        release_gpu_memory()
+        try:
+            return self._generate_oof_inner(request)
         except Exception as e:
-            logger.warning(f"Failed to generate OOF for {request.model_name}: {e}")
+            if not _is_out_of_memory(e):
+                raise
+            logger.warning(
+                f"Out of memory persists for {request.model_name} — "
+                "falling back to CPU for OOF generation"
+            )
+
+        import os
+
+        prev = os.environ.get("CUDA_VISIBLE_DEVICES")
+        try:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+            release_gpu_memory()
+            return self._generate_oof_inner(request)
+        except Exception as e:
+            if not _is_out_of_memory(e):
+                raise
+            logger.error(
+                f"OOF for {request.model_name} ran out of memory on GPU and CPU; "
+                f"the model has no OOF predictions and is excluded from stacking: {e}"
+            )
             return None
+        finally:
+            if prev is None:
+                os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            else:
+                os.environ["CUDA_VISIBLE_DEVICES"] = prev
 
     def _generate_oof_inner(self, request: OOFRequest) -> OOFPrediction | None:
         """Core OOF generation logic (no error handling — called by generate_oof)."""

@@ -135,9 +135,10 @@ def benchmark_ensemble(
     ensemble = VotingEnsemble(config=config)
     ensemble.set_base_models(models)
 
-    # Warmup
-    for _ in range(warmup):
-        ensemble.predict(X)
+    # Warmup (at least one call, so `output` is always bound)
+    output = ensemble.predict(X)
+    for _ in range(warmup - 1):
+        output = ensemble.predict(X)
 
     # Benchmark
     latencies = []

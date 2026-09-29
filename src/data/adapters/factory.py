@@ -90,7 +90,7 @@ class AdapterFactory:
         self._adapters: dict[str, BaseAdapter] = {}
         logger.debug(
             f"AdapterFactory initialized with config: "
-            f"seq_len={config.sequence_length}, "
+            f"seq_len override={config.sequence_length}, "
             f"mtf_timeframes={config.mtf_timeframes}"
         )
 
@@ -155,20 +155,20 @@ class AdapterFactory:
         }
 
         if adapter_type == "sequence":
-            kwargs["sequence_length"] = self.config.sequence_length
+            kwargs["sequence_length"] = self.config.sequence_length_for(model_key)
             kwargs["stride"] = 1  # Default stride
             logger.debug(
                 f"Creating sequence adapter for {model_name} with "
-                f"sequence_length={self.config.sequence_length}"
+                f"sequence_length={kwargs['sequence_length']}"
             )
 
         elif adapter_type == "multi_stream":
-            kwargs["sequence_length"] = self.config.sequence_length
+            kwargs["sequence_length"] = self.config.sequence_length_for(model_key)
             kwargs["timeframes"] = self.config.mtf_timeframes
             kwargs["stride"] = 1  # Default stride
             logger.debug(
                 f"Creating multi_stream adapter for {model_name} with "
-                f"sequence_length={self.config.sequence_length}, "
+                f"sequence_length={kwargs['sequence_length']}, "
                 f"timeframes={self.config.mtf_timeframes}"
             )
 
@@ -350,10 +350,10 @@ class AdapterFactory:
         }
 
         if adapter_type == "sequence":
-            info["sequence_length"] = self.config.sequence_length
+            info["sequence_length"] = self.config.sequence_length_for(model_name.lower())
 
         elif adapter_type == "multi_stream":
-            info["sequence_length"] = self.config.sequence_length
+            info["sequence_length"] = self.config.sequence_length_for(model_name.lower())
             info["timeframes"] = self.config.mtf_timeframes
             info["n_timeframes"] = len(self.config.mtf_timeframes)
 

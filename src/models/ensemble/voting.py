@@ -24,6 +24,7 @@ from typing import Any, cast
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
+from src.core.label_spans import LabelSpans
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
@@ -317,7 +318,7 @@ class VotingEnsemble(BaseModel):
         y_val: np.ndarray,
         sample_weights: np.ndarray | None = None,
         config: dict[str, Any] | None = None,
-        label_end_times: np.ndarray | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> TrainingMetrics:
         """
         Train all base models from scratch.
@@ -331,8 +332,8 @@ class VotingEnsemble(BaseModel):
             y_val: Validation labels
             sample_weights: Optional sample weights
             config: Optional configuration overrides
-            label_end_times: Optional label end times (unused by VotingEnsemble,
-                accepted for API compatibility with StackingEnsemble)
+            label_spans: Label spans (unused by VotingEnsemble, accepted for
+                API compatibility with StackingEnsemble)
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")

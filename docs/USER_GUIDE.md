@@ -420,10 +420,11 @@ How to combine model predictions.
 
 | Meta-Learner | Description |
 |--------------|-------------|
-| `"ridge_meta"` | Ridge regression (recommended) |
+| `"ridge_meta"` | L2-regularized multinomial logistic ("ridge") meta-learner (recommended) |
 | `"mlp_meta"` | Neural network |
 | `"xgboost_meta"` | XGBoost |
 | `"calibrated_meta"` | Probability calibrated |
+| `"voting_meta"` | Soft vote (averages base-model probabilities, no fitted weights) |
 
 ---
 
@@ -466,7 +467,7 @@ How to size trades.
 | `OPTIMIZE_FOR` | str | "sharpe_ratio" | sharpe_ratio, sortino_ratio, profit_factor, f1_weighted, accuracy |
 | `HORIZONS` | list | [5, 10, 15, 20] | Any positive integers |
 | `BUILD_ENSEMBLE` | bool | True | True, False |
-| `META_LEARNER` | str | "ridge_meta" | ridge_meta, mlp_meta, xgboost_meta, calibrated_meta |
+| `META_LEARNER` | str | "ridge_meta" | ridge_meta, mlp_meta, xgboost_meta, calibrated_meta, voting_meta |
 | `OPTUNA_TRIALS` | int | 50 | Any positive integer |
 | `LABELING_METHOD` | str | "triple_barrier" | triple_barrier, directional, threshold |
 | `FEATURE_FAMILIES` | list | ["price", "momentum", "volatility", "volume", "trend"] | See feature list above |

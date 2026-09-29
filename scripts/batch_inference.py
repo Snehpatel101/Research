@@ -18,12 +18,12 @@ Usage:
         --output predictions.parquet \
         --batch-size 5000
 
-    # Ensemble inference
+    # Stacking ensemble inference (the ensemble bundle loads its base bundles
+    # and combines them with its meta-learner; input is raw OHLCV)
     python scripts/batch_inference.py \
-        --bundles ./bundles/xgb_h20,./bundles/lgbm_h20 \
-        --input data/test.parquet \
-        --output ensemble_predictions.parquet \
-        --ensemble
+        --ensemble-bundle ./bundles/ensemble \
+        --input data/raw_ohlcv.parquet \
+        --output ensemble_predictions.parquet
 """
 
 from __future__ import annotations
@@ -61,8 +61,8 @@ Examples:
   # Single model inference
   python scripts/batch_inference.py --bundle ./bundles/xgb_h20 --input data.parquet --output predictions.parquet
 
-  # Ensemble inference
-  python scripts/batch_inference.py --bundles ./bundles/xgb_h20,./bundles/lgbm_h20 --input data.parquet --output predictions.parquet --ensemble
+  # Stacking ensemble inference
+  python scripts/batch_inference.py --ensemble-bundle ./bundles/ensemble --input raw.parquet --output predictions.parquet
         """,
     )
 
@@ -77,6 +77,11 @@ Examples:
         "--bundles",
         type=str,
         help="Comma-separated paths to multiple bundles",
+    )
+    model_group.add_argument(
+        "--ensemble-bundle",
+        type=Path,
+        help="Path to a stacking EnsembleBundle (predicts from raw OHLCV)",
     )
 
     # Data paths
@@ -106,18 +111,6 @@ Examples:
         "--no-calibrate",
         action="store_true",
         help="Disable probability calibration",
-    )
-    parser.add_argument(
-        "--ensemble",
-        action="store_true",
-        help="Use ensemble voting (requires multiple bundles)",
-    )
-    parser.add_argument(
-        "--voting",
-        type=str,
-        default="soft_vote",
-        choices=["soft_vote", "hard_vote"],
-        help="Ensemble voting method (default: soft_vote)",
     )
 
     # Output options
@@ -169,6 +162,9 @@ def main() -> int:
     # Create output directory
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
+    if args.ensemble_bundle:
+        return run_ensemble(args)
+
     # Load bundles
     if args.bundle:
         bundle_paths = [args.bundle]
@@ -190,48 +186,49 @@ def main() -> int:
 
     # Log model info
     for info in predictor.pipeline.get_model_info():
-        logger.info(f"  Model: {info['name']} (H{info['horizon']}, {info['features']} features)")
+        logger.info(f"  Model: {info['name']} (H{info['horizon']}, {info['n_features']} features)")
 
     # Run inference
     logger.info(f"Processing {args.input}...")
+    result = predictor.predict_batch(
+        args.input,
+        output_path=args.output,
+        progress_callback=None if args.quiet else progress_bar,
+        calibrate=not args.no_calibrate,
+    )
 
-    if args.ensemble and len(bundle_paths) > 1:
-        # Ensemble mode
-        import pandas as pd
+    if not args.quiet:
+        print()  # Newline after progress bar
 
-        data = pd.read_parquet(args.input)
-        result = predictor.pipeline.predict_ensemble(
-            data,
-            method=args.voting,
-            calibrate=not args.no_calibrate,
-        )
+    logger.info(
+        f"Completed: {result.n_samples} predictions, "
+        f"{result.samples_per_second:.0f} samples/sec, "
+        f"{len(result.errors)} errors"
+    )
 
-        # Save ensemble predictions
-        output_df = result.to_dataframe()
-        output_df.to_parquet(args.output, index=False)
+    return 0
 
-        logger.info(
-            f"Saved ensemble predictions to {args.output} "
-            f"({len(output_df)} samples, {result.inference_time_ms:.1f}ms)"
-        )
-    else:
-        # Standard batch inference
-        result = predictor.predict_batch(
-            args.input,
-            output_path=args.output,
-            progress_callback=None if args.quiet else progress_bar,
-            calibrate=not args.no_calibrate,
-        )
 
-        if not args.quiet:
-            print()  # Newline after progress bar
+def run_ensemble(args: argparse.Namespace) -> int:
+    """Predict raw OHLCV with a stacking EnsembleBundle and save the result."""
+    import pandas as pd
 
-        logger.info(
-            f"Completed: {result.n_samples} predictions, "
-            f"{result.samples_per_second:.0f} samples/sec, "
-            f"{len(result.errors)} errors"
-        )
+    from src.inference import EnsembleBundle, UniversalInferencePipeline
 
+    if not args.ensemble_bundle.exists():
+        logger.error(f"Ensemble bundle not found: {args.ensemble_bundle}")
+        return 1
+
+    pipeline = UniversalInferencePipeline(ensemble_bundle=EnsembleBundle.load(args.ensemble_bundle))
+    data = pd.read_parquet(args.input)
+    result = pipeline.predict_ensemble(data, calibrate=not args.no_calibrate)
+
+    output_df = result.to_dataframe()
+    output_df.to_parquet(args.output, index=False)
+    logger.info(
+        f"Saved ensemble predictions to {args.output} "
+        f"({len(output_df)} samples, {result.inference_time_ms:.1f}ms)"
+    )
     return 0
 
 

@@ -357,16 +357,16 @@ class WalkForwardTrainer:
         weights = cast(pd.Series, weights_result)
 
         # Label spans (bar positions) for purging; the orchestrator stores them on
-        # the container since its walk-forward frame has a RangeIndex
+        # the container since its walk-forward frame has a RangeIndex. Standalone
+        # containers derive them from their label end time column.
         label_spans: LabelSpans | None = container.metadata.get("label_spans")
+        if label_spans is None:
+            label_spans = container.get_label_spans("train")
         if label_spans is not None and len(label_spans) != len(X):
             raise ValueError(
                 f"label_spans cover {len(label_spans)} samples but the walk-forward "
                 f"frame has {len(X)}"
             )
-        label_end_times = (
-            None if label_spans is not None else container.get_label_end_times("train")
-        )
         use_uniqueness = (
             label_spans is not None
             and getattr(self._pipeline_config, "sample_weighting", "none") == "uniqueness"
@@ -419,7 +419,7 @@ class WalkForwardTrainer:
         feature_col_names = list(X.columns)
 
         for window_idx, (train_idx, test_idx) in enumerate(
-            evaluator.split(X, y, label_end_times=label_end_times, label_spans=label_spans)
+            evaluator.split(X, y, label_spans=label_spans)
         ):
             window_start = time.time()
             _log_rss(f"Window {window_idx + 1}/{wf_config.n_windows} START")

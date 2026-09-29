@@ -37,6 +37,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.label_spans import NO_LABEL_END, LabelSpans
+
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
 
@@ -538,6 +540,59 @@ class TimeSeriesDataContainer:
             return None
 
         return pd.to_datetime(split_data.df[label_end_time_col])
+
+    def get_label_spans(self, split: str) -> LabelSpans | None:
+        """
+        Label spans (integer row positions) for purged cross-validation.
+
+        Converts the split's ``label_end_time_h{horizon}`` column into
+        ``LabelSpans`` using the split's datetime column, so purging works on
+        the container's RangeIndex frames (``label_end_times`` alone needs a
+        DatetimeIndex on X). A label ending at time t covers every row of the
+        same symbol stamped at or before t.
+
+        Args:
+            split: Split name ("train", "val", "test")
+
+        Returns:
+            LabelSpans aligned with the rows of ``get_sklearn_arrays(split)``,
+            or None when the split has no label end time column.
+
+        Raises:
+            ValueError: If label end times exist but cannot be located (no
+                datetime column, or datetimes unsorted within a symbol).
+        """
+        end_times = self.get_label_end_times(split)
+        if end_times is None:
+            return None
+        split_data = self.get_split(split)
+        df = split_data.df
+        if split_data.datetime_column not in df.columns:
+            raise ValueError(
+                f"Split '{split}' has label end times but no "
+                f"'{split_data.datetime_column}' column to locate them"
+            )
+        times = pd.DatetimeIndex(pd.to_datetime(df[split_data.datetime_column]))
+        if times.is_monotonic_increasing:
+            return LabelSpans.from_end_times(times, end_times)
+
+        # Stacked multi-symbol frame: locate label ends within each symbol's rows
+        if split_data.symbol_column not in df.columns:
+            raise ValueError(
+                f"Split '{split}': datetime column is not sorted and there is no "
+                f"'{split_data.symbol_column}' column to group by"
+            )
+        starts = np.arange(len(df), dtype=np.int64)
+        ends = np.full(len(df), NO_LABEL_END, dtype=np.int64)
+        symbols = df[split_data.symbol_column].to_numpy()
+        for symbol in pd.unique(symbols):
+            rows = np.flatnonzero(symbols == symbol)
+            local = LabelSpans.from_end_times(
+                times[rows], end_times.iloc[rows].reset_index(drop=True)
+            )
+            known = local.ends >= 0
+            ends[rows[known]] = rows[local.ends[known]]
+        return LabelSpans(starts=starts, ends=ends)
 
     # =========================================================================
     # SKLEARN FORMAT

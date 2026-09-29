@@ -32,6 +32,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
+    from src.core.label_spans import LabelSpans
 
 logger = logging.getLogger(__name__)
 
@@ -461,7 +462,7 @@ class TrainerFeaturesMixin:
         X_train_df: pd.DataFrame,
         y_train: pd.Series,
         w_train: pd.Series | None,
-        label_end_times: pd.Series | None,
+        label_spans: LabelSpans | None,
     ) -> Any:
         """
         Run feature selection on training data.
@@ -472,7 +473,7 @@ class TrainerFeaturesMixin:
             X_train_df: Training features DataFrame
             y_train: Training labels
             w_train: Sample weights (optional)
-            label_end_times: Label end times for purging (optional)
+            label_spans: Label spans for purging overlapping labels (optional)
 
         Returns:
             FeatureSelectionResult with selected features
@@ -500,7 +501,7 @@ class TrainerFeaturesMixin:
                 if self.config.feature_selection_embargo_bars is not None
                 else 1440  # ~5 days at 5-min resolution
             ),
-            label_end_times=label_end_times,
+            label_spans=label_spans,
         )
 
         return result

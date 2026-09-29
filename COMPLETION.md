@@ -44,6 +44,14 @@
 - **Reproducibility:** seeded `np.random.default_rng` everywhere (ruff NPY rules on), one global seeder (`set_all_seeds`), CLI report no longer uses simulated prices.
 - **Tooling:** Python 3.11 targets (black/ruff/pyright), CI on uv with CPU torch (ruff, black, pyright, vulture, `pytest -m "not slow" -n auto`; weekly slow job), `slow` marker, Makefile `check`/`matrix` targets, pre-commit, `uv.lock` regenerated.
 
+### Code-review follow-ups
+
+- **Legacy container paths never purged — they crashed:** container frames have a RangeIndex, so passing `label_end_time_h{h}` as `label_end_times=` raised in every split. `ml walk-forward` / `ml cpcv-pbo` failed every model yet exited 0; `ml train model` (feature selection) and stacking ensembles crashed. `TimeSeriesDataContainer.get_label_spans()` now converts end times to `LabelSpans` (per symbol for stacked frames) and every call site passes `label_spans=`; `ml cv` now purges on spans too (it computed end times but never passed them). Both evaluation commands exit 1 when no model succeeds.
+- **OOF errors surface:** the OOF service swallowed every exception and returned None, silently dropping a model from stacking; it now only survives memory exhaustion.
+- **AdapterFactory** passed `sequence_length=None` to 3D/4D adapters (TypeError); uses `sequence_length_for(model)`.
+- **Notebooks** computed calibration and conformal coverage against the model's own predictions (no `label` column exists; truth is `y_true`); fixed with one shared valid-row mask. PURGE/EMBARGO default to None (derived).
+- **Stale config/scripts:** ridge_meta search space/config use `C`/`class_weight`; EnsembleBundle format 2.0.0 (1.x bundles refuse to load: retrain); stale scripts fixed or deleted, `scripts/` type-checked by pyright.
+
 ### Left for the user
 
 - **5-D Optuna island (DECISIONS #5):** deletion prepared on branch `worktree-agent-aeee8a73f7ed7b404`; the auto-mode permission check blocked removing the files, so it was not merged (its live-tuner fix was ported).

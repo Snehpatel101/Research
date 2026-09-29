@@ -73,7 +73,7 @@ def run_data_pipeline():
         sys.exit(1)
 
     # Find the scaled splits directory
-    scaled_dir = config.run_splits_dir / "scaled"
+    scaled_dir = config.splits_dir / "scaled"
     if not scaled_dir.exists():
         # Try to find it in the run directory
         run_dir = PROJECT_ROOT / "data" / "runs" / config.run_id
