@@ -262,8 +262,3 @@ def get_global_config() -> GlobalConfig:
     if _global_config is None:
         _global_config = load_global_config()
     return _global_config
-
-
-def set_global_config(config: GlobalConfig) -> None:
-    global _global_config
-    _global_config = config

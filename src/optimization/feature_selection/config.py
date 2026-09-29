@@ -113,15 +113,6 @@ class ModelFamilyDefaults:
 
         return mapping[family_lower].copy()
 
-    @classmethod
-    def is_enabled_by_default(cls, model_family: str) -> bool:
-        """Check if feature selection is enabled by default for a model family."""
-        try:
-            defaults = cls.get_defaults(model_family)
-            return bool(defaults.get("enabled", False))
-        except ValueError:
-            return False
-
 
 @dataclass
 class FeatureSelectionConfig:

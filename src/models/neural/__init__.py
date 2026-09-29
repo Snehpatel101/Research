@@ -68,7 +68,12 @@ from .numerical_stability import (
     NumericalValidator,
     validate_training_inputs,
 )
-from .oom_recovery import OOMConfig, OOMContext, OOMEvent, OOMRecoveryManager, create_oom_manager
+from .oom_recovery import (
+    OOMConfig,
+    OOMEvent,
+    OOMRecoveryManager,
+    create_oom_manager,
+)
 from .patchtst_model import (
     LearnablePositionalEncoding,
     PatchEmbedding,
@@ -109,7 +114,6 @@ __all__ = [
     "OOMConfig",
     "OOMEvent",
     "OOMRecoveryManager",
-    "OOMContext",
     "create_oom_manager",
     # LR Finder
     "LRFinder",

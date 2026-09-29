@@ -82,19 +82,6 @@ class TransactionCosts:
         slippage_cost = self.slippage_ticks * self.tick_value
         return contracts * (fixed_cost + slippage_cost)
 
-    def calculate_exit_cost(self, contracts: int, exit_price: float) -> float:
-        """
-        Calculate cost of exiting a position.
-
-        Args:
-            contracts: Number of contracts
-            exit_price: Exit price
-
-        Returns:
-            Total exit cost in dollars
-        """
-        return self.calculate_entry_cost(contracts, exit_price)
-
     def calculate_round_trip_cost(self, contracts: int) -> float:
         """
         Calculate total round-trip cost for a trade.

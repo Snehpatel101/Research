@@ -102,63 +102,6 @@ def validate_horizons(horizons: list[int], data_length: int | None = None) -> li
     return errors
 
 
-def validate_horizons_with_data(
-    horizons: list[int],
-    data_length: int,
-    raise_on_error: bool = False,
-) -> list[str]:
-    """
-    Validate horizons against data length with detailed warnings.
-
-    This function provides additional context beyond validate_horizons() by
-    logging warnings and optionally raising errors for horizon/data mismatches.
-
-    Parameters
-    ----------
-    horizons : list[int]
-        List of horizon values to validate
-    data_length : int
-        Number of samples in the dataset
-    raise_on_error : bool, default False
-        If True, raises ValueError for validation failures.
-        If False, logs warnings and returns error list.
-
-    Returns
-    -------
-    list[str]
-        List of validation error/warning messages
-
-    Raises
-    ------
-    ValueError
-        If raise_on_error=True and validation fails
-
-    Examples
-    --------
-    >>> # Warning case - horizons are large relative to data
-    >>> validate_horizons_with_data([5, 20], data_length=150)
-    ['Horizon 20 is >= 10% of data length...']
-
-    >>> # Error case with raise_on_error
-    >>> validate_horizons_with_data([5, 20], data_length=50, raise_on_error=True)
-    ValueError: Horizon validation failed: ...
-    """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    errors = validate_horizons(horizons, data_length=data_length)
-
-    if errors:
-        for err in errors:
-            logger.warning(f"Horizon validation: {err}")
-
-        if raise_on_error:
-            raise ValueError(f"Horizon validation failed: {'; '.join(errors)}")
-
-    return errors
-
-
 # Import canonical horizon definitions from the centralized module
 # Do NOT define horizons locally - always import from src.core.common.horizon_config
 
@@ -209,33 +152,6 @@ VARIANCE_THRESHOLD = 0.01
 # 4. Clean separation for production deployment
 
 
-def is_cross_asset_feature(feature_name: str) -> bool:
-    """
-    Check if a feature name represents a cross-asset feature.
-
-    Cross-asset features are NOT generated in this pipeline. Each symbol is
-    processed in complete isolation with no cross-symbol operations.
-
-    This function always returns False since cross-asset features have been
-    removed from the pipeline. It is kept for backward compatibility with
-    validation code that may still call it.
-
-    Parameters
-    ----------
-    feature_name : str
-        The feature column name to check
-
-    Returns
-    -------
-    bool
-        Always returns False since cross-asset features are not supported
-    """
-    # Cross-asset features are not generated - always return False
-    # Legacy patterns that would have been cross-asset (now removed):
-    # - mes_mgc_*, relative_strength, beta_*, spread_*, correlation_*
-    return False
-
-
 # =============================================================================
 # MULTI-TIMEFRAME (MTF) FEATURE CONFIGURATION
 # =============================================================================
@@ -258,8 +174,6 @@ MTF_CONFIG: dict[str, Any] = {
     # Master enable/disable for MTF features
     "enabled": True,
     # Base timeframe of the input data
-    # NOTE: This is the default. Use get_mtf_base_timeframe() to derive
-    # the base timeframe from a target timeframe dynamically.
     "base_timeframe": "1min",
     # Higher timeframes to compute features for
     # All TFs must be >= base timeframe (1min) since we resample UP
@@ -297,81 +211,6 @@ MTF_CONFIG: dict[str, Any] = {
 }
 
 
-def get_mtf_base_timeframe(target_tf: str | None = None) -> str:
-    """
-    Get the MTF base timeframe, optionally deriving it from a target timeframe.
-
-    When processing data at a specific timeframe, the MTF base should match
-    that timeframe. This function returns the appropriate base timeframe:
-    - If target_tf is provided and valid, returns target_tf (the base is the current TF)
-    - If target_tf is None or not provided, returns the default from MTF_CONFIG
-
-    Parameters
-    ----------
-    target_tf : str, optional
-        The target/primary timeframe being processed (e.g., "5min", "15min").
-        If provided, MTF features will use this as the base and add features
-        from timeframes strictly greater than this.
-
-    Returns
-    -------
-    str
-        The base timeframe to use for MTF feature computation.
-
-    Examples
-    --------
-    >>> get_mtf_base_timeframe()  # Returns default "1min"
-    '1min'
-    >>> get_mtf_base_timeframe("5min")  # Processing 5min data
-    '5min'
-    >>> get_mtf_base_timeframe("15min")  # Processing 15min data
-    '15min'
-
-    Notes
-    -----
-    When target_tf is specified, MTF features will only include timeframes
-    strictly greater than target_tf. For example, if target_tf="15min",
-    MTF features from ["30min", "45min", "60min"] will be included, but
-    not from ["5min", "10min", "15min"].
-    """
-    if target_tf is None:
-        base_tf = MTF_CONFIG["base_timeframe"]
-        return str(base_tf) if base_tf is not None else "1min"
-
-    # Validate the target timeframe using the common module
-    if is_valid_timeframe(target_tf, allow_extended=True):
-        return target_tf
-
-    # If invalid, log warning and return default
-    import logging
-
-    logger = logging.getLogger(__name__)
-    base_tf = MTF_CONFIG["base_timeframe"]
-    logger.warning(
-        f"Invalid target_tf '{target_tf}' provided to get_mtf_base_timeframe(). "
-        f"Falling back to default: {base_tf}"
-    )
-    return str(base_tf) if base_tf is not None else "1min"
-
-
-def get_mtf_config() -> dict[str, Any]:
-    """
-    Get the MTF configuration dictionary.
-
-    Returns
-    -------
-    dict
-        Copy of MTF_CONFIG
-
-    Notes
-    -----
-    Returns a copy to prevent accidental modification of the global config.
-    """
-    import copy
-
-    return copy.deepcopy(MTF_CONFIG)
-
-
 def validate_mtf_config(config: dict[str, Any] | None = None) -> list[str]:
     """
     Validate MTF configuration values.
@@ -386,7 +225,6 @@ def validate_mtf_config(config: dict[str, Any] | None = None) -> list[str]:
     list[str]
         List of validation error messages (empty if valid)
     """
-    from src.core.common.timeframes import is_valid_timeframe
 
     if config is None:
         config = MTF_CONFIG
@@ -419,26 +257,6 @@ def validate_mtf_config(config: dict[str, Any] | None = None) -> list[str]:
     return errors
 
 
-def validate_feature_thresholds() -> list[str]:
-    """
-    Validate feature selection threshold values.
-
-    Returns
-    -------
-    list[str]
-        List of validation error messages (empty if valid)
-    """
-    errors = []
-
-    if not (0 < CORRELATION_THRESHOLD <= 1.0):
-        errors.append(f"CORRELATION_THRESHOLD must be in (0, 1.0], got {CORRELATION_THRESHOLD}")
-
-    if VARIANCE_THRESHOLD < 0:
-        errors.append(f"VARIANCE_THRESHOLD must be non-negative, got {VARIANCE_THRESHOLD}")
-
-    return errors
-
-
 # =============================================================================
 # STATIONARITY TEST CONFIGURATION
 # =============================================================================
@@ -446,23 +264,6 @@ STATIONARITY_TESTS = {
     "enabled": False,
     "max_features": 5,
 }
-
-
-def get_stationarity_config() -> dict[str, Any]:
-    """Get a copy of the stationarity test configuration."""
-    import copy
-
-    return copy.deepcopy(STATIONARITY_TESTS)
-
-
-def validate_stationarity_config() -> list[str]:
-    """Validate stationarity test configuration."""
-    errors = []
-    if STATIONARITY_TESTS.get("max_features", 0) < 1:
-        errors.append(
-            f"STATIONARITY_TESTS.max_features must be >= 1, got {STATIONARITY_TESTS.get('max_features')}"
-        )
-    return errors
 
 
 # =============================================================================
@@ -481,15 +282,3 @@ def get_drift_config() -> dict[str, Any]:
     import copy
 
     return copy.deepcopy(DRIFT_CONFIG)
-
-
-def validate_drift_config() -> list[str]:
-    """Validate drift configuration."""
-    errors = []
-    if DRIFT_CONFIG.get("bins", 0) < 2:
-        errors.append(f"DRIFT_CONFIG.bins must be >= 2, got {DRIFT_CONFIG.get('bins')}")
-    if DRIFT_CONFIG.get("max_features", 0) < 1:
-        errors.append(
-            f"DRIFT_CONFIG.max_features must be >= 1, got {DRIFT_CONFIG.get('max_features')}"
-        )
-    return errors

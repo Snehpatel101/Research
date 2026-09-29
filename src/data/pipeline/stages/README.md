@@ -19,8 +19,7 @@ stages/
 ├── datasets/        Stage 7.6: Build Datasets (run_build_datasets)
 ├── scaled_validation/ Stage 7.7: Post-Scale Validation (run_scaled_validation)
 ├── validation/      Stage 8: Comprehensive Validation (run_validation)
-├── reporting/       Stage 9: Generate Report (run_generate_report)
-└── evaluation/      Stage 10: Post-Training Evaluation (run_evaluation)
+└── reporting/       Stage 9: Generate Report (run_generate_report)
 ```
 
 ## Stage Details
@@ -72,10 +71,7 @@ Validates scaled data for drift and distribution issues.
 Final data integrity, label sanity, and feature quality checks.
 
 ### Stage 9: Generate Report (`reporting/run.py`)
-Generates comprehensive Phase 1 summary with charts.
-
-### Stage 10: Post-Training Evaluation (`evaluation/run.py`)
-Post-training model evaluation (optional, runs after model training).
+Writes the Markdown completion report (PHASE1_COMPLETION_REPORT_<run_id>.md).
 
 ## Usage
 

@@ -36,21 +36,6 @@ DEFAULT_CPCV_OUTPUT_DIR = PROJECT_ROOT / "data" / "cpcv_pbo"
 DEFAULT_HORIZONS = [5, 10, 15, 20]
 
 
-def get_project_root(project_root: str | None = None) -> Path:
-    """
-    Get the project root path.
-
-    Args:
-        project_root: Optional path to project root. If None, derives from this file's location.
-
-    Returns:
-        Path to project root directory.
-    """
-    if project_root is None:
-        return PROJECT_ROOT
-    return Path(project_root)
-
-
 # =============================================================================
 # DISPLAY HELPERS
 # =============================================================================
@@ -59,11 +44,6 @@ def get_project_root(project_root: str | None = None) -> Path:
 def show_error(message: str) -> None:
     """Display error message."""
     console.print(f"[bold red]Error:[/bold red] {message}")
-
-
-def show_success(message: str) -> None:
-    """Display success message."""
-    console.print(f"[bold green]Success:[/bold green] {message}")
 
 
 def show_info(message: str) -> None:

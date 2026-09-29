@@ -8,8 +8,6 @@ by automatically reducing batch size and retrying operations.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,19 +52,17 @@ class OOMRecoveryManager:
         manager = OOMRecoveryManager(config)
         batch_size = 256
 
-        with manager.oom_safe_context() as ctx:
-            while not ctx.should_stop:
-                try:
-                    train_batch(batch_size)
-                    break
-                except RuntimeError as e:
-                    if manager.is_oom_error(e):
-                        batch_size = manager.handle_oom(batch_size)
-                        if batch_size is None:
-                            raise
-                        ctx.record_retry()
-                    else:
-                        raise
+        while True:
+            try:
+                train_batch(batch_size)
+                manager.mark_success()
+                break
+            except RuntimeError as e:
+                if not manager.is_oom_error(e):
+                    raise
+                batch_size = manager.handle_oom(batch_size)
+                if batch_size is None:
+                    raise
     """
 
     def __init__(self, config: OOMConfig | None = None) -> None:
@@ -89,11 +85,6 @@ class OOMRecoveryManager:
     def total_oom_count(self) -> int:
         """Get total number of OOM events."""
         return len(self._events)
-
-    @property
-    def recovered_count(self) -> int:
-        """Get number of successfully recovered OOM events."""
-        return sum(1 for e in self._events if e.recovered)
 
     @staticmethod
     def is_oom_error(error: Exception) -> bool:
@@ -189,62 +180,6 @@ class OOMRecoveryManager:
         """Reset retry counter for a new training phase."""
         self._current_retries = 0
 
-    @contextmanager
-    def oom_safe_context(self) -> Iterator[OOMContext]:
-        """
-        Context manager for OOM-safe operations.
-
-        Yields:
-            OOMContext for tracking retries
-        """
-        ctx = OOMContext(self)
-        try:
-            yield ctx
-        finally:
-            if ctx.success:
-                self.mark_success()
-
-    @contextmanager
-    def oom_safe_training(
-        self,
-        initial_batch_size: int,
-        train_fn: Callable[[int], Any],
-    ) -> Iterator[tuple[int, Any]]:
-        """
-        Context manager that handles OOM with automatic retry.
-
-        Args:
-            initial_batch_size: Starting batch size
-            train_fn: Training function that takes batch_size
-
-        Yields:
-            Tuple of (final_batch_size, train_fn_result)
-
-        Raises:
-            RuntimeError: If OOM cannot be recovered
-        """
-        batch_size = initial_batch_size
-        result = None
-
-        while True:
-            try:
-                result = train_fn(batch_size)
-                self.mark_success()
-                break
-            except RuntimeError as e:
-                if self.is_oom_error(e):
-                    new_batch_size = self.handle_oom(batch_size)
-                    if new_batch_size is None:
-                        raise RuntimeError(
-                            f"OOM recovery failed after {self._current_retries} retries. "
-                            f"Final batch size: {batch_size}"
-                        ) from e
-                    batch_size = new_batch_size
-                else:
-                    raise
-
-        yield batch_size, result
-
     def _clear_memory(self) -> None:
         """Clear GPU memory and run garbage collection."""
         from src.models.device import release_gpu_memory
@@ -299,28 +234,6 @@ class OOMRecoveryManager:
         }
 
 
-class OOMContext:
-    """Context helper for OOM-safe operations."""
-
-    def __init__(self, manager: OOMRecoveryManager) -> None:
-        self.manager = manager
-        self.retries = 0
-        self.success = False
-
-    @property
-    def should_stop(self) -> bool:
-        """Check if we should stop retrying."""
-        return self.retries >= self.manager.config.max_retries
-
-    def record_retry(self) -> None:
-        """Record a retry attempt."""
-        self.retries += 1
-
-    def mark_success(self) -> None:
-        """Mark operation as successful."""
-        self.success = True
-
-
 def create_oom_manager(
     enabled: bool = True,
     max_retries: int = 6,
@@ -352,6 +265,5 @@ __all__ = [
     "OOMConfig",
     "OOMEvent",
     "OOMRecoveryManager",
-    "OOMContext",
     "create_oom_manager",
 ]

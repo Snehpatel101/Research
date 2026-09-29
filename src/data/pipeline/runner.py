@@ -35,9 +35,6 @@ from .stages import (
 )
 from .utils import StageResult, StageStatus
 
-# Note: run_evaluation is exported from stages but not used in default pipeline
-# Stage 10 is optional and runs post-training
-
 
 class StageTimeoutError(Exception):
     """Raised when a pipeline stage exceeds its timeout."""
@@ -401,21 +398,9 @@ class PipelineRunner:
         except FileNotFoundError:
             self.logger.warning("No previous manifest found.")
 
-    def get_stage_status(self, stage_name: str) -> StageStatus | None:
-        """Get the status of a specific stage."""
-        if stage_name in self.stage_results:
-            return self.stage_results[stage_name].status
-        elif stage_name in self.completed_stages:
-            return StageStatus.COMPLETED
-        return StageStatus.PENDING
-
     def get_completed_stages(self) -> list[str]:
         """Get list of completed stage names."""
         return list(self.completed_stages)
-
-    def get_stage_result(self, stage_name: str) -> StageResult | None:
-        """Get the result of a specific stage."""
-        return self.stage_results.get(stage_name)
 
     def _validate_stage_output(
         self,

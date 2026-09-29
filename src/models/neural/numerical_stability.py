@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 from src.core.exceptions import NumericalInstabilityError
 
@@ -66,8 +65,6 @@ class NumericalValidator:
         loss = criterion(logits, y_batch)
         validator.check_loss(loss)
 
-        loss.backward()
-        validator.check_gradients(model)
     """
 
     def __init__(
@@ -261,100 +258,6 @@ class NumericalValidator:
         """
         return self.check_tensor(loss, "loss", raise_on_error)
 
-    def check_gradients(
-        self,
-        model: nn.Module,
-        raise_on_error: bool | None = None,
-    ) -> dict[str, NumericalCheckResult]:
-        """
-        Check all gradients in a model for NaN/Inf.
-
-        Args:
-            model: PyTorch model to check
-            raise_on_error: Override instance setting
-
-        Returns:
-            Dict mapping parameter names to their check results
-
-        Raises:
-            NumericalInstabilityError: If any gradient has NaN/Inf
-        """
-        results: dict[str, NumericalCheckResult] = {}
-        invalid_params: list[str] = []
-
-        for name, param in model.named_parameters():
-            if param.grad is not None:
-                result = self.check_tensor(
-                    param.grad,
-                    f"grad_{name}",
-                    raise_on_error=False,  # Collect all before raising
-                )
-                results[name] = result
-                if not result.is_valid:
-                    invalid_params.append(name)
-
-        # Raise after collecting all invalid gradients
-        should_raise = raise_on_error if raise_on_error is not None else self.raise_on_error
-        if invalid_params and should_raise:
-            message = f"Invalid gradients in {len(invalid_params)} parameters: {invalid_params[:5]}"
-            if len(invalid_params) > 5:
-                message += f" (and {len(invalid_params) - 5} more)"
-            raise NumericalInstabilityError(
-                message,
-                details={
-                    "invalid_params": invalid_params,
-                    "results": {k: v.message for k, v in results.items() if not v.is_valid},
-                },
-            )
-
-        return results
-
-    def check_gradient_norm(
-        self,
-        model: nn.Module,
-        max_norm: float = 1000.0,
-        raise_on_error: bool | None = None,
-    ) -> tuple[float, bool]:
-        """
-        Check total gradient norm and detect explosion.
-
-        Args:
-            model: PyTorch model
-            max_norm: Maximum allowed total gradient norm
-            raise_on_error: Override instance setting
-
-        Returns:
-            Tuple of (total_norm, is_valid)
-        """
-        total_norm = 0.0
-        for param in model.parameters():
-            if param.grad is not None:
-                param_norm = param.grad.data.norm(2).item()
-                if not np.isfinite(param_norm):
-                    should_raise = (
-                        raise_on_error if raise_on_error is not None else self.raise_on_error
-                    )
-                    if should_raise:
-                        raise NumericalInstabilityError(
-                            f"Non-finite gradient norm detected: {param_norm}"
-                        )
-                    return float("inf"), False
-                total_norm += param_norm**2
-
-        total_norm = total_norm**0.5
-        is_valid = total_norm <= max_norm
-
-        if not is_valid:
-            should_raise = raise_on_error if raise_on_error is not None else self.raise_on_error
-            if self.log_warnings:
-                logger.warning(f"Gradient norm {total_norm:.2f} exceeds max {max_norm:.2f}")
-            if should_raise:
-                raise NumericalInstabilityError(
-                    f"Gradient explosion detected: norm={total_norm:.2f} > max={max_norm:.2f}"
-                )
-
-        return total_norm, is_valid
-
     @property
     def stats(self) -> dict[str, int]:
         """Get validation statistics."""
@@ -362,11 +265,6 @@ class NumericalValidator:
             "checks_performed": self._check_count,
             "issues_found": self._issue_count,
         }
-
-    def reset_stats(self) -> None:
-        """Reset validation statistics."""
-        self._check_count = 0
-        self._issue_count = 0
 
 
 def validate_training_inputs(

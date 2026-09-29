@@ -40,7 +40,7 @@ from src.core.common.timeframes import normalize_timeframe
 from src.core.constants import DEFAULT_MTF_TIMEFRAMES
 from src.core.contracts import DataContract, DataRank
 from src.data.store import TIMEFRAMES as STORE_TIMEFRAMES
-from src.data.store import load_all_timeframes, load_raw_mtf
+from src.data.store import load_raw_mtf
 
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
@@ -777,39 +777,6 @@ class MultiStreamAdapter(BaseAdapter):
             sequence_length=sequence_length,
             base_path=base_path,
             **kwargs,
-        )
-
-    def load_all_from_store(self) -> dict[str, pd.DataFrame]:
-        """
-        Load all configured timeframes from the raw MTF store.
-
-        This is useful when you want to pre-load all data before calling transform().
-
-        Returns:
-            Dictionary mapping timeframe -> DataFrame.
-
-        Raises:
-            ValueError: If symbol or split not configured.
-            TimeframeNotFoundError: If any timeframe is missing from store.
-
-        Example:
-            >>> adapter = MultiStreamAdapter.from_store("MES", "train")
-            >>> all_data = adapter.load_all_from_store()
-            >>> print(list(all_data.keys()))
-            ['1min', '3min', '5min', ...]
-        """
-        if self.symbol is None or self.split is None:
-            raise ValueError(
-                "Cannot load from store: symbol and split must be configured. "
-                "Use MultiStreamAdapter.from_store() to create a store-configured adapter."
-            )
-
-        return load_all_timeframes(
-            symbol=self.symbol,
-            split=self.split,
-            base_path=self.base_path,
-            timeframes=self.timeframes,
-            missing_ok=False,
         )
 
 

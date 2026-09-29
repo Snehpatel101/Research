@@ -7,13 +7,6 @@ statistical model comparison, bootstrap confidence intervals,
 feature-label leakage detection, ensemble diversity analysis,
 regime-conditional evaluation, production backtesting,
 walk-forward validation, CPCV, PBO, and feature store.
-
-Note: Meta-labeling components are NOT re-exported here to avoid circular imports.
-Import them directly:
-    from src.data.pipeline.stages.labeling import MetaLabeler, BetSizeMethod
-    from src.data.pipeline.stages.meta_labeling import (
-        MetaLabelGenerator, BetSizer, PrimaryClassifier, run_meta_labeling
-    )
 """
 
 # Phase 5: Feature Store
@@ -303,6 +296,4 @@ __all__ = [
     "compute_dataframe_checksum",
     "compute_schema_hash",
     "compute_config_hash",
-    # Meta-Labeling (Phase 6) - Import directly from src.data.pipeline.stages.meta_labeling
-    # to avoid circular imports. See module docstring for details.
 ]

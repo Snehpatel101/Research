@@ -3,10 +3,9 @@ Main FeatureStore class for managing feature storage, retrieval, and versioning.
 
 The FeatureStore provides:
 1. Parquet-based feature caching with content-addressable storage
-2. Point-in-time feature retrieval for backtesting
-3. Feature lineage tracking for auditability
-4. Semantic versioning for feature definitions
-5. SHA256 checksums for data integrity
+2. Feature lineage tracking for auditability
+3. Semantic versioning for feature definitions
+4. SHA256 checksums for data integrity
 
 Usage
 -----
@@ -23,13 +22,6 @@ Usage
 ...         feature_set="core_full",
 ...         lineage={"raw_path": "...", "config": {...}}
 ...     )
->>>
->>> # Point-in-time retrieval
->>> df = store.get_features_as_of(
-...     symbol="MES",
-...     feature_set="core_full",
-...     as_of_date=datetime(2024, 1, 15),
-... )
 """
 
 from __future__ import annotations
@@ -52,7 +44,6 @@ from .lineage import (
 )
 from .versioning import (
     SemanticVersion,
-    VersionInfo,
     VersionManager,
     compute_config_hash,
     compute_schema_hash,
@@ -103,13 +94,6 @@ class FeatureStore:
     >>>
     >>> # Retrieve features
     >>> df = store.get_features(symbol="MES", feature_set="core_full")
-    >>>
-    >>> # Point-in-time retrieval
-    >>> df = store.get_features_as_of(
-    ...     symbol="MES",
-    ...     feature_set="core_full",
-    ...     as_of_date=datetime(2024, 6, 1)
-    ... )
     """
 
     def __init__(
@@ -347,93 +331,6 @@ class FeatureStore:
 
         raise FeatureNotFoundError(f"Features not found: {feature_set}/{symbol}/{version}")
 
-    def get_features_as_of(
-        self,
-        symbol: str,
-        feature_set: str,
-        as_of_date: datetime,
-        version: str | None = None,
-        columns: list[str] | None = None,
-        bar_duration: pd.Timedelta | None = None,
-    ) -> pd.DataFrame:
-        """
-        Get features with point-in-time filtering.
-
-        Retrieves features and filters to only include data available
-        as of the specified date. This is critical for backtesting to
-        avoid look-ahead bias.
-
-        For intraday data, a bar's OHLC values are not finalized until
-        the bar closes (timestamp + bar_duration). The ``bar_duration``
-        embargo ensures we only use bars whose close time < as_of_date.
-
-        Parameters
-        ----------
-        symbol : str
-            Symbol name
-        feature_set : str
-            Feature set name
-        as_of_date : datetime
-            Point-in-time date - only returns data before this date
-        version : str, optional
-            Feature version
-        columns : list[str], optional
-            Specific columns to load
-        bar_duration : pd.Timedelta, optional
-            Duration of one bar. Defaults to 1 minute for intraday
-            embargo. Set to pd.Timedelta(0) to disable.
-
-        Returns
-        -------
-        DataFrame
-            Feature data filtered to as_of_date
-
-        Raises
-        ------
-        FeatureNotFoundError
-            If features are not found
-        ValueError
-            If no datetime column exists for filtering
-        """
-        df = self.get_features(
-            symbol=symbol,
-            feature_set=feature_set,
-            version=version,
-            columns=columns,
-        )
-
-        # Find datetime column
-        datetime_col = None
-        for col in ["datetime", "timestamp", "date", "time"]:
-            if col in df.columns:
-                datetime_col = col
-                break
-
-        if datetime_col is None:
-            raise ValueError(
-                f"No datetime column found in features. " f"Available columns: {list(df.columns)}"
-            )
-
-        # Convert to datetime if needed
-        if not pd.api.types.is_datetime64_any_dtype(df[datetime_col]):
-            df[datetime_col] = pd.to_datetime(df[datetime_col])
-
-        # Apply bar-duration embargo for intraday point-in-time correctness.
-        # A bar timestamped at T is not finalized until T + bar_duration,
-        # so we exclude bars whose close time >= as_of_date.
-        if bar_duration is None:
-            bar_duration = pd.Timedelta(minutes=1)
-        embargo_cutoff = as_of_date - bar_duration
-        mask = df[datetime_col] < embargo_cutoff
-        filtered_df = df[mask].copy()
-
-        logger.info(
-            f"Point-in-time retrieval: {feature_set}/{symbol} as of {as_of_date} "
-            f"({len(filtered_df)}/{len(df)} rows)"
-        )
-
-        return filtered_df
-
     def put_features(
         self,
         df: pd.DataFrame,
@@ -641,80 +538,6 @@ class FeatureStore:
 
         return feature_lineage
 
-    def get_lineage(
-        self,
-        symbol: str,
-        feature_set: str,
-        version: str,
-    ) -> FeatureLineage | None:
-        """
-        Get lineage for a feature set.
-
-        Parameters
-        ----------
-        symbol : str
-            Symbol name
-        feature_set : str
-            Feature set name
-        version : str
-            Feature version
-
-        Returns
-        -------
-        FeatureLineage or None
-            Lineage if found
-        """
-        return self._lineage_tracker.get_lineage_for_feature_set(
-            feature_set=feature_set,
-            version=version,
-            symbol=symbol,
-        )
-
-    def get_version_info(
-        self,
-        feature_set: str,
-        version: str | None = None,
-    ) -> VersionInfo | None:
-        """
-        Get version information.
-
-        Parameters
-        ----------
-        feature_set : str
-            Feature set name
-        version : str, optional
-            Version to get info for. If None, returns latest.
-
-        Returns
-        -------
-        VersionInfo or None
-            Version info if found
-        """
-        manager = self._get_version_manager(feature_set)
-        if version is None:
-            latest = manager.latest_version
-            if latest is None:
-                return None
-            version = str(latest)
-        return manager.get_version(version)
-
-    def list_versions(self, feature_set: str) -> list[str]:
-        """
-        List all versions for a feature set.
-
-        Parameters
-        ----------
-        feature_set : str
-            Feature set name
-
-        Returns
-        -------
-        list[str]
-            List of version strings in sorted order
-        """
-        manager = self._get_version_manager(feature_set)
-        return [str(v) for v in manager.all_versions]
-
     def list_feature_sets(self) -> list[str]:
         """
         List all feature sets in the store.
@@ -734,25 +557,6 @@ class FeatureStore:
             feature_sets.add(entry.feature_set)
 
         return sorted(feature_sets)
-
-    def list_symbols(self, feature_set: str) -> list[str]:
-        """
-        List all symbols for a feature set.
-
-        Parameters
-        ----------
-        feature_set : str
-            Feature set name
-
-        Returns
-        -------
-        list[str]
-            List of symbol names
-        """
-        symbols = set()
-        for entry in self._cache.list_entries(feature_set):
-            symbols.add(entry.symbol)
-        return sorted(symbols)
 
     def invalidate(
         self,
@@ -818,51 +622,6 @@ class FeatureStore:
             "feature_sets": self.list_feature_sets(),
             "lineage_count": len(self._lineage_tracker),
         }
-
-    def validate_integrity(
-        self,
-        symbol: str | None = None,
-        feature_set: str | None = None,
-    ) -> dict[str, list[str]]:
-        """
-        Validate integrity of stored features.
-
-        Parameters
-        ----------
-        symbol : str, optional
-            Filter by symbol
-        feature_set : str, optional
-            Filter by feature set
-
-        Returns
-        -------
-        dict
-            Validation results with 'valid' and 'invalid' lists
-        """
-        valid = []
-        invalid = []
-
-        for entry in self._cache.list_entries(feature_set):
-            if symbol and entry.symbol != symbol:
-                continue
-
-            entry_key = f"{entry.feature_set}/{entry.symbol}/{entry.version}"
-
-            try:
-                # Try to load and validate
-                result = self._cache.get(
-                    feature_set=entry.feature_set,
-                    cache_key=entry.cache_key,
-                )
-                if result is not None:
-                    valid.append(entry_key)
-                else:
-                    invalid.append(entry_key)
-            except (ValueError, Exception) as e:
-                logger.warning(f"Integrity check failed for {entry_key}: {e}")
-                invalid.append(entry_key)
-
-        return {"valid": valid, "invalid": invalid}
 
     def cleanup(
         self,

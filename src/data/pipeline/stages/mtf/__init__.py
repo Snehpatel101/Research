@@ -20,7 +20,6 @@ Main Components:
     MTFFeatureGenerator: Main class for generating MTF features
     MTFMode: Enum for selecting what to generate (bars, indicators, or both)
     add_mtf_features: Convenience function for adding MTF features
-    validate_mtf_alignment: Validate proper alignment without lookahead
 
 Example:
     >>> from stages.mtf import MTFFeatureGenerator, MTFMode
@@ -54,12 +53,7 @@ from .constants import (
     REQUIRED_OHLCV_COLS,
     MTFMode,
 )
-from .convenience import (
-    add_mtf_bars,
-    add_mtf_features,
-    add_mtf_indicators,
-    validate_mtf_alignment,
-)
+from .convenience import add_mtf_features
 from .generator import MTFFeatureGenerator
 from .validators import validate_ohlcv_dataframe, validate_timeframe_format
 
@@ -70,9 +64,6 @@ __all__ = [
     "MTFMode",
     # Convenience functions
     "add_mtf_features",
-    "add_mtf_bars",
-    "add_mtf_indicators",
-    "validate_mtf_alignment",
     # Validation functions
     "validate_ohlcv_dataframe",
     "validate_timeframe_format",

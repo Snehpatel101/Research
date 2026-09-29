@@ -2,7 +2,8 @@
 MLFactory - Unified Entry Point for ML Factory Operations.
 
 This is THE single entry point for the ML Factory system, coordinating:
-- Data Pipeline (via PipelineRunner)
+- Data preparation (in-process: raw bars -> FeatureEngineer -> TripleBarrierLabeler;
+  the standalone PipelineRunner behind `ml data` is not used here)
 - Training (via UnifiedTrainingOrchestrator)
 - Evaluation (optional)
 - Bundling (via BundleBuilder)
@@ -168,7 +169,7 @@ class MLFactory:
     4. Bundling: Package for deployment (optional)
 
     The factory delegates to specialized components:
-    - PipelineRunner: Data pipeline execution
+    - FeatureEngineer + TripleBarrierLabeler: in-process data preparation
     - UnifiedTrainingOrchestrator: Model training
     - BundleBuilder: Inference artifact creation
 

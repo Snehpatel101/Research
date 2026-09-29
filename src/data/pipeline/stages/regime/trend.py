@@ -252,38 +252,6 @@ class TrendRegimeDetector(RegimeDetector):
 
         return regimes
 
-    def detect_with_components(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
-        """
-        Detect regime and return component values for debugging.
-
-        Args:
-            df: DataFrame with OHLC data
-
-        Returns:
-            Tuple of (regimes, adx_values, sma_values)
-        """
-        self.validate_input(df)
-
-        # Get ADX values
-        if self.adx_column and self.adx_column in df.columns:
-            adx = df[self.adx_column].values
-        else:
-            adx, _, _ = calculate_adx(
-                df["high"].values, df["low"].values, df["close"].values, self.adx_period
-            )
-
-        # Get SMA values
-        if self.sma_column and self.sma_column in df.columns:
-            sma = df[self.sma_column].values
-        else:
-            sma = calculate_sma(df["close"].values, self.sma_period)
-
-        regimes = self.detect(df)
-        adx_series = pd.Series(adx, index=df.index)
-        sma_series = pd.Series(sma, index=df.index)
-
-        return regimes, adx_series, sma_series
-
 
 __all__ = [
     "TrendRegimeDetector",

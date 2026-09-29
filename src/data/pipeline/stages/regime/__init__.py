@@ -29,10 +29,6 @@ Example:
     >>> from stages.regime import add_regime_features_to_dataframe
     >>> df_with_regimes = add_regime_features_to_dataframe(df)
 
-Configuration Example:
-    >>> from src.data.pipeline.config import REGIME_CONFIG
-    >>> detector = CompositeRegimeDetector.from_config(REGIME_CONFIG)
-
 Author: ML Pipeline
 Created: 2025-12-22
 """
@@ -52,16 +48,6 @@ from .composite import (
     CompositeRegimeDetector,
     CompositeRegimeResult,
     add_regime_features_to_dataframe,
-)
-
-# HMM-based regime detection
-from .hmm import (
-    HMMConfig,
-    HMMRegimeDetector,
-    HMMRegimeLabel,
-    RegimeRouter,
-    fit_gaussian_hmm,
-    order_states_by_volatility,
 )
 from .structure import (
     MarketStructureDetector,
@@ -106,13 +92,6 @@ __all__ = [
     "CompositeRegimeDetector",
     "CompositeRegimeResult",
     "add_regime_features_to_dataframe",
-    # HMM
-    "HMMRegimeDetector",
-    "HMMConfig",
-    "HMMRegimeLabel",
-    "RegimeRouter",
-    "fit_gaussian_hmm",
-    "order_states_by_volatility",
     # Unified entry point
     "get_regime_labels",
 ]

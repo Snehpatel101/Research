@@ -113,30 +113,6 @@ class TripleBarrierLabeler(LabelingStrategy):
 
         return {"k_up": 1.0, "k_down": 1.0, "max_bars": max(horizon * 3, 10)}
 
-    def _create_authoritative_config(
-        self,
-        horizon: int,
-        k_up: float | None = None,
-        k_down: float | None = None,
-        max_bars: int | None = None,
-    ) -> TripleBarrierConfig:
-        """
-        Create a TripleBarrierConfig for the authoritative labeler.
-
-        Merges instance defaults, horizon defaults, and method overrides.
-        """
-        defaults = self._get_default_params(horizon)
-
-        return TripleBarrierConfig(
-            upper_mult=k_up or self._k_up or defaults["k_up"],
-            lower_mult=k_down or self._k_down or defaults["k_down"],
-            horizon=max_bars or self._max_bars or defaults["max_bars"],
-            atr_column=self._atr_column,
-            apply_transaction_costs=self._apply_transaction_costs,
-            symbol=self._symbol,
-            volatility_regime=self._volatility_regime,
-        )
-
     def compute_labels(
         self,
         df: pd.DataFrame,

@@ -848,39 +848,6 @@ class TripleBarrierLabeler(LabelingStrategy):
 
         return metrics
 
-    def get_class_distribution(self, labels: pd.Series) -> dict[str, float]:
-        """
-        Compute class distribution from labels.
-
-        Args:
-            labels: Series of labels (-1, 0, +1).
-
-        Returns:
-            dict: Distribution with keys 'long', 'neutral', 'short'.
-        """
-        labels_arr = labels.values if isinstance(labels, pd.Series) else labels
-
-        valid_labels = labels_arr[labels_arr != -99]
-        valid_labels = valid_labels[~np.isnan(valid_labels)]
-
-        n_total = len(valid_labels)
-        if n_total == 0:
-            return {"long": 0.0, "neutral": 0.0, "short": 0.0, "n_samples": 0}
-
-        n_long = int((valid_labels == 1).sum())
-        n_neutral = int((valid_labels == 0).sum())
-        n_short = int((valid_labels == -1).sum())
-
-        return {
-            "long": n_long / n_total,
-            "neutral": n_neutral / n_total,
-            "short": n_short / n_total,
-            "n_samples": n_total,
-            "n_long": n_long,
-            "n_neutral": n_neutral,
-            "n_short": n_short,
-        }
-
 
 # =============================================================================
 # EXPORTS

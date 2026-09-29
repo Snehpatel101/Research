@@ -450,45 +450,6 @@ def get_timeframe_suffix(timeframe: str) -> str:
         return f"_{minutes}m"
 
 
-def get_canonical_from_suffix(suffix: str) -> str:
-    """
-    Get the canonical timeframe from a column suffix.
-
-    Parameters
-    ----------
-    suffix : str
-        Column suffix (e.g., "_5m", "_1h", "_1d")
-
-    Returns
-    -------
-    str
-        Canonical timeframe (e.g., "5min", "60min", "1440min")
-
-    Examples
-    --------
-    >>> get_canonical_from_suffix("_15m")
-    '15min'
-    >>> get_canonical_from_suffix("_1h")
-    '60min'
-    >>> get_canonical_from_suffix("_1d")
-    '1440min'
-    """
-    # Remove leading underscore if present
-    s = suffix.lstrip("_")
-
-    if s.endswith("d"):
-        days = int(s[:-1])
-        return f"{days * 1440}min"
-    elif s.endswith("h"):
-        hours = int(s[:-1])
-        return f"{hours * 60}min"
-    elif s.endswith("m"):
-        minutes = int(s[:-1])
-        return f"{minutes}min"
-    else:
-        raise ValueError(f"Unrecognized suffix format: '{suffix}'")
-
-
 def detect_timeframe(df: pd.DataFrame) -> str | None:
     """
     Detect the bar timeframe of an OHLCV frame from its datetime column or index.

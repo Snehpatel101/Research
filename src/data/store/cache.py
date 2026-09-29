@@ -426,35 +426,6 @@ class FeatureCache:
             return True
         return False
 
-    def invalidate_feature_set(self, feature_set: str) -> int:
-        """
-        Invalidate all cache entries for a feature set.
-
-        Parameters
-        ----------
-        feature_set : str
-            Feature set name
-
-        Returns
-        -------
-        int
-            Number of entries invalidated
-        """
-        feature_set_path = self.cache_dir / feature_set
-        if not feature_set_path.exists():
-            return 0
-
-        count = 0
-        for entry_path in feature_set_path.iterdir():
-            if entry_path.is_dir():
-                shutil.rmtree(entry_path)
-                count += 1
-
-        if count > 0:
-            logger.info(f"Invalidated {count} cache entries for {feature_set}")
-
-        return count
-
     def list_entries(self, feature_set: str | None = None) -> list[CacheMetadata]:
         """
         List all cache entries.

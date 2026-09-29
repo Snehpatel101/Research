@@ -31,9 +31,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.constants import (
-    DEFAULT_SEQUENCE_LENGTH,
     LABEL_CLASSES,
-    MODEL_DATA_RANKS,
     N_CLASSES,
 )
 from src.core.interfaces import OOFResult
@@ -189,27 +187,6 @@ class AlignedOOFResult:
             columns=self.get_feature_names(),
         )
 
-    def get_model_probabilities(self, model_name: str) -> np.ndarray:
-        """
-        Get probability columns for a specific model.
-
-        Args:
-            model_name: Name of the model.
-
-        Returns:
-            Array of shape (n_common, n_classes).
-
-        Raises:
-            ValueError: If model_name not found.
-        """
-        if model_name not in self.model_names:
-            raise ValueError(f"Model '{model_name}' not found. " f"Available: {self.model_names}")
-
-        idx = self.model_names.index(model_name)
-        start_col = idx * self.n_classes
-        end_col = start_col + self.n_classes
-        return self.probabilities[:, start_col:end_col]
-
     def get_valid_mask(self) -> np.ndarray:
         """
         Get mask of samples with valid predictions from ALL models.
@@ -222,29 +199,6 @@ class AlignedOOFResult:
         probs_reshaped = self.probabilities.reshape(self.n_common, self.n_models, self.n_classes)
         # Valid if no NaN in any model/class
         return np.asarray(~np.any(np.isnan(probs_reshaped), axis=(1, 2)))
-
-    def drop_incomplete(self) -> AlignedOOFResult:
-        """
-        Return new AlignedOOFResult with only complete samples.
-
-        Samples where any model has missing predictions are removed.
-
-        Returns:
-            New AlignedOOFResult with only complete samples.
-        """
-        valid_mask = self.get_valid_mask()
-        n_valid = valid_mask.sum()
-
-        return AlignedOOFResult(
-            probabilities=self.probabilities[valid_mask],
-            predictions=self.predictions[valid_mask],
-            common_indices=self.common_indices[valid_mask],
-            model_names=self.model_names,
-            coverage=dict.fromkeys(self.model_names, 1.0),  # All complete
-            n_common=n_valid,
-            n_models=self.n_models,
-            n_classes=self.n_classes,
-        )
 
     def summary(self) -> str:
         """
@@ -428,67 +382,6 @@ class OOFAligner:
             all_indices |= set(oof.indices)
 
         return np.array(sorted(all_indices), dtype=np.int64)
-
-    def compute_offset(
-        self,
-        model_name: str,
-        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
-    ) -> int:
-        """
-        Compute index offset for a model based on its data rank.
-
-        For sequence and multi-stream models, the first (seq_len - 1)
-        samples cannot be used because they lack sufficient history.
-
-        Args:
-            model_name: Model name (case-insensitive).
-            sequence_length: Sequence length used (default: 60).
-
-        Returns:
-            Index offset (0 for tabular, seq_len-1 for sequence/multi-stream).
-
-        Examples:
-            >>> aligner = OOFAligner()
-            >>> aligner.compute_offset("xgboost")
-            0
-            >>> aligner.compute_offset("lstm", sequence_length=60)
-            59
-            >>> aligner.compute_offset("patchtst", sequence_length=60)
-            59
-        """
-        rank = MODEL_DATA_RANKS.get(model_name.lower(), 2)
-
-        if rank == 2:
-            return 0
-        else:
-            return sequence_length - 1
-
-    def estimate_common_samples(
-        self,
-        total_samples: int,
-        model_names: list[str],
-        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
-    ) -> int:
-        """
-        Estimate the number of common samples after alignment.
-
-        Useful for planning before training to understand sample loss.
-
-        Args:
-            total_samples: Total samples in the original dataset.
-            model_names: List of model names to be aligned.
-            sequence_length: Sequence length for sequence/multi-stream models.
-
-        Returns:
-            Estimated number of common samples.
-
-        Example:
-            >>> aligner = OOFAligner()
-            >>> aligner.estimate_common_samples(10000, ["xgboost", "lstm"], 60)
-            9941
-        """
-        max_offset = max(self.compute_offset(name, sequence_length) for name in model_names)
-        return max(0, total_samples - max_offset)
 
 
 # =============================================================================

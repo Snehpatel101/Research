@@ -129,18 +129,3 @@ def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any
         "missing_metadata": missing,
         "total_columns_checked": len(df_columns_set),
     }
-
-
-def get_metadata_columns_info() -> dict[str, Any]:
-    """
-    Get metadata columns schema information.
-
-    Returns:
-        Dictionary with schema version, column count, and definitions.
-    """
-    return {
-        "version": METADATA_COLUMNS_VERSION,
-        "column_count": len(METADATA_COLUMNS),
-        "columns": METADATA_COLUMNS_DEFINITION,
-        "label_prefixes": LABEL_PREFIXES,
-    }

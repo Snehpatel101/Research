@@ -24,9 +24,6 @@ Usage:
 
     # Get PyTorch sequences
     train_dataset = container.get_pytorch_sequences("train", seq_len=60)
-
-    # Get NeuralForecast DataFrame
-    nf_df = container.get_neuralforecast_df("train")
 """
 
 from __future__ import annotations
@@ -499,11 +496,6 @@ class TimeSeriesDataContainer:
         return self.splits[split]
 
     @property
-    def available_splits(self) -> list[str]:
-        """List of available split names."""
-        return list(self.splits.keys())
-
-    @property
     def feature_columns(self) -> list[str]:
         """Feature column names."""
         return self.config.feature_columns
@@ -805,84 +797,9 @@ class TimeSeriesDataContainer:
     # NEURALFORECAST FORMAT
     # =========================================================================
 
-    def get_neuralforecast_df(self, split: str, include_features: bool = True) -> pd.DataFrame:
-        """
-        Get DataFrame in NeuralForecast format.
-
-        NeuralForecast expects columns: [unique_id, ds, y, (optional features)]
-        - unique_id: Identifier for each time series (symbol)
-        - ds: Datetime column
-        - y: Target variable
-
-        Args:
-            split: Split name ("train", "val", "test")
-            include_features: If True, include feature columns
-
-        Returns:
-            DataFrame with NeuralForecast-compatible schema
-
-        Raises:
-            KeyError: If split not found
-        """
-        split_data = self.get_split(split)
-        df = split_data.df.copy()
-
-        # Build output columns
-        output_cols = []
-
-        # unique_id from symbol column
-        if split_data.symbol_column in df.columns:
-            df["unique_id"] = df[split_data.symbol_column]
-        else:
-            df["unique_id"] = "default"
-        output_cols.append("unique_id")
-
-        # ds from datetime column
-        if split_data.datetime_column in df.columns:
-            df["ds"] = pd.to_datetime(df[split_data.datetime_column])
-        else:
-            # Create synthetic datetime index
-            df["ds"] = pd.date_range(start="2020-01-01", periods=len(df), freq="5min")
-        output_cols.append("ds")
-
-        # y from label column
-        df["y"] = df[split_data.label_column]
-        output_cols.append("y")
-
-        # Optional: sample weight
-        if split_data.weight_column in df.columns:
-            df["sample_weight"] = df[split_data.weight_column]
-            output_cols.append("sample_weight")
-
-        # Optional: features
-        if include_features:
-            output_cols.extend(split_data.feature_columns)
-
-        return df[output_cols]
-
     # =========================================================================
     # UTILITIES
     # =========================================================================
-
-    def describe(self) -> dict[str, Any]:
-        """Return summary statistics for the container."""
-        summary: dict[str, Any] = {
-            "horizon": self.config.horizon,
-            "n_features": self.n_features,
-            "label_column": self.config.label_column,
-            "weight_column": self.config.weight_column,
-            "splits": {},
-        }
-
-        for split_name, split_data in self.splits.items():
-            labels = split_data.df[split_data.label_column]
-            summary["splits"][split_name] = {
-                "n_samples": split_data.n_samples,
-                "symbols": split_data.symbols,
-                "label_distribution": labels.value_counts().to_dict(),
-            }
-
-        return summary
 
     def __repr__(self) -> str:
         splits_info = ", ".join(f"{k}={v.n_samples}" for k, v in self.splits.items())

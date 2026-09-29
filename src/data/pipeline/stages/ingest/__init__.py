@@ -33,7 +33,6 @@ from .validators import (
     SecurityError,
     validate_data_types,
     validate_ohlcv_relationships,
-    validate_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,12 +111,6 @@ class DataIngestor:
         logger.info("Initialized DataIngestor")
         logger.info(f"Raw data dir: {self.raw_data_dir}")
         logger.info(f"Output dir: {self.output_dir}")
-
-    def _validate_path(self, file_path: Path, allowed_dirs=None):
-        """Validate path is within allowed directories."""
-        if allowed_dirs is None:
-            allowed_dirs = [self.raw_data_dir, self.output_dir]
-        return validate_path(file_path, allowed_dirs)
 
     def load_data(self, file_path: str | Path, file_format: str | None = None) -> pd.DataFrame:
         """
@@ -260,50 +253,3 @@ class DataIngestor:
     def save_parquet(self, df: pd.DataFrame, symbol: str, metadata: dict | None = None) -> Path:
         """Save DataFrame to Parquet format."""
         return save_parquet(df, symbol, self.output_dir, metadata)
-
-    def ingest_directory(
-        self, pattern: str = "*.parquet", validate: bool = True
-    ) -> dict[str, dict]:
-        """
-        Ingest all files matching pattern in raw data directory.
-
-        Parameters:
-        -----------
-        pattern : File pattern to match (default: "*.parquet")
-        validate : Whether to validate OHLCV relationships
-
-        Returns:
-        --------
-        dict : Dictionary mapping symbols to their metadata
-        """
-        files = list(self.raw_data_dir.glob(pattern))
-
-        if not files:
-            logger.warning(f"No files found matching pattern: {pattern}")
-            return {}
-
-        logger.info(f"Found {len(files)} files to ingest")
-
-        results = {}
-        errors = []
-
-        for file_path in files:
-            try:
-                df, metadata = self.ingest_file(file_path, validate=validate)
-                symbol = metadata["symbol"]
-                self.save_parquet(df, symbol, metadata)
-                results[symbol] = metadata
-
-            except Exception as e:
-                errors.append(
-                    {"file": str(file_path.name), "error": str(e), "type": type(e).__name__}
-                )
-                logger.error(f"Error processing {file_path.name}: {e}", exc_info=True)
-
-        if errors:
-            error_summary = f"{len(errors)}/{len(files)} files failed ingestion"
-            logger.error(f"Ingestion completed with errors: {error_summary}")
-            raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
-
-        logger.info(f"\nIngestion complete. Processed {len(results)} files successfully.")
-        return results

@@ -195,24 +195,6 @@ class MultiResolution4DAdapter:
         """Sequence length."""
         return self.config.seq_len
 
-    def analyze_features(self, df: pd.DataFrame) -> dict[str, int]:
-        """
-        Analyze available features per timeframe.
-
-        Args:
-            df: DataFrame with MTF columns
-
-        Returns:
-            Dict mapping timeframe -> feature count
-        """
-        feature_map = build_timeframe_feature_map(
-            df,
-            self.config.timeframes,
-            self.config.features_per_timeframe,
-            self.config.include_base_features,
-        )
-        return {tf: len(cols) for tf, cols in feature_map.items()}
-
     def prepare(self, df: pd.DataFrame) -> None:
         """
         Prepare the adapter by analyzing the DataFrame structure.
@@ -239,20 +221,6 @@ class MultiResolution4DAdapter:
         for tf in self.config.timeframes:
             n_features = len(self._feature_map.get(tf, []))
             logger.debug(f"  {tf}: {n_features} features")
-
-    def get_feature_map(self) -> dict[str, list[str]]:
-        """
-        Get the feature map (timeframe -> column names).
-
-        Returns:
-            Dict mapping timeframe to list of column names
-
-        Raises:
-            RuntimeError: If prepare() has not been called
-        """
-        if self._feature_map is None:
-            raise RuntimeError("Adapter not prepared. Call prepare(df) first.")
-        return self._feature_map.copy()
 
     def create_dataset(
         self,
@@ -300,19 +268,6 @@ class MultiResolution4DAdapter:
             pad_missing_features=self.config.pad_missing_features,
             pad_value=self.config.pad_value,
         )
-
-    def get_output_shape(self, n_features: int | None = None) -> tuple[int, int, int]:
-        """
-        Get the output tensor shape (excluding batch dimension).
-
-        Args:
-            n_features: Features per timeframe (uses max from prepare() if None)
-
-        Returns:
-            Tuple of (n_timeframes, seq_len, n_features)
-        """
-        features = n_features if n_features is not None else self._max_features
-        return (self.n_timeframes, self.config.seq_len, features)
 
     def __repr__(self) -> str:
         return (
@@ -530,31 +485,6 @@ class MultiResolution4DDataset(Dataset):
     def timeframes(self) -> list[str]:
         """List of timeframes."""
         return self._timeframes.copy()
-
-    def get_all_labels(self) -> np.ndarray:
-        """Get all labels for valid sequences (for stratification)."""
-        target_indices = self._indices + self._seq_len - 1
-        return np.asarray(self._labels[target_indices])
-
-    def get_all_weights(self) -> np.ndarray:
-        """Get all weights for valid sequences."""
-        target_indices = self._indices + self._seq_len - 1
-        return np.asarray(self._weights[target_indices])
-
-    def get_label_distribution(self) -> dict:
-        """Get label value counts for valid sequences."""
-        labels = self.get_all_labels()
-        unique, counts = np.unique(labels, return_counts=True)
-        return dict(zip(unique.tolist(), counts.tolist(), strict=False))
-
-    def get_timeframe_feature_counts(self) -> dict[str, int]:
-        """Get actual feature counts per timeframe (before padding)."""
-        counts = {}
-        for tf_idx, tf in enumerate(self._timeframes):
-            tf_data = self._timeframe_data[tf_idx]
-            variances = np.var(tf_data, axis=0)
-            counts[tf] = int(np.sum(variances > 1e-10))
-        return counts
 
     def __repr__(self) -> str:
         return (

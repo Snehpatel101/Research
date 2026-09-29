@@ -100,7 +100,6 @@ from src.config.global_config import (
     GlobalConfig,
     get_global_config,
     load_global_config,
-    set_global_config,
 )
 
 # =============================================================================
@@ -206,7 +205,6 @@ __all__ = [
     "GlobalConfig",
     "load_global_config",
     "get_global_config",
-    "set_global_config",
     # Timeframes
     "CANONICAL_TIMEFRAMES",
     "SUPPORTED_TIMEFRAMES",

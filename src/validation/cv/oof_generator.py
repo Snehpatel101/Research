@@ -290,23 +290,6 @@ class OOFGenerator:
                 n_classes=self.n_classes,
             )
 
-    def validate_oof_coverage(
-        self,
-        oof_predictions: dict[str, OOFPrediction],
-        original_index: pd.Index,
-    ) -> dict[str, Any]:
-        """
-        Validate that OOF predictions cover all samples.
-
-        Args:
-            oof_predictions: Dict of OOF predictions by model
-            original_index: Original DataFrame index
-
-        Returns:
-            Validation result dict with passed status and any issues
-        """
-        return self._validator.validate_coverage(oof_predictions, original_index)
-
     def build_stacking_dataset(
         self,
         oof_predictions: dict[str, OOFPrediction],

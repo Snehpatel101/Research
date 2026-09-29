@@ -10,9 +10,7 @@ Usage:
 """
 
 from src.core.common.horizon_config import (
-    # Horizon lists
     ACTIVE_HORIZONS,
-    # Purge/embargo configuration
     DEFAULT_TIMEFRAME_MINUTES,
     EMBARGO_MULTIPLIER,
     EMBARGO_TIME_MINUTES,
@@ -22,12 +20,9 @@ from src.core.common.horizon_config import (
     MIN_EMBARGO_BARS,
     PURGE_MULTIPLIER,
     SUPPORTED_HORIZONS,
-    # HorizonConfig dataclass
     HorizonConfig,
-    # Functions
     auto_scale_purge_embargo,
     compute_embargo_bars,
-    get_default_barrier_params_for_horizon,
     get_scaled_horizons,
     validate_horizons,
 )
@@ -43,18 +38,14 @@ from src.core.common.split_ratios import (
     validate_split_ratios,
 )
 from src.core.common.timeframes import (
-    # Core timeframe lists
     ALL_CANONICAL_TIMEFRAMES,
     CANONICAL_TIMEFRAMES,
     EXTENDED_TIMEFRAMES,
     FULL_9TF_LADDER,
     SUPPORTED_TIMEFRAMES,
-    # Mappings
     TIMEFRAME_ALIASES,
     TIMEFRAME_TO_FREQ,
     TIMEFRAME_TO_MINUTES,
-    # Functions
-    get_canonical_from_suffix,
     get_timeframe_minutes,
     get_timeframe_suffix,
     is_valid_timeframe,
@@ -83,7 +74,6 @@ __all__ = [
     "is_valid_timeframe",
     "validate_timeframe",
     "get_timeframe_suffix",
-    "get_canonical_from_suffix",
     # Split ratios
     "DEFAULT_SPLIT_RATIOS",
     "DEFAULT_TRAIN_RATIO",
@@ -109,5 +99,4 @@ __all__ = [
     "get_scaled_horizons",
     "auto_scale_purge_embargo",
     "compute_embargo_bars",
-    "get_default_barrier_params_for_horizon",
 ]

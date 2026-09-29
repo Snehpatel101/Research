@@ -188,37 +188,3 @@ def validate_feature_set_coverage(
         logger.warning(warning)
 
     return result
-
-
-def get_feature_set_columns(
-    df_columns: list[str],
-    feature_set_name: str,
-) -> list[str]:
-    """
-    Get the list of columns that match a feature set definition.
-
-    Convenience function that resolves a feature set name and returns
-    the columns from df_columns that match it.
-
-    Parameters
-    ----------
-    df_columns : list[str]
-        List of column names from the DataFrame
-    feature_set_name : str
-        Name or alias of the feature set (e.g., 'boosting_optimal', 'lstm')
-
-    Returns
-    -------
-    list[str]
-        Sorted list of columns that match the feature set
-
-    Raises
-    ------
-    ValueError
-        If feature_set_name is not recognized
-    """
-    canonical = resolve_feature_set_name(feature_set_name)
-    feature_set = FEATURE_SET_DEFINITIONS[canonical]
-    result = validate_feature_set_coverage(df_columns, feature_set, raise_on_empty=False)
-    matched_columns: list[str] = result["matched_columns"]
-    return matched_columns

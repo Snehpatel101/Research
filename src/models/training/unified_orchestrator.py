@@ -569,30 +569,6 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
     # _analyze_ensemble_diversity and _generate_financial_reports are provided
     # by FeatureSelectionMixin (feature_selection.py)
 
-    def get_trained_model(self, model_key: str) -> Any | None:
-        """
-        Get a trained model by key.
-
-        Args:
-            model_key: Key in format "model_name_hHORIZON" (e.g., "xgboost_h20")
-
-        Returns:
-            Trainer instance or None if not found
-        """
-        return self._trained_models.get(model_key)
-
-    def get_oof_predictions(self, model_key: str) -> OOFPrediction | None:
-        """
-        Get OOF predictions for a model.
-
-        Args:
-            model_key: Key in format "model_name_hHORIZON"
-
-        Returns:
-            OOFPrediction or None if not found
-        """
-        return self._oof_predictions.get(model_key)
-
 
 # =============================================================================
 # CONVENIENCE FUNCTIONS

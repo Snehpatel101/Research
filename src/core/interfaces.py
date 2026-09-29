@@ -190,35 +190,6 @@ class OOFResult:
     def n_classes(self) -> int:
         return int(self.probabilities.shape[1])
 
-    def align_to(self, target_indices: np.ndarray) -> OOFResult:
-        """
-        Align this OOF result to a target index set.
-
-        Returns a new OOFResult with predictions aligned to target_indices.
-        Missing indices will have NaN probabilities.
-        """
-        aligned_probs = np.full((len(target_indices), self.n_classes), np.nan)
-        aligned_preds = np.full(len(target_indices), -999, dtype=int)
-        aligned_folds = np.full(len(target_indices), -1, dtype=int)
-
-        # Find matching indices
-        idx_map = {idx: i for i, idx in enumerate(target_indices)}
-        for i, idx in enumerate(self.indices):
-            if idx in idx_map:
-                j = idx_map[idx]
-                aligned_probs[j] = self.probabilities[i]
-                aligned_preds[j] = self.predictions[i]
-                aligned_folds[j] = self.fold_ids[i]
-
-        return OOFResult(
-            predictions=aligned_preds,
-            probabilities=aligned_probs,
-            indices=target_indices,
-            fold_ids=aligned_folds,
-            model_name=self.model_name,
-            coverage=np.sum(~np.isnan(aligned_probs[:, 0])) / len(target_indices),
-        )
-
 
 # =============================================================================
 # PROTOCOLS - For structural typing without circular imports

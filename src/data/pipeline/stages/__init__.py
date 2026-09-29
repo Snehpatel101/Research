@@ -11,14 +11,11 @@ Stage 7: Data Splitting - Chronological train/val/test splits with purging and e
 Stage 7.5: Feature Scaling - Fit scalers on train, transform all splits
 Stage 7.6: Dataset Building - Create model-ready datasets
 Stage 8: Validation - Comprehensive data, label, and feature quality checks
-Stage 9: Report Generation - Comprehensive Phase 1 summary with charts
-Stage 10: Evaluation - Post-training model evaluation and metrics
+Stage 9: Report Generation - Markdown completion report
 """
 
-from .clean import DataCleaner
 from .clean.run import run_data_cleaning
 from .datasets.run import run_build_datasets
-from .evaluation.run import run_evaluation
 from .features import FeatureEngineer
 from .features.run import run_feature_engineering
 from .final_labels.run import run_final_labels
@@ -31,7 +28,6 @@ from .scaled_validation.run import run_scaled_validation
 from .scaling import (
     FeatureScaler,
     FeatureScalingConfig,
-    scale_splits,
 )
 from .scaling.run import run_feature_scaling
 from .splits.core import create_chronological_splits
@@ -40,16 +36,13 @@ from .validation.run import run_validation
 
 __all__ = [
     "DataIngestor",
-    "DataCleaner",
     "FeatureEngineer",
     "create_chronological_splits",
     "run_validation",
     "FeatureScalingConfig",
     "FeatureScaler",
-    "scale_splits",
     "run_data_cleaning",
     "run_build_datasets",
-    "run_evaluation",
     "run_feature_engineering",
     "run_final_labels",
     "run_ga_optimization",

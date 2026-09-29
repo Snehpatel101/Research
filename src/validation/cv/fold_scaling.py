@@ -168,41 +168,6 @@ class FoldAwareScaler:
             n_features=X_train.shape[1] if X_train.ndim > 1 else 1,
         )
 
-    def fit_transform_fold_df(
-        self,
-        X_train: pd.DataFrame,
-        X_val: pd.DataFrame,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        DataFrame-preserving version of fit_transform_fold.
-
-        Args:
-            X_train: Training DataFrame
-            X_val: Validation DataFrame
-
-        Returns:
-            Tuple of (X_train_scaled_df, X_val_scaled_df)
-        """
-        result = self.fit_transform_fold(X_train.values, X_val.values)
-
-        X_train_scaled_df = pd.DataFrame(
-            result.X_train_scaled,
-            columns=X_train.columns,
-            index=X_train.index,
-        )
-        X_val_scaled_df = pd.DataFrame(
-            result.X_val_scaled,
-            columns=X_val.columns,
-            index=X_val.index,
-        )
-
-        return X_train_scaled_df, X_val_scaled_df
-
-    @property
-    def current_scaler(self) -> RobustScaler | StandardScaler | None:
-        """Get the most recently fit scaler (for inspection/serialization)."""
-        return self._current_scaler
-
 
 def scale_cv_fold(
     X: pd.DataFrame | np.ndarray,

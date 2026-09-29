@@ -12,50 +12,6 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def audit_nan_columns(df: pd.DataFrame, nan_threshold: float = 0.9) -> dict:
-    """
-    Audit NaN values per column and categorize by severity.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame to audit
-    nan_threshold : float, default 0.9
-        Threshold for "high NaN" categorization
-
-    Returns
-    -------
-    Dict
-        Audit results with column categorizations
-    """
-    rows = len(df)
-    if rows == 0:
-        return {
-            "total_rows": 0,
-            "total_cols": len(df.columns),
-            "all_nan_cols": [],
-            "high_nan_cols": [],
-            "moderate_nan_cols": [],
-            "nan_rates": {},
-        }
-
-    nan_counts = df.isna().sum()
-    nan_rates = nan_counts / rows
-
-    all_nan_cols = nan_rates[nan_rates == 1.0].index.tolist()
-    high_nan_cols = nan_rates[(nan_rates > nan_threshold) & (nan_rates < 1.0)].index.tolist()
-    moderate_nan_cols = nan_rates[(nan_rates > 0.5) & (nan_rates <= nan_threshold)].index.tolist()
-
-    return {
-        "total_rows": rows,
-        "total_cols": len(df.columns),
-        "all_nan_cols": all_nan_cols,
-        "high_nan_cols": high_nan_cols,
-        "moderate_nan_cols": moderate_nan_cols,
-        "nan_rates": nan_rates.to_dict(),
-    }
-
-
 def clean_nan_columns(
     df: pd.DataFrame,
     symbol: str,

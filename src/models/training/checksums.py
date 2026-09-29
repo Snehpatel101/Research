@@ -63,8 +63,7 @@ class ArtifactIntegrityManager:
         >>> manager.save_checksums()
         ...
         >>> # Later, verify integrity
-        >>> results = manager.verify_all()
-        >>> assert all(results.values()), "Some artifacts failed verification!"
+        >>> assert manager.verify_artifact(model_path), "Artifact failed verification!"
     """
 
     # Files to automatically checksum
@@ -226,28 +225,6 @@ class ArtifactIntegrityManager:
         logger.debug(f"Verified: {rel_path}")
         return True
 
-    def verify_all(self) -> dict[str, bool]:
-        """
-        Verify all registered artifacts.
-
-        Returns:
-            Dict mapping file paths to verification status
-        """
-        results = {}
-        for rel_path in self._checksums:
-            file_path = self.artifacts_dir / rel_path
-            results[rel_path] = self.verify_artifact(file_path)
-
-        n_passed = sum(results.values())
-        n_total = len(results)
-
-        if n_passed == n_total:
-            logger.info(f"All {n_total} artifacts verified successfully")
-        else:
-            logger.error(f"Verification failed: {n_passed}/{n_total} artifacts passed")
-
-        return results
-
     def save_checksums(self) -> Path:
         """
         Save checksums to JSON file.
@@ -290,60 +267,12 @@ class ArtifactIntegrityManager:
         logger.debug(f"Loaded {len(checksums)} checksums from {self.checksums_file}")
         return checksums
 
-    def get_artifact_info(self, file_path: Path) -> ArtifactChecksum | None:
-        """
-        Get checksum info for an artifact.
-
-        Args:
-            file_path: Path to artifact
-
-        Returns:
-            ArtifactChecksum if registered, None otherwise
-        """
-        try:
-            rel_path = str(file_path.relative_to(self.artifacts_dir))
-        except ValueError:
-            rel_path = str(file_path.absolute())
-
-        return self._checksums.get(rel_path)
-
-    def list_artifacts(self) -> list[ArtifactChecksum]:
-        """
-        List all registered artifacts.
-
-        Returns:
-            List of ArtifactChecksum objects
-        """
-        return list(self._checksums.values())
-
     def clear(self) -> None:
         """Clear all registered checksums."""
         self._checksums.clear()
         if self.checksums_file.exists():
             self.checksums_file.unlink()
         logger.debug("Cleared all checksums")
-
-    @staticmethod
-    def quick_verify(file_path: Path, expected_sha256: str) -> bool:
-        """
-        Quick verification without manager instance.
-
-        Args:
-            file_path: Path to file
-            expected_sha256: Expected SHA256 hash
-
-        Returns:
-            True if checksum matches
-        """
-        if not file_path.exists():
-            return False
-
-        sha256_hash = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                sha256_hash.update(chunk)
-
-        return sha256_hash.hexdigest() == expected_sha256
 
 
 def compute_file_checksum(file_path: Path) -> str:

@@ -37,7 +37,10 @@ from .schemas import (
     register_stage_schema,
     validate_stage_output,
 )
-from .stage_registry import PipelineStage, get_stage_definitions, get_stage_order
+from .stage_registry import (
+    PipelineStage,
+    get_stage_definitions,
+)
 from .utils import StageResult, StageStatus
 
 __all__ = [
@@ -47,7 +50,6 @@ __all__ = [
     "StageResult",
     "PipelineStage",
     "get_stage_definitions",
-    "get_stage_order",
     # Phase 7B: Schema validation
     "StageSchema",
     "StageValidationError",

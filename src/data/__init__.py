@@ -76,7 +76,6 @@ from .pipeline import (
     StageResult,
     StageStatus,
     get_stage_definitions,
-    get_stage_order,
 )
 
 # Re-export from feature_store (now in data/store)
@@ -109,7 +108,6 @@ __all__ = [
     "StageResult",
     "StageStatus",
     "get_stage_definitions",
-    "get_stage_order",
     # Adapters
     "AdapterRegistry",
     "get_adapter",

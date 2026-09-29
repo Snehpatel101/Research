@@ -24,7 +24,6 @@ class ModelQuery:
             ModelQuery()
             .model_name("xgboost")
             .horizon(20)
-            .min_metric("val_f1", 0.5)
             .sort_by("val_f1", descending=True)
             .limit(10)
         )
@@ -67,16 +66,6 @@ class ModelQuery:
         self.feature_sets.extend(sets)
         return self
 
-    def min_metric(self, metric: str, value: float) -> ModelQuery:
-        """Filter for minimum metric value."""
-        self.min_metrics[metric] = value
-        return self
-
-    def max_metric(self, metric: str, value: float) -> ModelQuery:
-        """Filter for maximum metric value."""
-        self.max_metrics[metric] = value
-        return self
-
     def after(self, date: datetime | str) -> ModelQuery:
         """Filter for models trained after date."""
         if isinstance(date, str):
@@ -89,11 +78,6 @@ class ModelQuery:
         if isinstance(date, str):
             date = datetime.fromisoformat(date)
         self.date_before = date
-        return self
-
-    def with_tag(self, key: str, value: str) -> ModelQuery:
-        """Filter by tag key-value pair."""
-        self.tags[key] = value
         return self
 
     def sort_by(self, metric: str, descending: bool = True) -> ModelQuery:

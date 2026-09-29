@@ -43,10 +43,11 @@ class MLflowTracker(ExperimentTracker):
             experiment_name="my_experiment"
         )
         tracker = MLflowTracker(config)
-        with tracker.run_context("training_run") as run_id:
-            tracker.log_params({"lr": 0.001})
-            tracker.log_metrics({"loss": 0.5}, step=1)
-            tracker.log_artifact(model_path, "model")
+        tracker.start_run("training_run")
+        tracker.log_params({"lr": 0.001})
+        tracker.log_metrics({"loss": 0.5}, step=1)
+        tracker.log_artifact(model_path, "model")
+        tracker.end_run()
     """
 
     def __init__(self, config: TrackerConfig) -> None:
@@ -260,56 +261,6 @@ class MLflowTracker(ExperimentTracker):
         except Exception as e:
             logger.warning(f"Failed to log artifact {path}: {e}")
 
-    def log_model(
-        self,
-        model_path: Path | str,
-        model_name: str | None = None,
-    ) -> None:
-        """
-        Log a trained model to MLflow.
-
-        Args:
-            model_path: Path to model file or directory
-            model_name: Optional model name for registry
-        """
-        if not self._is_active:
-            logger.warning("No active run, model not logged")
-            return
-
-        model_path = Path(model_path)
-        if not model_path.exists():
-            logger.warning(f"Model path does not exist: {model_path}")
-            return
-
-        # Log as artifact with "model" type
-        self.log_artifact(model_path, artifact_type="model")
-
-        # Optionally register in model registry
-        if model_name:
-            try:
-                artifact_uri = f"runs:/{self._run_id}/model"
-                mlflow.register_model(artifact_uri, model_name)
-                logger.info(f"Registered model: {model_name}")
-            except Exception as e:
-                logger.warning(f"Failed to register model {model_name}: {e}")
-
-    def set_tags(self, tags: dict[str, str]) -> None:
-        """
-        Set tags on the current run.
-
-        Args:
-            tags: Dictionary of tag name -> value
-        """
-        if not self._is_active:
-            logger.warning("No active run, tags not set")
-            return
-
-        for key, value in tags.items():
-            try:
-                mlflow.set_tag(key, str(value))
-            except Exception as e:
-                logger.debug(f"Failed to set tag {key}: {e}")
-
     def log_figure(self, figure: Any, filename: str) -> None:
         """
         Log a matplotlib/plotly figure.
@@ -326,14 +277,6 @@ class MLflowTracker(ExperimentTracker):
             mlflow.log_figure(figure, filename)
         except Exception as e:
             logger.warning(f"Failed to log figure {filename}: {e}")
-
-    def get_run_url(self) -> str | None:
-        """Get URL to current run in MLflow UI."""
-        if not self._run_id:
-            return None
-
-        tracking_uri = mlflow.get_tracking_uri()
-        return f"{tracking_uri}/#/experiments/{self._experiment_id}/runs/{self._run_id}"
 
 
 __all__ = ["MLflowTracker", "MLFLOW_AVAILABLE"]

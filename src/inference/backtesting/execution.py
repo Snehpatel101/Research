@@ -99,45 +99,8 @@ class MarketHoursFilter:
             self._calendar = CMECalendar()
         return self._calendar
 
-    def is_tradeable_time(self, timestamp: datetime) -> bool:
-        """
-        Check if timestamp is during liquid trading hours.
-
-        Filters:
-        - CME holidays
-        - Weekend days
-        - Outside NY session (9:30 AM - 4:00 PM ET)
-
-        Args:
-            timestamp: UTC or timezone-aware datetime
-
-        Returns:
-            True if timestamp is tradeable
-        """
-        if not self.enable_market_hours_filter:
-            return True
-
-        # Convert to Eastern Time if needed
-        if timestamp.tzinfo is None:
-            # Assume UTC if no timezone
-            timestamp = pytz.UTC.localize(timestamp)
-
-        et_time = timestamp.astimezone(ET_TZ)
-
-        # Check weekend
-        if et_time.weekday() >= 5:  # Saturday = 5, Sunday = 6
-            return False
-
-        # Check holidays
-        if self.calendar.is_holiday(et_time):
-            return False
-
-        # Check if within liquid session hours (per-contract)
-        current_time = et_time.time()
-        return self._session_start <= current_time < self._session_end
-
     def tradeable_mask(self, timestamps: pd.DatetimeIndex) -> np.ndarray:
-        """Vectorized ``is_tradeable_time`` over a whole bar index."""
+        """Boolean mask of bars inside the tradeable session window."""
         n = len(timestamps)
         if not self.enable_market_hours_filter:
             return np.ones(n, dtype=bool)
@@ -189,29 +152,6 @@ class MarketHoursFilter:
             return signal_price + adverse_ticks * tick_size
         else:  # Short
             return signal_price - adverse_ticks * tick_size
-
-    def calculate_max_position_size(
-        self,
-        avg_volume: float,
-        max_participation: float | None = None,
-    ) -> int:
-        """
-        Limit position size to fraction of market volume.
-
-        Prevents excessive market impact by limiting participation rate.
-
-        Args:
-            avg_volume: Rolling average volume (contracts)
-            max_participation: Max fraction of volume (overrides constructor default)
-
-        Returns:
-            Maximum contracts tradeable without excessive market impact
-        """
-        participation = (
-            max_participation if max_participation is not None else self.max_participation
-        )
-        max_contracts = int(avg_volume * participation)
-        return max(1, max_contracts)  # At least 1 contract
 
     def _get_tick_size(self) -> float:
         """Get the tick size (minimum price increment, price units) for the contract."""

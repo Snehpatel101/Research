@@ -34,11 +34,7 @@ from .data_contract import (
     VALID_LABELS,
     OHLCVValidationSchema,
     filter_invalid_labels,
-    get_dataset_fingerprint,
-    summarize_label_distribution,
-    validate_feature_lookahead,
     validate_labels,
-    validate_ohlcv_schema,
 )
 from .features import check_feature_quality
 from .integrity import check_data_integrity
@@ -58,12 +54,8 @@ __all__ = [
     "check_feature_normalization",
     # OHLCV validation schema (NOT the same as core DataContract)
     "OHLCVValidationSchema",
-    "validate_ohlcv_schema",
     "validate_labels",
     "filter_invalid_labels",
-    "get_dataset_fingerprint",
-    "validate_feature_lookahead",
-    "summarize_label_distribution",
     # Feature selection
     "FeatureSelectionResult",
     # Phase 4A, 4B: Validation exceptions

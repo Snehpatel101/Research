@@ -1,5 +1,5 @@
 """
-UniversalInferencePipeline - THE single entry point for all inference.
+UniversalInferencePipeline - multi-bundle inference over deployed bundles.
 
 Wraps ModelBundle and EnsembleBundle into a unified interface that handles:
 - Single model inference (predict, predict_from_raw)
@@ -108,7 +108,7 @@ class UniversalPredictionResult:
 
 class UniversalInferencePipeline:
     """
-    THE single entry point for all inference in ML Factory.
+    Multi-bundle inference (per-model and ensemble) over deployed bundles.
 
     Orchestrates ModelBundle and EnsembleBundle into a clean, unified
     interface.  Construction is via class methods; the ``__init__`` is

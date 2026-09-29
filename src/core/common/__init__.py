@@ -13,7 +13,6 @@ from .horizon_config import (
     SUPPORTED_HORIZONS,
     HorizonConfig,
     auto_scale_purge_embargo,
-    get_default_barrier_params_for_horizon,
     get_scaled_horizons,
     validate_horizons,
 )
@@ -34,7 +33,6 @@ from .timeframes import (
     TIMEFRAME_ALIASES,
     TIMEFRAME_TO_FREQ,
     TIMEFRAME_TO_MINUTES,
-    get_canonical_from_suffix,
     get_timeframe_minutes,
     get_timeframe_suffix,
     is_valid_timeframe,
@@ -58,7 +56,6 @@ __all__ = [
     "validate_horizons",
     "get_scaled_horizons",
     "auto_scale_purge_embargo",
-    "get_default_barrier_params_for_horizon",
     # split_ratios (CFG-010)
     "DEFAULT_TRAIN_RATIO",
     "DEFAULT_VAL_RATIO",
@@ -74,7 +71,6 @@ __all__ = [
     "TIMEFRAME_ALIASES",
     "TIMEFRAME_TO_FREQ",
     "TIMEFRAME_TO_MINUTES",
-    "get_canonical_from_suffix",
     "get_timeframe_minutes",
     "get_timeframe_suffix",
     "is_valid_timeframe",

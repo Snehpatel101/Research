@@ -123,22 +123,6 @@ def create_failed_result(
     )
 
 
-def log_stage_header(stage_num: int, stage_name: str, logger: logging.Logger) -> None:
-    """Log a formatted stage header."""
-    logger.info("=" * 70)
-    logger.info(f"STAGE {stage_num}: {stage_name}")
-    logger.info("=" * 70)
-
-
-def log_stage_summary(title: str, items: dict[str, Any], logger: logging.Logger) -> None:
-    """Log a formatted summary section."""
-    logger.info("\n" + "-" * 50)
-    logger.info(title)
-    logger.info("-" * 50)
-    for key, value in items.items():
-        logger.info(f"  {key}: {value}")
-
-
 # =============================================================================
 # CONFIG SNAPSHOT UTILITIES (DATA-004)
 # =============================================================================
@@ -165,71 +149,6 @@ CONFIG_SNAPSHOT_PATH_KEYS = {
     "model_path",
     "checkpoint_dir",
 }
-
-
-def capture_config_snapshot(config: Any, include_paths: bool = False) -> dict[str, Any]:
-    """
-    Safely serialize a config object to a dictionary for manifest snapshots.
-
-    Excludes sensitive data like secrets/credentials and optionally sanitizes
-    absolute paths to prevent environment-specific information leaking.
-
-    Args:
-        config: Configuration object (dataclass, dict, or object with attributes)
-        include_paths: If True, include path values (as basenames only).
-            If False, path keys are excluded entirely.
-
-    Returns:
-        Dictionary with safe config values for manifest storage.
-
-    Example:
-        >>> from src.data.pipeline.utils import capture_config_snapshot
-        >>> snapshot = capture_config_snapshot(pipeline_config)
-        >>> manifest.set_config_snapshot(snapshot)
-
-    Note:
-        This function is designed to be defensive - it catches and logs
-        serialization errors rather than failing.
-    """
-    snapshot: dict[str, Any] = {}
-
-    try:
-        # Convert config to dict if needed
-        if hasattr(config, "__dict__"):
-            config_dict = vars(config)
-        elif hasattr(config, "to_dict"):
-            config_dict = config.to_dict()
-        elif isinstance(config, dict):
-            config_dict = config
-        else:
-            logger.warning(f"Unknown config type: {type(config)}, returning empty snapshot")
-            return {}
-
-        for key, value in config_dict.items():
-            # Skip private attributes
-            if key.startswith("_"):
-                continue
-
-            # Skip excluded keys (secrets, credentials)
-            key_lower = key.lower()
-            if any(excluded in key_lower for excluded in CONFIG_SNAPSHOT_EXCLUDE_KEYS):
-                continue
-
-            # Handle path keys
-            if key in CONFIG_SNAPSHOT_PATH_KEYS or key_lower.endswith("_path"):
-                if include_paths and value is not None:
-                    # Include only basename to avoid absolute paths
-                    snapshot[key] = Path(value).name if value else None
-                continue
-
-            # Serialize the value
-            snapshot[key] = _serialize_config_value(value)
-
-    except Exception as e:
-        logger.warning(f"Error capturing config snapshot: {e}")
-        return {"error": str(e)}
-
-    return snapshot
 
 
 def _serialize_config_value(value: Any) -> Any:

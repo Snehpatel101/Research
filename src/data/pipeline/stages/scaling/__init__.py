@@ -14,14 +14,8 @@ Key Features:
 - Integrates with stage8_validate.py
 
 Usage:
-    from src.data.pipeline.stages.scaling import FeatureScaler, scale_splits
+    from src.data.pipeline.stages.scaling import FeatureScaler
 
-    # Simple usage with scale_splits convenience function
-    train_scaled, val_scaled, test_scaled, scaler = scale_splits(
-        train_df, val_df, test_df, feature_cols
-    )
-
-    # Or use FeatureScaler directly for more control
     scaler = FeatureScaler(scaler_type='robust')
     train_scaled = scaler.fit_transform(train_df, feature_cols)
 
@@ -41,11 +35,6 @@ Updated: 2025-12-20 - Refactored into modular package
 """
 
 # Core classes and configuration
-# Convenience functions
-from .convenience import (
-    scale_splits,
-    scale_train_val_test,
-)
 from .core import (
     DEFAULT_SCALING_STRATEGY,
     FEATURE_PATTERNS,
@@ -53,7 +42,6 @@ from .core import (
     FeatureScalingConfig,
     ScalerConfig,
     ScalerType,
-    ScalingReport,
     ScalingStatistics,
 )
 
@@ -71,10 +59,8 @@ from .scalers import (
 
 # Validation functions
 from .validators import (
-    add_scaling_validation_to_stage8,
     validate_no_leakage,
     validate_scaling,
-    validate_scaling_for_splits,
 )
 
 __all__ = [
@@ -84,7 +70,6 @@ __all__ = [
     "FeatureCategory",
     "FeatureScalingConfig",
     "ScalingStatistics",
-    "ScalingReport",
     "FEATURE_PATTERNS",
     "DEFAULT_SCALING_STRATEGY",
     # Utilities
@@ -98,9 +83,4 @@ __all__ = [
     # Validation
     "validate_scaling",
     "validate_no_leakage",
-    "validate_scaling_for_splits",
-    "add_scaling_validation_to_stage8",
-    # Convenience
-    "scale_splits",
-    "scale_train_val_test",
 ]

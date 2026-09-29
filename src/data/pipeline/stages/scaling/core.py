@@ -293,21 +293,3 @@ class ScalingStatistics:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ScalingStatistics":
         return cls(**d)
-
-
-@dataclass
-class ScalingReport:
-    """Complete scaling report."""
-
-    timestamp: str
-    n_features: int
-    n_samples_train: int
-    scaler_type: str
-    features_by_category: dict[str, list[str]]
-    features_by_scaler: dict[str, list[str]]
-    statistics: dict[str, dict[str, Any]]
-    warnings: list[str]
-    errors: list[str]
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)

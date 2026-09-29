@@ -18,7 +18,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -49,19 +49,6 @@ try:
     from src.models.config import MODEL_DATA_REQUIREMENTS
 except ImportError:
     MODEL_DATA_REQUIREMENTS: dict[str, Any] | None = None  # type: ignore[no-redef]
-
-
-class _TrainerProtocol(Protocol):
-    """Protocol defining the interface expected by TrainerArtifactsMixin."""
-
-    config: Any  # TrainerConfig
-    model: Any  # Model instance
-    run_id: str
-    output_path: Path
-    feature_selector: Any | None
-    calibrator: Any | None
-
-    def _is_feature_selection_enabled(self) -> bool: ...
 
 
 if TYPE_CHECKING:

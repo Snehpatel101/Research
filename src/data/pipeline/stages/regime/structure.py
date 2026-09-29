@@ -267,26 +267,6 @@ class MarketStructureDetector(RegimeDetector):
 
         return regimes
 
-    def detect_with_hurst(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-        """
-        Detect regime and return Hurst values for debugging.
-
-        Args:
-            df: DataFrame with close prices
-
-        Returns:
-            Tuple of (regimes, hurst_values)
-        """
-        self.validate_input(df)
-
-        prices = df["close"].values
-        hurst = calculate_rolling_hurst(prices, self.lookback, self.min_lag, self.max_lag)
-
-        regimes = self.detect(df)
-        hurst_series = pd.Series(hurst, index=df.index)
-
-        return regimes, hurst_series
-
 
 __all__ = [
     "MarketStructureDetector",

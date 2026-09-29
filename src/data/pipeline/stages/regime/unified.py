@@ -10,7 +10,6 @@ Other regime modules in the codebase:
     - ``src/models/training/regime_detector.py``         (regime-aware training mode;
       also used at inference by ``src/inference/regime_bundle.py``)
     - ``src/models/training/modes/regime_aware.py``      (mode-level wrapper)
-    - ``src/data/pipeline/stages/regime/hmm.py``         (HMM-based, experimental)
 
 Usage::
 

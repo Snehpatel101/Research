@@ -44,7 +44,6 @@ class FeatureSelectionManager:
     Example:
         >>> manager = FeatureSelectionManager.from_model_family("boosting")
         >>> result = manager.select_features(X_train_df, y_train, sample_weights)
-        >>> X_train_selected = manager.apply_selection(X_train_df)
         >>> manager.save(model_path / "feature_selection.json")
     """
 
@@ -297,139 +296,6 @@ class FeatureSelectionManager:
 
         return self._result
 
-    def select_features_single_fold(
-        self,
-        X_train: pd.DataFrame,
-        y_train: pd.Series | np.ndarray,
-        sample_weights: pd.Series | np.ndarray | None = None,
-    ) -> PersistedFeatureSelection:
-        """
-        Run feature selection on a single training fold.
-
-        Faster alternative to walk-forward selection when CV-based
-        stability analysis is not needed.
-
-        Args:
-            X_train: Training feature DataFrame
-            y_train: Training labels
-            sample_weights: Optional sample weights
-
-        Returns:
-            PersistedFeatureSelection with selected features
-        """
-        if not self.config.enabled:
-            self._all_features = list(X_train.columns)
-            self._result = PersistedFeatureSelection.passthrough(self._all_features)
-            return self._result
-
-        if not isinstance(X_train, pd.DataFrame):
-            raise ValueError("X_train must be a pandas DataFrame with named columns")
-
-        self._all_features = list(X_train.columns)
-        n_features_original = len(self._all_features)
-
-        n_to_select = self.config.n_features
-        if n_to_select <= 0 or n_to_select >= n_features_original:
-            self._result = PersistedFeatureSelection.passthrough(self._all_features)
-            return self._result
-
-        logger.info(
-            f"Running single-fold feature selection: "
-            f"n_features={n_to_select}, method={self.config.method}"
-        )
-
-        # Initialize selector
-        self._selector = WalkForwardFeatureSelector(
-            n_features_to_select=n_to_select,
-            selection_method=self.config.method,
-            n_estimators=self.config.n_estimators,
-            min_feature_frequency=1.0,  # Not used for single fold
-            use_clustered_importance=self.config.use_clustered_importance,
-            max_clusters=self.config.max_clusters,
-            random_state=self.config.random_state,
-        )
-
-        # Convert y to Series if needed
-        y_series = pd.Series(y_train) if isinstance(y_train, np.ndarray) else y_train
-        w_series = (
-            pd.Series(sample_weights) if isinstance(sample_weights, np.ndarray) else sample_weights
-        )
-
-        # Compute importance
-        importance = self._selector._compute_importance(X_train, y_series, w_series)
-
-        # Select top features
-        selected_features = importance.nlargest(n_to_select).index.tolist()
-
-        # Build result
-        feature_indices = {f: self._all_features.index(f) for f in selected_features}
-
-        self._result = PersistedFeatureSelection(
-            selected_features=selected_features,
-            feature_indices=feature_indices,
-            selection_method=self.config.method,
-            n_features_original=n_features_original,
-            n_features_selected=len(selected_features),
-            stability_scores=dict.fromkeys(selected_features, 1.0),
-            importance_scores=importance.to_dict(),
-            metadata={
-                "single_fold": True,
-                "model_family": self.config.model_family,
-            },
-        )
-
-        logger.info(
-            f"Single-fold feature selection complete: "
-            f"{self._result.n_features_selected} features selected"
-        )
-
-        return self._result
-
-    def apply_selection(
-        self,
-        X: pd.DataFrame | np.ndarray,
-        feature_names: list[str] | None = None,
-    ) -> np.ndarray:
-        """
-        Apply feature selection to data.
-
-        Args:
-            X: Input data (DataFrame or ndarray)
-            feature_names: Feature names if X is ndarray (required if ndarray)
-
-        Returns:
-            numpy array with selected features only
-
-        Raises:
-            RuntimeError: If feature selection has not been run
-            ValueError: If feature names don't match
-        """
-        if self._result is None:
-            raise RuntimeError("Feature selection has not been run. Call select_features() first.")
-
-        # Get feature names
-        if isinstance(X, pd.DataFrame):
-            all_features = list(X.columns)
-            X_values = X.values
-        else:
-            if feature_names is None:
-                raise ValueError("feature_names must be provided when X is a numpy array")
-            all_features = feature_names
-            X_values = X
-
-        # Get column indices for selected features
-        indices = self._result.get_column_indices(all_features)
-
-        if not indices:
-            raise ValueError(
-                "No selected features found in input data. "
-                f"Selected: {self._result.selected_features[:5]}..., "
-                f"Available: {all_features[:5]}..."
-            )
-
-        result: np.ndarray = X_values[:, indices]
-        return result
-
     def apply_selection_df(self, X: pd.DataFrame) -> pd.DataFrame:
         """
         Apply feature selection and return a DataFrame.
@@ -472,21 +338,6 @@ class FeatureSelectionManager:
             f"Loaded feature selection from {path}: " f"{self._result.n_features_selected} features"
         )
         return self._result
-
-    @classmethod
-    def load_from_path(cls, path: Path) -> FeatureSelectionManager:
-        """
-        Create manager by loading from saved file.
-
-        Args:
-            path: Path to saved feature selection JSON
-
-        Returns:
-            FeatureSelectionManager with loaded result
-        """
-        manager = cls()
-        manager.load(path)
-        return manager
 
     def get_feature_report(self) -> dict[str, Any]:
         """

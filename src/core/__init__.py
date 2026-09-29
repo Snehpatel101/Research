@@ -86,7 +86,6 @@ from src.core.common import (
     TIMEFRAME_TO_MINUTES,
     HorizonConfig,
     auto_scale_purge_embargo,
-    get_default_barrier_params_for_horizon,
     get_scaled_horizons,
     get_timeframe_minutes,
     is_valid_timeframe,
@@ -199,8 +198,6 @@ from src.core.contracts import (
 # ABSORBED: src/coordination - Temporal alignment utilities
 # =============================================================================
 from src.core.coordination import (
-    TimeframeCoordinator,
-    TimeframeData,
     align_to_anchor,
     apply_mtf_lag,
     compute_sequence_offset,
@@ -568,7 +565,6 @@ __all__ = [
     "validate_horizons",
     "get_scaled_horizons",
     "auto_scale_purge_embargo",
-    "get_default_barrier_params_for_horizon",
     "ALL_CANONICAL_TIMEFRAMES",
     "EXTENDED_TIMEFRAMES",
     "FULL_9TF_LADDER",
@@ -616,8 +612,6 @@ __all__ = [
     "apply_mtf_lag",
     "compute_sequence_offset",
     "validate_timestamp_alignment",
-    "TimeframeCoordinator",
-    "TimeframeData",
     # =========================================================================
     # EXCEPTIONS - Unified exception hierarchy (Phase 8B)
     # =========================================================================

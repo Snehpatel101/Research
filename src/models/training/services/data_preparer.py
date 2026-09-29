@@ -92,10 +92,5 @@ class DataPreparer:
         prepared = self._data_prep.prepare(df=df, model_name=model_name)
         return prepared.feature_names
 
-    @property
-    def data_prep(self) -> UnifiedDataPreparation:
-        """Get underlying UnifiedDataPreparation instance."""
-        return self._data_prep
-
 
 __all__ = ["DataPreparer"]

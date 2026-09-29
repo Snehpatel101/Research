@@ -124,17 +124,6 @@ class RegimeDetectorConfig:
         if self.lookback < 10:
             raise ValueError(f"lookback must be >= 10, got {self.lookback}")
 
-    @classmethod
-    def from_pipeline_config(cls, config: PipelineConfig) -> RegimeDetectorConfig:
-        """Create from PipelineConfig."""
-        return cls(
-            method=config.regime_detection_method,
-            lookback=config.regime_lookback,
-            n_regimes=config.n_regimes,
-            volatility_window=config.regime_volatility_window,
-            adx_threshold=config.regime_adx_threshold,
-        )
-
 
 @dataclass
 class RegimeResult:
@@ -513,32 +502,6 @@ class RegimeDetector:
             raise ValueError("DataFrame must have high, low, and close columns")
 
         return high, low, close
-
-    def get_regime_masks(self, df: pd.DataFrame) -> dict[str, pd.Series]:
-        """
-        Get boolean masks for each regime.
-
-        Args:
-            df: DataFrame to detect regimes in
-
-        Returns:
-            Dict mapping regime label to boolean mask
-        """
-        result = self.detect(df)
-        return {label: result.get_mask(label) for label in result.get_regime_labels()}
-
-    def split_by_regime(self, df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-        """
-        Split DataFrame by regime.
-
-        Args:
-            df: DataFrame to split
-
-        Returns:
-            Dict mapping regime label to DataFrame subset
-        """
-        masks = self.get_regime_masks(df)
-        return {label: df[mask].copy() for label, mask in masks.items()}
 
 
 # =============================================================================

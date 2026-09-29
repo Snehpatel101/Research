@@ -265,35 +265,12 @@ class VersionManager:
 
         return info
 
-    def get_version(self, version: SemanticVersion | str) -> VersionInfo | None:
-        """
-        Get version info.
-
-        Parameters
-        ----------
-        version : SemanticVersion or str
-            Version to look up
-
-        Returns
-        -------
-        VersionInfo or None
-            Version info if found
-        """
-        if isinstance(version, str):
-            version = SemanticVersion.parse(version)
-        return self._versions.get(version)
-
     @property
     def latest_version(self) -> SemanticVersion | None:
         """Get the latest registered version."""
         if not self._ordered_versions:
             return None
         return self._ordered_versions[-1]
-
-    @property
-    def all_versions(self) -> list[SemanticVersion]:
-        """Get all versions in sorted order."""
-        return list(self._ordered_versions)
 
     def suggest_version(
         self,

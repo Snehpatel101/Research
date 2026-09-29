@@ -161,33 +161,6 @@ class FeatureSelectionResult:
 
     # === OHLCV/Stability Analysis Methods ===
 
-    def get_category_breakdown(self) -> dict[str, int]:
-        """
-        Get count of selected features per category.
-
-        Requires OHLCV category utilities from feature_selection package.
-        """
-        try:
-            from src.optimization.feature_selection.ohlcv_selector import get_feature_categories
-
-            return {
-                cat: len(feats)
-                for cat, feats in get_feature_categories(self.selected_features).items()
-            }
-        except ImportError:
-            return {}
-
-    def get_top_features(self, n: int = 10) -> list[tuple[str, float]]:
-        """Get top N features by importance."""
-        if not self.feature_importances:
-            return []
-        sorted_features = sorted(
-            self.feature_importances.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        return sorted_features[:n]
-
 
 @dataclass
 class PersistedFeatureSelection:
@@ -227,42 +200,11 @@ class PersistedFeatureSelection:
             )
 
     @property
-    def is_empty(self) -> bool:
-        """Check if no features were selected."""
-        return len(self.selected_features) == 0
-
-    @property
     def reduction_ratio(self) -> float:
         """Calculate feature reduction ratio (0 = no reduction, 1 = all removed)."""
         if self.n_features_original == 0:
             return 0.0
         return 1 - (self.n_features_selected / self.n_features_original)
-
-    def get_feature_mask(self, all_features: list[str]) -> list[bool]:
-        """
-        Create boolean mask for selected features.
-
-        Args:
-            all_features: Complete list of feature names
-
-        Returns:
-            Boolean mask where True indicates selected features
-        """
-        selected_set = set(self.selected_features)
-        return [f in selected_set for f in all_features]
-
-    def get_column_indices(self, all_features: list[str]) -> list[int]:
-        """
-        Get column indices for selected features.
-
-        Args:
-            all_features: Complete list of feature names
-
-        Returns:
-            List of integer indices for selected features
-        """
-        feature_to_idx = {f: i for i, f in enumerate(all_features)}
-        return [feature_to_idx[f] for f in self.selected_features if f in feature_to_idx]
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
