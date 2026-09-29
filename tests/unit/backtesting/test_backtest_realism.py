@@ -318,12 +318,14 @@ class TestBarrierParity:
         assert cost_in_atr == pytest.approx(expected, rel=1e-12)
 
     def test_backtest_derives_same_cost_term(self, labeled_walk):
-        """barrier_cost_in_atr=None -> the labeler's helper on the price data."""
+        """barrier_cost_in_atr=None -> the labeler's helpers, causally (expanding median ATR)."""
         prices, _labels, _atr, cost_in_atr = labeled_walk
         bt = _parity_backtester(prices, np.zeros(len(prices)), None)
-        assert bt._barrier_cost_in_atr > 0
-        # Same helper; medians differ only by the ATR warm-up bars
-        assert bt._barrier_cost_in_atr == pytest.approx(cost_in_atr, rel=0.02)
+        result = bt.run()
+        derived = result.stats["barrier_cost_in_atr"]
+        assert derived > 0
+        # Same helper; the final expanding median approximates the global one
+        assert derived == pytest.approx(cost_in_atr, rel=0.02)
 
     @pytest.mark.parametrize("bar", [60, 150, 333])
     def test_stop_and_tp_equal_label_barriers(self, labeled_walk, bar):

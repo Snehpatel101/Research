@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -96,19 +95,35 @@ def test_equity_up_to_t_ignores_appended_future_bars(
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Backtester derives barrier_cost_in_atr (barrier_cost_in_atr=None) from the MEDIAN ATR "
-        "of the WHOLE price series, so appending bars shifts the stop/take-profit distances of "
-        "earlier trades. Mild global-calibration lookahead in the default; the factory passes "
-        "the labeling run's cost explicitly and is unaffected."
-    ),
+@settings(max_examples=15, deadline=None)
+@given(
+    seed=st.integers(0, 2**32 - 1),
+    n_total=st.integers(80, 200),
+    cut_frac=st.floats(0.3, 0.9),
+    vol=st.sampled_from([5e-4, 2e-3, 8e-3]),
+    signal_prob=st.floats(0.1, 0.6),
 )
-def test_derived_barrier_cost_ignores_appended_future_bars() -> None:
-    """Default (derived) barrier cost: equity before the cut must not depend on later bars."""
-    prices, preds = _scenario(n_total=80, seed=0, vol=5e-4, signal_prob=0.5)
+def test_derived_barrier_cost_ignores_appended_future_bars(
+    seed: int, n_total: int, cut_frac: float, vol: float, signal_prob: float
+) -> None:
+    """Default (derived) barrier cost is causal: an expanding median ATR up to the signal bar."""
+    prices, preds = _scenario(n_total, seed, vol, signal_prob)
     config = BacktestConfig(barrier_k_up=1.5, barrier_k_down=1.5, enable_market_hours_filter=False)
-    short = _equity(prices, preds, config, 40)
-    full = _equity(prices, preds, config, 80)
-    np.testing.assert_allclose(full[:39], short[:39], rtol=1e-9, atol=1e-6)
+    cut = max(30, int(cut_frac * n_total))
+
+    short = _equity(prices, preds, config, cut)
+    full = _equity(prices, preds, config, n_total)
+
+    np.testing.assert_allclose(full[: cut - 1], short[: cut - 1], rtol=1e-9, atol=1e-6)
+
+
+def test_derived_barrier_cost_is_expanding_median() -> None:
+    """The per-bar cost equals price cost / median of the valid ATR values so far."""
+    from src.data.labeling.triple_barrier import expanding_cost_in_atr
+
+    atr = np.array([np.nan, 2.0, 4.0, np.nan, 6.0, 0.0, 10.0])
+    out = expanding_cost_in_atr(1.0, atr)
+
+    np.testing.assert_allclose(
+        out, [0.0, 1 / 2.0, 1 / 3.0, 1 / 3.0, 1 / 4.0, 1 / 4.0, 1 / 5.0], rtol=1e-12
+    )
