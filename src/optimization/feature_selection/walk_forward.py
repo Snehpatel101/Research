@@ -27,11 +27,91 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
+from sklearn.metrics import log_loss, make_scorer
 
 from .config import FeatureSelectorConfig
 from .result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
+
+# Log-loss floor: avoids -inf when a forest assigns exactly 0 to the true class.
+_PROBA_EPS = 1e-15
+
+# Fraction of the training fold held out when a caller supplies no holdout set.
+_FALLBACK_HOLDOUT_FRAC = 0.25
+
+# Scale of the within-cluster tie-break added to a cluster's importance.
+_WITHIN_CLUSTER_TIEBREAK = 1e-9
+
+
+def _neg_log_loss_scorer(classes: np.ndarray) -> Any:
+    """Scorer returning negative (optionally weighted) log-loss.
+
+    MDA must score probabilities, not argmax accuracy: on imbalanced classes
+    accuracy is dominated by the majority class and is blind to features that
+    sharpen probabilities without flipping the arg-max. ``labels`` is pinned to
+    the fitted classes so a holdout missing a class does not raise.
+    """
+    return make_scorer(
+        log_loss,
+        greater_is_better=False,
+        response_method="predict_proba",
+        labels=np.asarray(classes),
+    )
+
+
+def _neg_log_loss(
+    proba: np.ndarray,
+    y_idx: np.ndarray,
+    weights: np.ndarray | None,
+) -> float:
+    """Negative weighted log-loss from class probabilities and class indices."""
+    p_true = np.clip(proba[np.arange(len(y_idx)), y_idx], _PROBA_EPS, 1.0)
+    ll = -np.log(p_true)
+    if weights is None:
+        return -float(ll.mean())
+    return -float(np.average(ll, weights=weights))
+
+
+def cluster_features(
+    X: pd.DataFrame,
+    max_clusters: int,
+    distance_threshold: float,
+) -> pd.Series:
+    """Hierarchically cluster features on signed-correlation distance.
+
+    Distance is ``sqrt(0.5 * (1 - rho))`` (Lopez de Prado 2020, "Machine Learning
+    for Asset Managers", 4.2) using the *signed* correlation, so anti-correlated
+    features are far apart (d=1 at rho=-1) and are not merged; the previous
+    ``1 - |rho|`` distance averaged them into one cluster. Average linkage is used
+    because Ward requires Euclidean geometry, which this distance matrix does not
+    guarantee.
+
+    Features are merged only while their linkage distance is below
+    ``distance_threshold`` (``rho`` of roughly ``1 - 2 * threshold**2``). If that
+    still leaves more than ``max_clusters`` clusters the tree is cut at exactly
+    ``max_clusters`` to bound cost. Note that cap force-merges *uncorrelated*
+    features (a noise column can then inherit a signal cluster's importance), so
+    callers that care about ranking should pass ``max_clusters >= n_features``.
+
+    Returns:
+        Series of integer cluster ids indexed by feature name.
+    """
+    if X.shape[1] == 1:
+        return pd.Series([1], index=X.columns)
+
+    # Constant / NaN-correlated columns are treated as uncorrelated with everything.
+    corr = X.corr().fillna(0.0).to_numpy(copy=True)
+    corr = np.clip((corr + corr.T) / 2.0, -1.0, 1.0)
+    np.fill_diagonal(corr, 1.0)
+    dist = np.sqrt(0.5 * (1.0 - corr))
+    np.fill_diagonal(dist, 0.0)
+
+    tree = linkage(squareform(dist, checks=False), method="average")
+    labels = fcluster(tree, t=distance_threshold, criterion="distance")
+    if len(np.unique(labels)) > max_clusters:
+        labels = fcluster(tree, t=max_clusters, criterion="maxclust")
+    return pd.Series(labels, index=X.columns)
 
 
 class WalkForwardFeatureSelector:
@@ -59,6 +139,7 @@ class WalkForwardFeatureSelector:
         use_clustered_importance: bool = False,
         max_clusters: int = 20,
         random_state: int = 42,
+        cluster_distance_threshold: float = 0.5,
     ) -> None:
         """
         Initialize WalkForwardFeatureSelector.
@@ -72,6 +153,8 @@ class WalkForwardFeatureSelector:
             use_clustered_importance: Use clustered MDA for correlated features
             max_clusters: Max feature clusters (if clustered)
             random_state: Random seed for reproducibility
+            cluster_distance_threshold: Max ``sqrt(0.5*(1-rho))`` linkage distance at
+                which features merge into one cluster (0.5 <=> rho of about 0.5)
         """
         self.config = FeatureSelectorConfig(
             n_features_to_select=n_features_to_select,
@@ -83,6 +166,7 @@ class WalkForwardFeatureSelector:
             max_clusters=max_clusters,
         )
         self.random_state = random_state
+        self.cluster_distance_threshold = cluster_distance_threshold
 
     def select_features_walkforward(
         self,
@@ -196,7 +280,14 @@ class WalkForwardFeatureSelector:
             w_test: Holdout sample weights for MDA scoring.
         """
         if self.config.use_clustered_importance:
-            return self._clustered_mda_importance(X, y, sample_weights)
+            return self._clustered_mda_importance(
+                X,
+                y,
+                sample_weights,
+                X_test=X_test,
+                y_test=y_test,
+                w_test=w_test,
+            )
 
         if self.config.selection_method == "mdi":
             return self._mdi_importance(X, y, sample_weights)
@@ -252,9 +343,11 @@ class WalkForwardFeatureSelector:
         w_test: pd.Series | None = None,
     ) -> pd.Series:
         """
-        Mean Decrease in Accuracy (permutation importance).
+        Mean Decrease in Accuracy (permutation importance), scored by log-loss.
 
-        Fits the RF on training data but scores permutation importance on
+        Importance is the increase in (sample-weighted) log-loss when a feature is
+        permuted, not the drop in accuracy: accuracy is insensitive on imbalanced
+        classes. Fits the RF on training data but scores permutation importance on
         the holdout set (X_test, y_test) to avoid overfitting bias. Falls
         back to OOB scoring if no holdout is provided.
 
@@ -285,6 +378,7 @@ class WalkForwardFeatureSelector:
             rf,
             score_X,
             score_y,
+            scoring=_neg_log_loss_scorer(rf.classes_),
             n_repeats=self.config.mda_n_repeats,
             random_state=self.random_state,
             n_jobs=-1,
@@ -298,59 +392,95 @@ class WalkForwardFeatureSelector:
         X: pd.DataFrame,
         y: pd.Series,
         sample_weights: pd.Series | None = None,
+        X_test: pd.DataFrame | None = None,
+        y_test: pd.Series | None = None,
+        w_test: pd.Series | None = None,
     ) -> pd.Series:
         """
-        MDA importance with feature clustering.
+        Clustered MDA (Lopez de Prado 2020, "ML for Asset Managers", 6.5).
 
-        Groups correlated features and computes importance per cluster,
-        then distributes importance within cluster. Handles multicollinearity.
+        1. Cluster features on train-fold signed-correlation distance.
+        2. Fit ONE forest on all features of the (purged) train fold.
+        3. On the held-out fold, permute all columns of a cluster JOINTLY (same
+           row permutation, so intra-cluster structure is kept) and record the
+           increase in log-loss; cluster importance is its mean over repeats.
+           Joint permutation removes the substitution effect: a signal duplicated
+           across correlated columns is no longer masked by its twins.
+        4. Every feature inherits its cluster's importance. Ties inside a cluster
+           are broken by the feature's own single-column MDA, which only orders
+           members and is added at a 1e-9 scale so it can never reorder clusters.
+           (Splitting the cluster score 1/size instead would rank pure-noise
+           features by cluster size, which the previous implementation did.)
 
-        Reference: Lopez de Prado (2018), Chapter 8
+        Sample weights are used for both fitting and scoring. If no holdout is
+        supplied, the last 25% of the (time-ordered) train rows is held out.
         """
-        # Compute correlation matrix
-        corr = X.corr()
-
-        # Convert NaN to 0 correlation (for constant features)
-        corr = corr.fillna(0)
-
-        # Hierarchical clustering on distance = 1 - |correlation|
-        dist = 1 - corr.abs()
-        dist = dist.clip(lower=0)  # Prevent floating-point negative distances
-        dist_arr = dist.to_numpy(copy=True)
-        np.fill_diagonal(dist_arr, 0)  # Ensure diagonal is 0
-
-        # Condense distance matrix and cluster
-        dist_condensed = squareform(dist_arr)
-        linkage_matrix = linkage(dist_condensed, method="ward")
-        clusters = fcluster(linkage_matrix, t=self.config.max_clusters, criterion="maxclust")
-
-        # Map features to clusters
-        feature_clusters = pd.Series(clusters, index=X.columns)
-
-        # Compute importance per cluster
-        cluster_importance: dict[int, float] = {}
-        for cluster_id in np.unique(clusters):
-            cluster_features = feature_clusters[feature_clusters == cluster_id].index.tolist()
-
-            # Use mean of cluster features as representative
-            X_cluster = X[cluster_features].mean(axis=1).to_frame("cluster_mean")
-
-            rf = RandomForestClassifier(
-                n_estimators=50,
-                max_depth=5,
-                random_state=self.random_state,
+        if X_test is None or y_test is None:
+            logger.warning(
+                "Clustered MDA: no holdout set provided, holding out the last "
+                f"{_FALLBACK_HOLDOUT_FRAC:.0%} of the training rows."
             )
-            rf.fit(X_cluster, y, sample_weight=sample_weights)
-            cluster_importance[cluster_id] = float(rf.feature_importances_[0])
+            cut = int(len(X) * (1 - _FALLBACK_HOLDOUT_FRAC))
+            X_test, y_test = X.iloc[cut:], y.iloc[cut:]
+            w_test = sample_weights.iloc[cut:] if sample_weights is not None else None
+            X, y = X.iloc[:cut], y.iloc[:cut]
+            sample_weights = sample_weights.iloc[:cut] if sample_weights is not None else None
 
-        # Distribute importance within cluster equally
-        feature_importance: dict[str, float] = {}
-        for feature in X.columns:
-            cluster_id = feature_clusters[feature]
-            n_features_in_cluster = int((feature_clusters == cluster_id).sum())
-            feature_importance[feature] = cluster_importance[cluster_id] / n_features_in_cluster
+        clusters = cluster_features(X, self.config.max_clusters, self.cluster_distance_threshold)
 
-        return pd.Series(feature_importance)
+        rf = RandomForestClassifier(
+            n_estimators=self.config.n_estimators,
+            max_depth=5,
+            n_jobs=-1,
+            random_state=self.random_state,
+        )
+        rf.fit(X, y, sample_weight=sample_weights)
+
+        # Score only holdout rows whose class the forest has seen.
+        class_to_idx = {c: i for i, c in enumerate(rf.classes_)}
+        keep = y_test.isin(list(class_to_idx)).to_numpy()
+        if not keep.any():
+            return pd.Series(0.0, index=X.columns)
+        values = X_test.loc[:, X.columns].to_numpy(dtype=float, copy=True)[keep]
+        y_idx = y_test.map(class_to_idx).to_numpy()[keep].astype(int)
+        w_eval = w_test.to_numpy(dtype=float)[keep] if w_test is not None else None
+
+        base = _neg_log_loss(
+            rf.predict_proba(pd.DataFrame(values, columns=X.columns)), y_idx, w_eval
+        )
+        rng = np.random.default_rng(self.random_state)
+        col_pos = {c: i for i, c in enumerate(X.columns)}
+
+        def group_importance(cols: list[str]) -> float:
+            pos = [col_pos[c] for c in cols]
+            saved = values[:, pos].copy()
+            drops = []
+            for _ in range(self.config.mda_n_repeats):
+                values[:, pos] = saved[rng.permutation(len(saved))]
+                proba = rf.predict_proba(pd.DataFrame(values, columns=X.columns))
+                drops.append(base - _neg_log_loss(proba, y_idx, w_eval))
+            values[:, pos] = saved
+            return float(np.mean(drops))
+
+        cluster_importance: dict[int, float] = {}
+        for cluster_id in np.unique(clusters.to_numpy()):
+            members = clusters.index[clusters == cluster_id].tolist()
+            cluster_importance[int(cluster_id)] = group_importance(members)
+
+        importance = pd.Series(
+            {f: cluster_importance[int(clusters[f])] for f in X.columns}, dtype=float
+        )
+
+        # Within-cluster ordering (singleton clusters need none).
+        sizes = clusters.map(clusters.value_counts())
+        for cluster_id in clusters[sizes > 1].unique():
+            members = clusters.index[clusters == cluster_id].tolist()
+            own = pd.Series({f: group_importance([f]) for f in members})
+            span = own.max() - own.min()
+            rank01 = (own - own.min()) / span if span > 0 else own * 0.0
+            importance[members] += _WITHIN_CLUSTER_TIEBREAK * rank01
+
+        return importance
 
 
 class CVIntegratedFeatureSelector:

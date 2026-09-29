@@ -26,6 +26,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# MDA ranking is stable at this many rows; larger datasets are strided down to it.
+MDA_MAX_ROWS = 50_000
+
+
+def _temporal_stride_subsample(df: pd.DataFrame, max_rows: int) -> tuple[pd.DataFrame, int]:
+    """Subsample to at most ``max_rows`` by taking every ``stride``-th row in order.
+
+    Preserves temporal order (monotonic index) so purge/embargo stay meaningful.
+
+    Returns:
+        (subsampled frame, stride); stride == 1 means the frame is unchanged.
+    """
+    n = len(df)
+    if n <= max_rows:
+        return df, 1
+    stride = -(-n // max_rows)  # ceil: guarantees len(result) <= max_rows
+    return df.iloc[::stride], stride
+
 
 class FeatureSelectionMixin:
     """Mixin providing feature selection pipeline methods for the orchestrator."""
@@ -70,21 +88,13 @@ class FeatureSelectionMixin:
                 )
                 return None
 
-            # Subsample for large datasets — MDA ranking is stable at 50K rows
-            mda_max_rows = 50_000
-            if len(clean_df) > mda_max_rows:
+            # Subsample for large datasets — MDA ranking is stable at 50K rows.
+            # Strided (every-Nth) sampling keeps rows in temporal order; a shuffling
+            # subsample would make PurgedKFold's positional purge/embargo meaningless.
+            clean_df, stride = _temporal_stride_subsample(clean_df, MDA_MAX_ROWS)
+            if stride > 1:
                 logger.info(
-                    f"  MDA subsampling: {len(clean_df):,} rows → {mda_max_rows:,} "
-                    f"(stratified by {label_col})"
-                )
-                # Stratified subsample to preserve class balance
-                from sklearn.model_selection import train_test_split
-
-                clean_df, _ = train_test_split(
-                    clean_df,
-                    train_size=mda_max_rows,
-                    stratify=clean_df[label_col],
-                    random_state=42,
+                    f"  MDA subsampling: strided every {stride}th row → {len(clean_df):,} rows"
                 )
 
             X = clean_df[feature_names]
@@ -94,13 +104,18 @@ class FeatureSelectionMixin:
                 logger.warning("MDA ranking: labels have < 2 classes, falling back to variance")
                 return None
 
+            # Purge/embargo are in original bars; after striding one row spans
+            # `stride` bars, so scale down (ceil: never under-purge).
+            purge_bars = -(-self.config.purge_bars // stride)
+            embargo_bars = -(-self.config.embargo_bars // stride)
+
             # Cap embargo to at most 15% of data so MDA works on small datasets
             n_samples = len(X)
             max_embargo = int(n_samples * 0.15)
-            mda_embargo = min(self.config.embargo_bars, max_embargo)
+            mda_embargo = min(embargo_bars, max_embargo)
             mda_cv_config = PurgedKFoldConfig(
                 n_splits=3,
-                purge_bars=self.config.purge_bars,
+                purge_bars=purge_bars,
                 embargo_bars=mda_embargo,
             )
             mda_cv = PurgedKFold(mda_cv_config)
@@ -114,7 +129,10 @@ class FeatureSelectionMixin:
                 min_feature_frequency=0.01,
                 random_state=42,
                 use_clustered_importance=True,
-                max_clusters=20,
+                # Never force-merge uncorrelated features: the correlation-distance
+                # cut alone decides clusters (joint permutation costs the same as
+                # plain MDA at one group per feature, so no cap is needed).
+                max_clusters=len(feature_names),
             )
             result = selector.select_features_walkforward(X, y, cv_splits)
 
