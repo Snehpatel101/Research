@@ -105,11 +105,7 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     feature_generation: str = field(
         default_factory=lambda: _get_global_or_default("features.generation.default", "full")
     )
-    sma_periods: list[int] = field(
-        default_factory=lambda: _get_global_or_default(
-            "features.sma_periods", [10, 20, 50, 100, 200]
-        )
-    )
+    sma_periods: list[int] = field(default_factory=lambda: [5, 10, 20, 50, 100, 200])
     ema_periods: list[int] = field(
         default_factory=lambda: _get_global_or_default("features.ema_periods", [9, 21, 50])
     )

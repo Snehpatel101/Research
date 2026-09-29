@@ -39,8 +39,6 @@ Usage:
 from src.models.config import (
     CONFIG_DIR,
     CONFIG_ROOT,
-    CV_CONFIG_PATH,
-    TRAINING_CONFIG_PATH,
     AppliedOverrides,
     ConfigBuildResult,
     ConfigError,
@@ -53,13 +51,10 @@ from src.models.config import (
     find_model_config,
     flatten_model_config,
     get_applied_overrides,
-    get_environment_overrides,
     get_model_info,
     is_colab,
     list_available_models,
-    load_cv_config,
     load_model_config,
-    load_training_config,
     load_yaml_config,
     merge_configs,
     resolve_device,
@@ -74,8 +69,6 @@ __all__ = [
     # Paths
     "CONFIG_ROOT",
     "CONFIG_DIR",
-    "TRAINING_CONFIG_PATH",
-    "CV_CONFIG_PATH",
     # Exceptions
     "ConfigError",
     "ConfigValidationError",
@@ -95,9 +88,6 @@ __all__ = [
     "load_model_config",
     "flatten_model_config",
     "find_model_config",
-    "load_training_config",
-    "load_cv_config",
-    "get_environment_overrides",
     # Merging
     "merge_configs",
     "build_config",

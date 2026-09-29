@@ -64,18 +64,15 @@ EMBARGO_BARS = 60
 MAX_EPOCHS = 50
 EARLY_STOPPING_PATIENCE = 10
 BATCH_SIZE = 256
-DEVICE = "auto"
 TRAINING_MODE = "standard"
 MTF_ENABLED = True
 MTF_TIMEFRAMES = ["15min", "30min", "1h"]
 FEATURE_SELECTION_ENABLED = False
-FEATURE_SELECTION_METHOD = "mda"
 BUILD_ENSEMBLE = True
 META_LEARNER = "ridge_meta"
 OPTUNA_ENABLED = False
 OPTUNA_TRIALS = 0
 RUN_BACKTEST = False
-GENERATE_REPORT = True
 CREATE_BUNDLE = True
 DEPLOY_ARTIFACT = True
 EXPERIMENT_NAME = "test_notebook_boosting"
@@ -84,7 +81,7 @@ RANDOM_SEED = 42
 
 def cell_2_config():
     print(f"Models: {len(MODELS)} selected -> {MODELS}")
-    print(f"Epochs: {MAX_EPOCHS}, Horizons: {HORIZONS}, Device: {DEVICE}")
+    print(f"Epochs: {MAX_EPOCHS}, Horizons: {HORIZONS}")
     print(f"Training mode: {TRAINING_MODE}")
     print(f"Ensemble: {BUILD_ENSEMBLE}, Optuna trials: disabled")
     print(f"Bundling: create={CREATE_BUNDLE}, deploy={DEPLOY_ARTIFACT}")
@@ -121,7 +118,7 @@ def cell_3_validate():
         raise ValueError("Fix errors above")
 
     print(f"Config OK: {len(MODELS)} models, {N_SPLITS} CV folds, "
-          f"purge={PURGE_BARS}, embargo={EMBARGO_BARS}, device={DEVICE}, mode={TRAINING_MODE}")
+          f"purge={PURGE_BARS}, embargo={EMBARGO_BARS}, mode={TRAINING_MODE}")
     return True
 
 
@@ -199,16 +196,12 @@ def cell_5_run():
             symbol=SYMBOL,
             data_path=DATA_PATH,
             features=FeatureConfig(
-                mode="full",
                 selection_enabled=FEATURE_SELECTION_ENABLED,
-                selection_method=FEATURE_SELECTION_METHOD,
             ),
-            labeling=LabelingConfig(method="triple_barrier"),
+            labeling=LabelingConfig(),
             mtf=MTFConfig(
                 enabled=MTF_ENABLED,
-                mode="indicators" if MTF_ENABLED else "none",
                 timeframes=MTF_TIMEFRAMES if MTF_ENABLED else [],
-                primary_timeframe=TARGET_TIMEFRAME,
             ),
         ),
         training=TrainingSection(
@@ -218,7 +211,6 @@ def cell_5_run():
             n_splits=N_SPLITS,
             purge_bars=PURGE_BARS,
             embargo_bars=EMBARGO_BARS,
-            device=DEVICE,
             batch_size=BATCH_SIZE,
             max_epochs=MAX_EPOCHS,
             early_stopping_patience=EARLY_STOPPING_PATIENCE,
@@ -228,7 +220,6 @@ def cell_5_run():
         ),
         evaluation=EvaluationSection(
             run_backtest=RUN_BACKTEST,
-            generate_report=GENERATE_REPORT,
         ),
         bundling=BundlingSection(
             create_bundle=CREATE_BUNDLE,

@@ -35,15 +35,12 @@ config = ExperimentConfig(
         symbol="MGC",
         data_path="data/raw/MGC_1m_5year.parquet",
         features=FeatureConfig(
-            mode="full",
             selection_enabled=False,
         ),
-        labeling=LabelingConfig(method="triple_barrier", binary_mode=False),
+        labeling=LabelingConfig(binary_mode=False),
         mtf=MTFConfig(
             enabled=True,
-            mode="indicators",
             timeframes=["15min", "30min", "1h"],
-            primary_timeframe="5min",
         ),
     ),
     training=TrainingSection(
@@ -53,7 +50,6 @@ config = ExperimentConfig(
         n_splits=2,
         purge_bars=20,
         embargo_bars=60,
-        device="auto",
         batch_size=512,
         max_epochs=3,
         early_stopping_patience=3,
@@ -62,13 +58,11 @@ config = ExperimentConfig(
         walk_forward=WalkForwardConfig(
             n_windows=2, window_type="expanding",
             min_train_pct=0.4, test_pct=0.1,
-            embargo_bars=60, gap_bars=20,
         ),
-        optuna=OptunaConfig(n_trials=0, n_startup_trials=5, timeout=0),
+        optuna=OptunaConfig(n_trials=0, timeout=0),
     ),
     evaluation=EvaluationSection(
         run_backtest=False,
-        generate_report=True,
         commission_per_contract=2.50,
         slippage_ticks=1.0,
         initial_equity=100000.0,

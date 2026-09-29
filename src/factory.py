@@ -199,7 +199,7 @@ class MLFactory:
     def __init__(
         self,
         config: ExperimentConfig,
-        verbose: int = 1,
+        verbose: int | None = None,
         enable_checkpoints: bool = True,
     ):
         """
@@ -207,12 +207,13 @@ class MLFactory:
 
         Args:
             config: ExperimentConfig defining the experiment
-            verbose: Logging verbosity (0=silent, 1=info, 2=debug)
+            verbose: Logging verbosity (0=silent, 1=info, 2=debug).
+                None (default) uses ``config.verbose``.
             enable_checkpoints: Whether to save checkpoints after each stage
                 (default: True). Enables resume_from_checkpoint() on failure.
         """
         self.config = config
-        self.verbose = verbose
+        self.verbose = config.verbose if verbose is None else verbose
         self.enable_checkpoints = enable_checkpoints
 
         # Create output directory
@@ -242,7 +243,7 @@ class MLFactory:
         config_path = self.output_dir / "experiment_config.yaml"
         config.save_yaml(config_path)
 
-        if verbose >= 1:
+        if self.verbose >= 1:
             logger.info(f"MLFactory initialized: {self.output_dir.name}")
             logger.info(f"Config saved to: {config_path}")
             if enable_checkpoints:
@@ -980,10 +981,8 @@ class MLFactory:
             elif isinstance(df.index, pd.DatetimeIndex):
                 prices_df["timestamp"] = df.index
 
-            # Configure backtester using local BacktestConfig
-            # Note: canonical BacktestConfig (src/config/inference.py) has different fields
-            # than the local one (src/inference/backtesting/backtest.py).
-            # We map position_sizing from canonical short names to local long names.
+            # Map evaluation.position_sizing short names to the Backtester's
+            # PositionSizingMethod values.
             position_sizing_map = {
                 "fixed": "fixed_contracts",
                 "volatility": "volatility_targeted",

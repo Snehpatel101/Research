@@ -176,7 +176,6 @@ REQUIRED_FIELDS = {
     "root": ["random_seed"],
     "timeframes": ["default_primary", "canonical_ladder"],
     "splits": ["train", "val", "test"],
-    "purge_embargo": ["purge_multiplier", "embargo_time_minutes"],
     "horizons": ["supported", "active"],
     "training": ["batch_size", "max_epochs"],
 }
@@ -189,9 +188,6 @@ FIELD_TYPES = {
     "splits.train": float,
     "splits.val": float,
     "splits.test": float,
-    "purge_embargo.purge_multiplier": float,
-    "purge_embargo.embargo_time_minutes": int,
-    "purge_embargo.min_embargo_bars": int,
     "horizons.supported": list,
     "horizons.active": list,
     "horizons.default": list,
@@ -205,9 +201,6 @@ FIELD_TYPES = {
     "training.pin_memory": bool,
     "calibration.enabled": bool,
     "calibration.method": str,
-    "mtf.enabled": bool,
-    "mtf.default_mode": str,
-    "mtf.default_timeframes": list,
 }
 
 # Fields where null means "auto-detect"
@@ -217,7 +210,6 @@ NULLABLE_FIELDS = {"training.num_workers", "training.pin_memory"}
 VALID_VALUES = {
     "training.device": ["auto", "cpu", "cuda", "mps"],
     "calibration.method": ["auto", "isotonic", "sigmoid", "none"],
-    "mtf.default_mode": ["indicators", "bars", "both"],
     "scaler.default": ["robust", "standard", "minmax", "none"],
     "tracking.backend": ["local", "mlflow", "wandb", "disabled"],
 }
@@ -228,8 +220,6 @@ NUMERIC_BOUNDS = {
     "splits.train": (0.0, 1.0),
     "splits.val": (0.0, 1.0),
     "splits.test": (0.0, 1.0),
-    "purge_embargo.purge_multiplier": (1.0, 10.0),
-    "purge_embargo.embargo_time_minutes": (60, 20160),  # 1 hour to 2 weeks
     "training.batch_size": (1, 8192),
     "training.max_epochs": (1, 10000),
     "training.early_stopping_patience": (0, 1000),
@@ -454,51 +444,6 @@ def validate_horizons(data: dict[str, Any]) -> ValidationResult:
     return result
 
 
-def validate_purge_embargo(data: dict[str, Any]) -> ValidationResult:
-    """Validate purge/embargo configuration and cross-field dependencies."""
-    result = ValidationResult()
-
-    purge_embargo = data.get("purge_embargo", {})
-    horizons = data.get("horizons", {})
-    timeframes = data.get("timeframes", {})
-
-    purge_mult = purge_embargo.get("purge_multiplier", 3.0)
-    embargo_minutes = purge_embargo.get("embargo_time_minutes", 7200)
-    active_horizons = horizons.get("active", [])
-    default_tf = timeframes.get("default_primary", "5min")
-
-    # Calculate expected purge bars
-    if active_horizons:
-        max_horizon = max(active_horizons)
-        expected_purge = int(max_horizon * purge_mult)
-
-        # Check if purge is sufficient for max_bars calculation
-        # max_bars is typically 2.5x horizon
-        max_bars = int(max_horizon * 2.5)
-        if expected_purge < max_bars:
-            result.add_warning(
-                field="purge_embargo.purge_multiplier",
-                message=f"Purge ({expected_purge} bars) may be insufficient for "
-                f"max_bars ({max_bars}). Consider multiplier >= 2.5",
-                value=purge_mult,
-            )
-
-    # Calculate embargo bars for the default timeframe
-    tf_minutes = _parse_timeframe_minutes(default_tf)
-    if tf_minutes:
-        embargo_bars = embargo_minutes // tf_minutes
-        if embargo_bars < 100:
-            result.add_warning(
-                field="purge_embargo.embargo_time_minutes",
-                message=f"Embargo of {embargo_bars} bars at {default_tf} may be "
-                f"insufficient for decorrelation",
-                value=embargo_minutes,
-                suggestion="Consider at least 288 bars (~1 day at 5min)",
-            )
-
-    return result
-
-
 def validate_timeframes(data: dict[str, Any]) -> ValidationResult:
     """Validate timeframe configuration."""
     result = ValidationResult()
@@ -586,21 +531,6 @@ def validate_unknown_keys(
     return result
 
 
-def _parse_timeframe_minutes(tf: str) -> int | None:
-    """Parse timeframe string to minutes."""
-    try:
-        if tf.endswith("min"):
-            return int(tf[:-3])
-        elif tf.endswith("h"):
-            return int(tf[:-1]) * 60
-        elif tf.endswith("d"):
-            return int(tf[:-1]) * 1440
-        else:
-            return None
-    except ValueError:
-        return None
-
-
 # =============================================================================
 # MAIN VALIDATION FUNCTION
 # =============================================================================
@@ -651,7 +581,6 @@ def validate_config(
         validate_numeric_bounds,
         validate_split_ratios,
         validate_horizons,
-        validate_purge_embargo,
         validate_timeframes,
         validate_training,
     ]
@@ -834,7 +763,6 @@ __all__ = [
     "validate_numeric_bounds",
     "validate_split_ratios",
     "validate_horizons",
-    "validate_purge_embargo",
     "validate_timeframes",
     "validate_training",
     "validate_unknown_keys",

@@ -10,14 +10,10 @@ from src.core.paths import (
     CONFIG_DIR,
     CONFIG_MODELS_DIR,
     CONFIG_ROOT,
-    CV_CONFIG_PATH,
-    TRAINING_CONFIG_PATH,
 )
 
 __all__ = [
     "CONFIG_ROOT",
     "CONFIG_DIR",
     "CONFIG_MODELS_DIR",
-    "TRAINING_CONFIG_PATH",
-    "CV_CONFIG_PATH",
 ]

@@ -59,8 +59,8 @@ class DSRComputeConfig:
     """
     Configuration for DSR computation thresholds and numerical controls.
 
-    For statistical inputs (n_trials, variance, skewness, kurtosis),
-    see src.config.cv.DSRConfig which is the CANONICAL DSRConfig.
+    Statistical inputs (n_trials, variance, skewness, kurtosis) are passed
+    to the compute functions directly.
 
     This class controls HOW the DSR is computed (thresholds, clipping),
     not WHAT statistical inputs are used.

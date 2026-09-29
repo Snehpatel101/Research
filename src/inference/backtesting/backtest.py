@@ -327,7 +327,7 @@ class Backtester:
     def _resolve_sizing_method(value: str) -> str:
         """Map canonical position_sizing values to local PositionSizingMethod values.
 
-        The canonical config (src/config/inference.py) uses short names like
+        ExperimentConfig.evaluation.position_sizing uses short names like
         "fixed", "kelly", "volatility", "confidence".  The local position sizer
         (position_sizing.py) expects "fixed_contracts", "kelly",
         "volatility_targeted", "bet_sizing", etc.  This method bridges the two.

@@ -17,20 +17,12 @@ with higher-precedence sources overriding lower ones:
    - FAIL HARD on errors (user explicitly requested this file)
    - Example: `--config my_experiment.yaml`
 
-3. **Environment-Specific Overrides**
-   - From config/training.yaml `environments:` section
-   - Auto-detected based on execution environment:
-     * colab: Google Colab environment
-     * local_gpu: Local machine with CUDA available
-     * local_cpu: Local machine without GPU
-   - Common overrides: batch_size, num_workers, mixed_precision
-
-4. **Model-Specific YAML** (auto-discovered)
+3. **Model-Specific YAML** (auto-discovered)
    - Located at config/models/{model_name}.yaml
    - Contains model-specific hyperparameters and defaults
    - WARN on errors (not user-requested, auto-discovery)
 
-5. **Provided Defaults** (Lowest Priority)
+4. **Provided Defaults** (Lowest Priority)
    - Built-in defaults passed to build_config()
    - Fallback values when no other source specifies a key
 
@@ -39,7 +31,6 @@ Example Override Flow:
 ```
 defaults = {"batch_size": 64, "max_epochs": 100}
 model.yaml = {"batch_size": 256}  # Overrides default
-environment (GPU) = {"batch_size": 512}  # Overrides model.yaml
 CLI args = {"batch_size": 128}  # Final value: 128
 ```
 
@@ -61,7 +52,6 @@ from .exceptions import ConfigError
 from .loaders import (
     find_model_config,
     flatten_model_config,
-    get_environment_overrides,
     load_model_config,
     load_yaml_config,
 )
@@ -79,7 +69,6 @@ class AppliedOverrides:
 
     Attributes:
         environment: Detected environment (colab, local_gpu, local_cpu)
-        environment_overrides: Keys that came from environment-specific config
         model_yaml_path: Path to model-specific YAML if loaded
         model_yaml_keys: Keys that came from model YAML
         explicit_config_path: Path to explicit config file if provided
@@ -88,7 +77,6 @@ class AppliedOverrides:
     """
 
     environment: str = ""
-    environment_overrides: dict[str, Any] = field(default_factory=dict)
     model_yaml_path: str | None = None
     model_yaml_keys: list[str] = field(default_factory=list)
     explicit_config_path: str | None = None
@@ -99,7 +87,6 @@ class AppliedOverrides:
         """Convert to dictionary for JSON serialization."""
         return {
             "environment": self.environment,
-            "environment_overrides": self.environment_overrides,
             "model_yaml_path": self.model_yaml_path,
             "model_yaml_keys": self.model_yaml_keys,
             "explicit_config_path": self.explicit_config_path,
@@ -147,7 +134,6 @@ def get_applied_overrides() -> dict[str, Any]:
 
     Returns a dictionary containing:
     - environment: Detected execution environment
-    - environment_overrides: Settings that came from environment config
     - model_yaml_path: Path to model YAML if loaded
     - model_yaml_keys: Keys from model YAML
     - explicit_config_path: User-provided config file path
@@ -197,7 +183,6 @@ def build_config(
     cli_args: dict[str, Any] | None = None,
     config_file: str | Path | None = None,
     defaults: dict[str, Any] | None = None,
-    apply_environment_overrides: bool = True,
 ) -> ConfigBuildResult:
     """
     Build complete model configuration from multiple sources.
@@ -205,9 +190,8 @@ def build_config(
     Configuration precedence (highest to lowest):
     1. CLI arguments
     2. Config file (if explicitly provided, FAIL HARD on errors)
-    3. Environment-specific overrides
-    4. Model-specific YAML (config/models/{model_name}.yaml - warn on errors)
-    5. Provided defaults
+    3. Model-specific YAML (config/models/{model_name}.yaml - warn on errors)
+    4. Provided defaults
 
     See module docstring for detailed precedence documentation.
 
@@ -219,7 +203,6 @@ def build_config(
         cli_args: Arguments from CLI (highest priority)
         config_file: Path to override config file (if provided, FAIL HARD on errors)
         defaults: Default configuration (lowest priority)
-        apply_environment_overrides: Apply environment-specific settings
 
     Returns:
         ConfigBuildResult containing:
@@ -253,26 +236,6 @@ def build_config(
             logger.warning(
                 f"Failed to load default config from {model_config_path}: {e}. "
                 f"Using built-in defaults."
-            )
-
-    # Apply environment-specific overrides
-    if apply_environment_overrides:
-        env_overrides = get_environment_overrides()
-        if env_overrides:
-            # Flatten environment overrides
-            flat_overrides = {}
-            for section_name, section_data in env_overrides.items():
-                if isinstance(section_data, dict):
-                    flat_overrides.update(section_data)
-                else:
-                    flat_overrides[section_name] = section_data
-
-            # Track environment overrides
-            applied.environment_overrides = flat_overrides.copy()
-            config = merge_configs(config, flat_overrides)
-            logger.info(
-                f"Applied environment overrides for '{env.value}': "
-                f"{list(flat_overrides.keys())}"
             )
 
     # Load explicit config file if provided (FAIL HARD on errors)

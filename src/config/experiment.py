@@ -1,40 +1,31 @@
 """
 ExperimentConfig - Single Source of Truth for ML Factory Experiments.
 
-This module provides ExperimentConfig, which consolidates all configuration
-needed for a complete ML Factory experiment run. It composes existing config
-classes rather than duplicating fields.
-
-ExperimentConfig is the top-level config used by MLFactory. It provides
-conversion methods to legacy config formats for backward compatibility.
+ExperimentConfig is the top-level config used by MLFactory. Every field is
+either read by MLFactory directly or reaches the training stack through
+``to_pipeline_config()`` — there are no settable-but-ignored knobs. Loading a
+dict/YAML that carries keys from older versions logs a warning per unknown key
+and ignores it instead of failing.
 
 Example:
     from src.config.experiment import ExperimentConfig
 
-    config = ExperimentConfig(
-        name="mes_xgboost_experiment",
-        symbol="MES",
-        models=["xgboost", "lightgbm", "lstm"],
-        horizons=[5, 10, 15, 20],
-    )
+    config = ExperimentConfig(name="mes_xgboost_experiment")
+    config.data.symbol = "MES"
+    config.data.data_path = "data/mes_1min.parquet"
+    config.training.models = ["xgboost", "lightgbm", "lstm"]
 
-    # Use with MLFactory
     from src.factory import MLFactory
-    factory = MLFactory(config)
-    result = factory.run()
-
-    # Or convert to legacy formats
-    pipeline_config = config.to_pipeline_config()
-    trainer_config = config.to_trainer_config(model_name="xgboost")
+    result = MLFactory(config).run()
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import yaml
 
@@ -43,19 +34,61 @@ from src.config.data import (
     FeatureConfig,
     LabelingConfig,
     MTFConfig,
-    ScalerConfig,
     SequenceConfig,
     SplitConfig,
 )
-from src.config.inference import BacktestConfig, BundleConfig
-from src.config.training import CalibrationConfig, CheckpointConfig, OptunaConfig
+from src.config.training import CalibrationConfig, OptunaConfig
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 def _generate_run_id() -> str:
     """Generate unique run ID with timestamp."""
     return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+
+def _dataclass_from_dict(cls: type[_T], raw: dict[str, Any], where: str) -> _T:  # noqa: UP047
+    """Build dataclass ``cls`` from a nested dict, warning on (and dropping) unknown keys.
+
+    Nested config sections are recognised by their ``default_factory`` being a
+    dataclass type, and are built recursively. A section given as ``None``
+    (an empty YAML mapping) falls back to its defaults.
+    """
+    if not isinstance(raw, dict):
+        raise TypeError(f"{where} must be a mapping, got {type(raw).__name__}")
+
+    known = {f.name: f for f in fields(cls)}  # type: ignore[arg-type]
+    unknown = sorted(set(raw) - set(known))
+    if unknown:
+        logger.warning(
+            f"Ignoring unknown config key(s) in {where}: {unknown} "
+            "(misspelled, or removed because they never reached the pipeline)"
+        )
+
+    kwargs: dict[str, Any] = {}
+    for name, value in raw.items():
+        if name not in known:
+            continue
+        factory = known[name].default_factory
+        if isinstance(factory, type) and is_dataclass(factory):
+            if value is None:
+                continue
+            value = _dataclass_from_dict(factory, value, f"{where}.{name}")
+        kwargs[name] = value
+    return cls(**kwargs)
+
+
+def _plain(value: Any) -> Any:
+    """Recursively convert Paths/tuples so the dict is safe_dump/JSON friendly."""
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    if isinstance(value, Path):
+        return str(value)
+    return value
 
 
 # =============================================================================
@@ -83,7 +116,6 @@ class DataSection:
     # Sub-configs
     features: FeatureConfig = field(default_factory=FeatureConfig)
     labeling: LabelingConfig = field(default_factory=LabelingConfig)
-    scaler: ScalerConfig = field(default_factory=ScalerConfig)
     sequence: SequenceConfig = field(default_factory=SequenceConfig)
     mtf: MTFConfig = field(default_factory=MTFConfig)
     splits: SplitConfig = field(default_factory=SplitConfig)
@@ -142,10 +174,8 @@ class TrainingSection:
     # Sub-configs
     optuna: OptunaConfig = field(default_factory=OptunaConfig)
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
-    checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
 
-    # Device settings
-    device: str = "auto"  # auto, cpu, cuda, mps
+    # Neural network settings (device is auto-detected per model)
     batch_size: int = 512
     max_epochs: int = 100
     early_stopping_patience: int = 15
@@ -162,8 +192,6 @@ class EvaluationSection:
     """
 
     run_backtest: bool = False
-    compute_shap: bool = False
-    generate_report: bool = True
     position_sizing: str = "fixed"
 
     # Transaction cost overrides (passed to BacktestConfig)
@@ -179,9 +207,6 @@ class BundlingSection:
     """
 
     create_bundle: bool = True
-    bundle_format: str = "directory"  # directory, tar.gz
-    include_oof: bool = True
-    include_feature_importance: bool = True
     deploy_artifact: bool = True
 
 
@@ -201,11 +226,12 @@ class ExperimentConfig:
 
     Attributes:
         name: Experiment name
-        description: Experiment description
+        description: Free-text description (metadata, saved with the run)
         run_id: Unique run identifier (auto-generated)
         output_dir: Output directory for artifacts
         random_seed: Random seed for reproducibility
-        verbose: Logging verbosity (0=silent, 1=info, 2=debug)
+        verbose: Logging verbosity (0=silent, 1=info, 2=debug); MLFactory's
+            default when its own ``verbose`` argument is omitted
 
         data: Data configuration section
         training: Training configuration section
@@ -215,9 +241,8 @@ class ExperimentConfig:
     Example:
         config = ExperimentConfig(
             name="mes_xgboost_experiment",
-            symbol="MES",
-            models=["xgboost", "lightgbm"],
-            horizons=[5, 10, 15, 20],
+            data=DataSection(symbol="MES", data_path="data/mes_1min.parquet"),
+            training=TrainingSection(models=["xgboost", "lightgbm"], horizons=[5, 20]),
         )
     """
 
@@ -277,7 +302,12 @@ class ExperimentConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
         """
-        Create ExperimentConfig from dictionary.
+        Create ExperimentConfig from a (possibly nested) dictionary.
+
+        Missing keys take their defaults. Unknown keys — typos, or fields
+        removed in later versions (e.g. Phase 116 pruned every setting that
+        never reached the pipeline) — are logged with a warning and ignored,
+        so YAML written by older versions still loads.
 
         Args:
             data: Configuration dictionary
@@ -285,79 +315,7 @@ class ExperimentConfig:
         Returns:
             ExperimentConfig instance
         """
-        # Extract top-level fields
-        config_dict = {
-            "name": data.get("name", "ml_factory_experiment"),
-            "description": data.get("description", ""),
-            "run_id": data.get("run_id", _generate_run_id()),
-            "output_dir": Path(data.get("output_dir", "experiments/runs")),
-            "random_seed": data.get("random_seed", 42),
-            "verbose": data.get("verbose", 1),
-        }
-
-        # Parse data section
-        data_section_dict = data.get("data", {})
-        config_dict["data"] = DataSection(
-            symbol=data_section_dict.get("symbol", "MES"),
-            data_path=data_section_dict.get("data_path"),
-            start_date=data_section_dict.get("start_date"),
-            end_date=data_section_dict.get("end_date"),
-            bar_timeframe=data_section_dict.get("bar_timeframe"),
-            features=FeatureConfig(**data_section_dict.get("features", {})),
-            labeling=LabelingConfig(**data_section_dict.get("labeling", {})),
-            scaler=ScalerConfig(**data_section_dict.get("scaler", {})),
-            sequence=SequenceConfig(**data_section_dict.get("sequence", {})),
-            mtf=MTFConfig(**data_section_dict.get("mtf", {})),
-            splits=SplitConfig(**data_section_dict.get("splits", {})),
-        )
-
-        # Parse training section
-        training_section_dict = data.get("training", {})
-        config_dict["training"] = TrainingSection(
-            models=training_section_dict.get("models", ["xgboost"]),
-            horizons=training_section_dict.get("horizons", [5, 10, 15, 20]),
-            training_mode=training_section_dict.get("training_mode", "standard"),
-            cv_method=training_section_dict.get("cv_method", "purged_kfold"),
-            n_splits=training_section_dict.get("n_splits", 5),
-            purge_bars=training_section_dict.get("purge_bars", 60),
-            embargo_bars=training_section_dict.get("embargo_bars", 1440),
-            optuna=OptunaConfig(**training_section_dict.get("optuna", {})),
-            calibration=CalibrationConfig(**training_section_dict.get("calibration", {})),
-            checkpoint=CheckpointConfig(**training_section_dict.get("checkpoint", {})),
-            device=training_section_dict.get("device", "auto"),
-            batch_size=training_section_dict.get("batch_size", 512),
-            max_epochs=training_section_dict.get("max_epochs", 100),
-            early_stopping_patience=training_section_dict.get("early_stopping_patience", 15),
-            build_ensemble=training_section_dict.get("build_ensemble", True),
-            meta_learner=training_section_dict.get("meta_learner", "ridge_meta"),
-            walk_forward=WalkForwardConfig(**training_section_dict.get("walk_forward", {})),
-            regime=RegimeSettings(**training_section_dict.get("regime", {})),
-            meta_labeling=MetaLabelingSettings(**training_section_dict.get("meta_labeling", {})),
-        )
-
-        # Parse evaluation section
-        eval_section_dict = data.get("evaluation", {})
-        config_dict["evaluation"] = EvaluationSection(
-            run_backtest=eval_section_dict.get("run_backtest", False),
-            compute_shap=eval_section_dict.get("compute_shap", False),
-            generate_report=eval_section_dict.get("generate_report", True),
-            position_sizing=eval_section_dict.get("position_sizing", "fixed"),
-            commission_per_contract=eval_section_dict.get("commission_per_contract"),
-            slippage_ticks=eval_section_dict.get("slippage_ticks"),
-            initial_equity=eval_section_dict.get("initial_equity", 100000.0),
-        )
-
-        # Parse bundling section
-        bundle_section_dict = data.get("bundling", {})
-        config_dict["bundling"] = BundlingSection(
-            create_bundle=bundle_section_dict.get("create_bundle", True),
-            bundle_format=bundle_section_dict.get("bundle_format", "directory"),
-            include_oof=bundle_section_dict.get("include_oof", True),
-            include_feature_importance=bundle_section_dict.get("include_feature_importance", True),
-            deploy_artifact=bundle_section_dict.get("deploy_artifact", True),
-        )
-
-        return cls(**config_dict)
+        return _dataclass_from_dict(cls, data or {}, "ExperimentConfig")
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> ExperimentConfig:
@@ -383,65 +341,8 @@ class ExperimentConfig:
         return cls.from_dict(data)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "run_id": self.run_id,
-            "output_dir": str(self.output_dir),
-            "random_seed": self.random_seed,
-            "verbose": self.verbose,
-            "data": {
-                "symbol": self.data.symbol,
-                "data_path": str(self.data.data_path) if self.data.data_path else None,
-                "start_date": self.data.start_date,
-                "end_date": self.data.end_date,
-                "bar_timeframe": self.data.bar_timeframe,
-                "features": asdict(self.data.features),
-                "labeling": asdict(self.data.labeling),
-                "scaler": asdict(self.data.scaler),
-                "sequence": asdict(self.data.sequence),
-                "mtf": asdict(self.data.mtf),
-                "splits": asdict(self.data.splits),
-            },
-            "training": {
-                "models": self.training.models,
-                "horizons": self.training.horizons,
-                "training_mode": self.training.training_mode,
-                "cv_method": self.training.cv_method,
-                "n_splits": self.training.n_splits,
-                "purge_bars": self.training.purge_bars,
-                "embargo_bars": self.training.embargo_bars,
-                "device": self.training.device,
-                "batch_size": self.training.batch_size,
-                "max_epochs": self.training.max_epochs,
-                "early_stopping_patience": self.training.early_stopping_patience,
-                "build_ensemble": self.training.build_ensemble,
-                "meta_learner": self.training.meta_learner,
-                "optuna": asdict(self.training.optuna),
-                "calibration": asdict(self.training.calibration),
-                "checkpoint": asdict(self.training.checkpoint),
-                "walk_forward": asdict(self.training.walk_forward),
-                "regime": asdict(self.training.regime),
-                "meta_labeling": asdict(self.training.meta_labeling),
-            },
-            "evaluation": {
-                "run_backtest": self.evaluation.run_backtest,
-                "compute_shap": self.evaluation.compute_shap,
-                "generate_report": self.evaluation.generate_report,
-                "position_sizing": self.evaluation.position_sizing,
-                "commission_per_contract": self.evaluation.commission_per_contract,
-                "slippage_ticks": self.evaluation.slippage_ticks,
-                "initial_equity": self.evaluation.initial_equity,
-            },
-            "bundling": {
-                "create_bundle": self.bundling.create_bundle,
-                "bundle_format": self.bundling.bundle_format,
-                "include_oof": self.bundling.include_oof,
-                "include_feature_importance": self.bundling.include_feature_importance,
-                "deploy_artifact": self.bundling.deploy_artifact,
-            },
-        }
+        """Convert to a plain (YAML/JSON-safe) nested dictionary."""
+        return _plain(asdict(self))
 
     def save_yaml(self, path: str | Path) -> None:
         """
@@ -455,21 +356,18 @@ class ExperimentConfig:
 
         with open(path, "w") as f:
             # safe_dump pairs with the safe_load in from_yaml: the full Dumper
-            # emits python-specific tags (e.g. !!python/tuple for
-            # ScalerConfig.clip_range) that safe_load then refuses to parse,
-            # breaking every YAML round-trip.
+            # emits python-specific tags (e.g. !!python/tuple) that safe_load
+            # then refuses to parse, breaking every YAML round-trip.
             yaml.safe_dump(self.to_dict(), f, default_flow_style=False, sort_keys=False)
 
     # =========================================================================
-    # CONVERSION TO LEGACY CONFIGS (BACKWARD COMPATIBILITY)
+    # CONVERSION TO THE TRAINING STACK'S CONFIG
     # =========================================================================
 
     def to_pipeline_config(self) -> Any:
         """
-        Convert to PipelineConfig for backward compatibility.
-
-        This is used by MLFactory to interface with existing components
-        that expect the legacy PipelineConfig format.
+        Convert to the PipelineConfig consumed by the training orchestrator
+        and BundleBuilder.
 
         Returns:
             PipelineConfig instance
@@ -495,6 +393,10 @@ class ExperimentConfig:
             n_splits=self.training.n_splits,
             purge_bars=self.training.purge_bars,
             embargo_bars=self.training.embargo_bars,
+            # Chronological split ratios (purge/embargo gaps sit between them)
+            train_ratio=self.data.splits.train_ratio,
+            val_ratio=self.data.splits.val_ratio,
+            test_ratio=self.data.splits.test_ratio,
             # Walk-forward validation settings
             wf_n_windows=self.training.walk_forward.n_windows,
             wf_window_type=self.training.walk_forward.window_type,
@@ -520,13 +422,8 @@ class ExperimentConfig:
             label_optimization_trials=self.training.optuna.n_trials,
             feature_selection_trials=self.training.optuna.n_trials,
             feature_pruning_trials=self.training.optuna.n_trials,
-            optuna_random_state=self.training.optuna.random_state,
             optuna_metric=self.training.optuna.metric,
             optuna_timeout=self.training.optuna.timeout,
-            # Feature configuration
-            feature_families=self.data.features.families,
-            # Labeling configuration
-            labeling_method=self.data.labeling.method,
             # MTF configuration (empty list disables MTF features)
             mtf_timeframes=self.data.mtf.timeframes if self.data.mtf.enabled else [],
             # Sequence configuration
@@ -535,77 +432,11 @@ class ExperimentConfig:
             batch_size=self.training.batch_size,
             max_epochs=self.training.max_epochs,
             early_stopping_patience=self.training.early_stopping_patience,
+            # Probability calibration (fitted on each model's validation split)
+            auto_calibrate=self.training.calibration.enabled,
+            calibration_method=self.training.calibration.method,
             # Classification mode
             n_classes=_n_classes,
-        )
-
-    def to_trainer_config(self, model_name: str, horizon: int | None = None) -> Any:
-        """
-        Convert to TrainerConfig for a specific model.
-
-        Args:
-            model_name: Name of the model
-            horizon: Training horizon (defaults to first horizon)
-
-        Returns:
-            TrainerConfig instance
-        """
-        from src.models.config.trainer_config import TrainerConfig
-
-        horizon = horizon or self.training.horizons[0] if self.training.horizons else 20
-
-        return TrainerConfig(
-            model_name=model_name,
-            horizon=horizon,
-            sequence_length=self.data.sequence.seq_len,
-            batch_size=self.training.batch_size,
-            max_epochs=self.training.max_epochs,
-            early_stopping_patience=self.training.early_stopping_patience,
-            random_seed=self.random_seed,
-            output_dir=self.output_dir,
-            device=self.training.device,
-            use_feature_selection=self.data.features.selection_enabled,
-            feature_selection_n_features=self.data.features.selection_n_features,
-            feature_selection_method=self.data.features.selection_method,
-            feature_selection_cv_splits=self.data.features.selection_cv_splits,
-            feature_selection_min_frequency=self.data.features.selection_min_frequency,
-        )
-
-    def to_backtest_config(self) -> BacktestConfig:
-        """
-        Convert to canonical BacktestConfig for backtesting.
-
-        Note: The factory uses the operational BacktestConfig from
-        src/inference/backtesting/backtest.py directly, not this method.
-        This is for backward compatibility with code using the canonical config.
-
-        Returns:
-            BacktestConfig instance (canonical, from src/config/inference.py)
-        """
-        return BacktestConfig(
-            start_date=self.data.start_date,
-            end_date=self.data.end_date,
-            position_sizing=self.evaluation.position_sizing,
-            initial_capital=self.evaluation.initial_equity,
-        )
-
-    def to_bundle_config(self, model_name: str, horizon: int) -> BundleConfig:
-        """
-        Convert to BundleConfig for a specific model.
-
-        Args:
-            model_name: Name of the model
-            horizon: Prediction horizon
-
-        Returns:
-            BundleConfig instance
-        """
-        bundle_path = self.output_dir / "bundles" / f"{model_name}_h{horizon}"
-        return BundleConfig(
-            bundle_path=bundle_path,
-            model_name=model_name,
-            horizon=horizon,
-            symbol=self.data.symbol,
         )
 
 

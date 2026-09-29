@@ -267,16 +267,13 @@ from src.core.lineage import (
 from src.core.paths import (
     CONFIG_DIR,
     CONFIG_MODELS_DIR,
-    CONFIG_PIPELINE_DIR,
     CONFIG_ROOT,
-    CV_CONFIG_PATH,
     DATA_DIR,
     EXPERIMENTS_DIR,
     PROJECT_ROOT,
     RAW_DATA_DIR,
     RESULTS_DIR,
     RUNS_DIR,
-    TRAINING_CONFIG_PATH,
 )
 
 # =============================================================================
@@ -524,10 +521,7 @@ __all__ = [
     "EXPERIMENTS_DIR",
     "CONFIG_ROOT",
     "CONFIG_MODELS_DIR",
-    "CONFIG_PIPELINE_DIR",
     "CONFIG_DIR",
-    "TRAINING_CONFIG_PATH",
-    "CV_CONFIG_PATH",
     # Defaults
     "DEFAULTS",
     "GlobalDefaults",

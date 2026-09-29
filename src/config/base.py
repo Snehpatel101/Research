@@ -288,38 +288,9 @@ class BaseConfig:
 
 
 # =============================================================================
-# MIXIN CLASSES FOR OPTIONAL FUNCTIONALITY
-# =============================================================================
-
-
-class TimestampedConfigMixin:
-    """Mixin that adds created_at timestamp to configs."""
-
-    created_at: str
-
-    def __post_init__(self) -> None:
-        """Set created_at if not provided."""
-        if not hasattr(self, "created_at") or self.created_at is None:
-            self.created_at = datetime.now().isoformat()
-
-
-class VersionedConfigMixin:
-    """Mixin that adds version tracking to configs."""
-
-    version: str
-
-    def __post_init__(self) -> None:
-        """Set version if not provided."""
-        if not hasattr(self, "version") or self.version is None:
-            self.version = "1.0.0"
-
-
-# =============================================================================
 # EXPORTS
 # =============================================================================
 
 __all__ = [
     "BaseConfig",
-    "TimestampedConfigMixin",
-    "VersionedConfigMixin",
 ]

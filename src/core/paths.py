@@ -29,17 +29,9 @@ EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 
 CONFIG_ROOT = PROJECT_ROOT / "config"
 CONFIG_MODELS_DIR = CONFIG_ROOT / "models"
-CONFIG_PIPELINE_DIR = CONFIG_ROOT / "pipeline"
 
 # For backward compatibility with models/config/paths.py
 CONFIG_DIR = CONFIG_MODELS_DIR  # Alias for models config directory
-
-# =============================================================================
-# SPECIFIC CONFIG FILES
-# =============================================================================
-
-TRAINING_CONFIG_PATH = CONFIG_PIPELINE_DIR / "training.yaml"
-CV_CONFIG_PATH = CONFIG_PIPELINE_DIR / "cv.yaml"
 
 # =============================================================================
 # EXPORTS
@@ -54,8 +46,5 @@ __all__ = [
     "EXPERIMENTS_DIR",
     "CONFIG_ROOT",
     "CONFIG_MODELS_DIR",
-    "CONFIG_PIPELINE_DIR",
     "CONFIG_DIR",
-    "TRAINING_CONFIG_PATH",
-    "CV_CONFIG_PATH",
 ]

@@ -1,91 +1,54 @@
 """
-Centralized configuration package - Single Source of Truth.
+Centralized configuration package.
 
-This package provides unified access to configuration across the codebase.
+Only configuration that the pipeline actually reads lives here — a class or
+field that can be set but never reaches MLFactory is a bug waiting to happen
+(Phase 116 removed every such "aspirational" config class and field).
 
-CONSOLIDATED CONFIG ARCHITECTURE (~15 config classes instead of 55+)
-====================================================================
+    # Top-level experiment config (used by MLFactory)
+    from src.config import ExperimentConfig
 
-Import configs from their canonical locations:
-
-    # Base class for all configs
-    from src.config import BaseConfig
-
-    # Data-related configs
+    # Its section building blocks
     from src.config import (
-        FeatureConfig, LabelingConfig, ScalerConfig,
-        SequenceConfig, MTFConfig, SplitConfig
+        FeatureConfig, LabelingConfig, SequenceConfig, MTFConfig, SplitConfig,
+        OptunaConfig, CalibrationConfig, WalkForwardConfig,
     )
 
-    # Training-related configs
-    from src.config import (
-        TrainerConfig, OptunaConfig, CalibrationConfig,
-        CheckpointConfig, OOMConfig, GAConfig
-    )
+    # Contract specs per symbol
+    from src.config import SymbolConfig
 
-    # Cross-validation configs
-    from src.config import (
-        CVConfig, CPCVConfig, WalkForwardConfig,
-        PurgedKFoldConfig, PBOConfig
-    )
-
-    # Model-specific configs
-    from src.config import (
-        XGBoostConfig, LightGBMConfig, LSTMConfig,
-        TransformerConfig, PerModelConfig
-    )
-
-    # Ensemble configs
-    from src.config import (
-        EnsembleConfig, MetaLearnerConfig,
-        StackingConfig, VotingConfig
-    )
-
-    # Inference configs
-    from src.config import (
-        InferenceConfig, BacktestConfig,
-        BundleConfig, ServerConfig
-    )
-
-Configuration Access Utility:
------------------------------
+    # Process-wide defaults from config/global.yaml
     from src.config import get_config_value
-
-    # Replace all _get_global_or_default() calls with this:
-    batch_size = get_config_value("training.batch_size", 256)
-    horizons = get_config_value("horizons.active", [5, 10, 15, 20])
+    batch_size = get_config_value("training.batch_size", 512)
 
 Package Structure:
 ------------------
     src/config/
         __init__.py         <- This file (central facade)
-        base.py             <- BaseConfig (foundation for all configs)
-        data.py             <- Data configs (Feature, Labeling, Scaler, etc.)
-        training.py         <- Training configs (Trainer, Optuna, etc.)
-        cv.py               <- CV configs (CPCV, WalkForward, etc.)
-        model_configs.py    <- Model configs (XGBoost, LSTM, etc.)
-        ensemble.py         <- Ensemble configs (Stacking, Voting, etc.)
-        inference.py        <- Inference configs (Backtest, Server, etc.)
+        base.py             <- BaseConfig (foundation for the config classes)
+        experiment.py       <- ExperimentConfig + its sections
+        data.py             <- Feature / Labeling / Sequence / MTF / Split configs
+        training.py         <- Optuna / Calibration configs
+        cv.py               <- WalkForwardConfig
+        symbol.py           <- SymbolConfig (contract specs)
+        global_config.py    <- GlobalConfig (config/global.yaml loader)
         utils.py            <- get_config_value (single implementation)
-        validators.py       <- Schema validation
-        global_config.py    <- GlobalConfig (YAML loader)
+        validators.py       <- global.yaml schema validation
         constants/          <- Re-exports from src.core.common
         models/             <- Re-exports from src.models.config
         pipeline/           <- Re-exports from src.data.pipeline.config
+
+Operational configs (PurgedKFoldConfig, the Backtester's BacktestConfig,
+ProbabilityCalibrator's CalibrationConfig, ...) live next to their
+implementations.
 """
 
 from __future__ import annotations
 
-import warnings
-
 # =============================================================================
-# BASE CONFIG (foundation for all config classes)
+# BASE CONFIG
 # =============================================================================
-from src.config.base import (
-    BaseConfig,
-    TimestampedConfigMixin,
-    VersionedConfigMixin,
-)
+from src.config.base import BaseConfig
 
 # =============================================================================
 # COMMONLY USED CONSTANTS (from src.config.constants)
@@ -113,62 +76,18 @@ from src.config.constants import (
 )
 
 # =============================================================================
-# CROSS-VALIDATION CONFIGS (consolidated from multiple locations)
+# EXPERIMENT SECTION CONFIGS
 # =============================================================================
-from src.config.cv import (
-    # Configs
-    CPCVConfig,
-    CVConfig,
-    # Enums
-    CVMethod,
-    DSRConfig,
-    PBOConfig,
-    PurgedKFoldConfig,
-    PurgeEmbargoConfig,
-    WalkForwardConfig,
-    WindowType,
-)
-
-# =============================================================================
-# DATA CONFIGS (consolidated from multiple locations)
-# =============================================================================
+from src.config.cv import WalkForwardConfig, WindowType
 from src.config.data import (
-    # Configs
-    BarConfig,
-    # Enums
     FeatureCategory,
     FeatureConfig,
     LabelingConfig,
-    LabelingMethod,
     MTFConfig,
     MTFMode,
-    MultiResolutionConfig,
-    ScalerConfig,
     ScalerType,
     SequenceConfig,
-    SessionConfig,
-    SessionsConfig,
     SplitConfig,
-)
-
-# =============================================================================
-# ENSEMBLE CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.ensemble import (
-    # Predefined
-    PREDEFINED_ENSEMBLES,
-    # Configs
-    BlendingConfig,
-    EnsembleConfig,
-    # Enums
-    EnsembleMethod,
-    MetaLearnerConfig,
-    MetaLearnerType,
-    OOFAlignmentConfig,
-    StackingConfig,
-    VotingConfig,
-    VotingType,
-    get_predefined_ensemble,
 )
 
 # Top-level ExperimentConfig (used by MLFactory) — canonical location
@@ -182,47 +101,6 @@ from src.config.global_config import (
     get_global_config,
     load_global_config,
     set_global_config,
-)
-
-# =============================================================================
-# INFERENCE CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.inference import (
-    # Configs
-    AlertConfig,
-    BacktestConfig,
-    BundleConfig,
-    InferenceConfig,
-    # Enums
-    InferenceMode,
-    PositionSizerConfig,
-    PositionSizingMethod,
-    PreprocessingGraphConfig,
-    ServerConfig,
-)
-
-# =============================================================================
-# MODEL CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.model_configs import (
-    # Enums
-    ActivationType,
-    # Boosting
-    CatBoostConfig,
-    GRUConfig,
-    LightGBMConfig,
-    # Neural
-    LSTMConfig,
-    # Base
-    ModelConfig,
-    ModelFamily,
-    # Transformer
-    PatchTSTConfig,
-    # Per-model
-    PerModelConfig,
-    TCNConfig,
-    TransformerConfig,
-    XGBoostConfig,
 )
 
 # =============================================================================
@@ -251,21 +129,7 @@ from src.config.pipeline import (
 # SYMBOL CONFIGURATION
 # =============================================================================
 from src.config.symbol import SymbolConfig
-
-# =============================================================================
-# TRAINING CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.training import (
-    # Optimization
-    CalibrationConfig,
-    CheckpointConfig,
-    ConformalConfig,
-    ExperimentTrackingConfig,
-    GAConfig,
-    OOMConfig,
-    OptunaConfig,
-    ParallelTrainingConfig,
-)
+from src.config.training import CalibrationConfig, OptunaConfig
 
 # =============================================================================
 # CONFIGURATION ACCESS UTILITIES
@@ -277,7 +141,6 @@ from src.config.utils import (
     ConfigSource,
     ConfigValueError,
     clear_config_cache,
-    # Primary function - USE THIS instead of _get_global_or_default()
     get_config_value,
     get_config_value_strict,
     list_config_paths,
@@ -299,135 +162,29 @@ from src.config.validators import (
     validate_config_file,
 )
 
-
-# =============================================================================
-# DEPRECATED: _get_global_or_default
-# =============================================================================
-def _get_global_or_default(attr_path: str, fallback):
-    """
-    DEPRECATED: Use get_config_value() instead.
-
-    This function exists only for backward compatibility.
-    """
-    warnings.warn(
-        "_get_global_or_default is deprecated. "
-        "Use get_config_value() from src.config instead:\n"
-        "  from src.config import get_config_value\n"
-        f"  value = get_config_value('{attr_path}', {fallback!r})",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_config_value(attr_path, fallback)
-
-
 __all__ = [
-    # ==========================================================================
-    # BASE CONFIG (foundation)
-    # ==========================================================================
+    # Base
     "BaseConfig",
-    "TimestampedConfigMixin",
-    "VersionedConfigMixin",
-    # ==========================================================================
-    # DATA CONFIGS (consolidated)
-    # ==========================================================================
-    # Enums
-    "ScalerType",
-    "FeatureCategory",
-    "LabelingMethod",
-    "MTFMode",
-    # Configs
+    # Experiment config + sections
+    "ExperimentConfig",
     "FeatureConfig",
     "LabelingConfig",
-    "ScalerConfig",
     "SequenceConfig",
     "MTFConfig",
-    "MultiResolutionConfig",
-    "SessionConfig",
-    "SessionsConfig",
     "SplitConfig",
-    "BarConfig",
-    # ==========================================================================
-    # TRAINING CONFIGS (consolidated)
-    # ==========================================================================
-    "TrainerConfig",
     "OptunaConfig",
-    "GAConfig",
     "CalibrationConfig",
-    "ConformalConfig",
-    "CheckpointConfig",
-    "OOMConfig",
-    "ParallelTrainingConfig",
-    "ExperimentTrackingConfig",
-    "ExperimentConfig",
-    # ==========================================================================
-    # CROSS-VALIDATION CONFIGS (consolidated)
-    # ==========================================================================
-    # Enums
-    "CVMethod",
-    "WindowType",
-    # Configs
-    "CVConfig",
-    "PurgeEmbargoConfig",
-    "PurgedKFoldConfig",
-    "CPCVConfig",
     "WalkForwardConfig",
-    "PBOConfig",
-    "DSRConfig",
-    # ==========================================================================
-    # MODEL CONFIGS (consolidated)
-    # ==========================================================================
-    # Enums
-    "ModelFamily",
-    "ActivationType",
-    # Configs
-    "ModelConfig",
-    "XGBoostConfig",
-    "LightGBMConfig",
-    "CatBoostConfig",
-    "LSTMConfig",
-    "GRUConfig",
-    "TCNConfig",
-    "TransformerConfig",
-    "PatchTSTConfig",
-    "PerModelConfig",
-    # ==========================================================================
-    # ENSEMBLE CONFIGS (consolidated)
-    # ==========================================================================
-    # Enums
-    "EnsembleMethod",
-    "VotingType",
-    "MetaLearnerType",
-    # Configs
-    "EnsembleConfig",
-    "MetaLearnerConfig",
-    "StackingConfig",
-    "VotingConfig",
-    "BlendingConfig",
-    "OOFAlignmentConfig",
-    # Predefined
-    "PREDEFINED_ENSEMBLES",
-    "get_predefined_ensemble",
-    # ==========================================================================
-    # INFERENCE CONFIGS (consolidated)
-    # ==========================================================================
-    # Enums
-    "InferenceMode",
-    "PositionSizingMethod",
-    # Configs
-    "InferenceConfig",
-    "BundleConfig",
-    "ServerConfig",
-    "BacktestConfig",
-    "PositionSizerConfig",
-    "PreprocessingGraphConfig",
-    "AlertConfig",
-    # ==========================================================================
-    # SYMBOL CONFIGURATION
-    # ==========================================================================
+    "WindowType",
+    # Shared enums
+    "ScalerType",
+    "FeatureCategory",
+    "MTFMode",
+    # Symbol configuration
     "SymbolConfig",
-    # ==========================================================================
-    # CONFIG ACCESS UTILITIES
-    # ==========================================================================
+    # Trainer config (src.models.config)
+    "TrainerConfig",
+    # Config access utilities
     "get_config_value",
     "get_config_value_strict",
     "clear_config_cache",
@@ -445,9 +202,6 @@ __all__ = [
     "ValidationIssue",
     "ValidationSeverity",
     "ConfigValidationError",
-    # ==========================================================================
-    # BACKWARD COMPATIBLE (still supported)
-    # ==========================================================================
     # Global config
     "GlobalConfig",
     "load_global_config",
@@ -483,8 +237,4 @@ __all__ = [
     "ModelDataRequirements",
     "BARRIER_PARAMS",
     "get_barrier_params",
-    # ==========================================================================
-    # DEPRECATED (for migration)
-    # ==========================================================================
-    "_get_global_or_default",
 ]

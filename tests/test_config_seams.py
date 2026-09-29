@@ -6,10 +6,13 @@ Covers:
 2. Optuna timeout reaching the TimeSeriesOptunaTuner constructor.
 3. ExperimentConfig.to_pipeline_config seams (optuna_timeout, optimize_features,
    mtf_timeframes).
-4. YAML round-trip (safe_dump/safe_load) and ScalerConfig clip_range list->tuple.
+4. YAML round-trip (safe_dump/safe_load); old YAML with removed/unknown keys
+   loads with a warning instead of crashing.
 5. TrainerConfig field-driven to_dict round-trip.
 6. OptunaConfig n_trials=0 valid, negative rejected.
 7. PipelineConfig regime_adx_threshold None-auto per symbol.
+8. Phase 116 wiring: split ratios, calibration enabled/method (down to
+   TrainerConfig) and ExperimentConfig.verbose reach the code that runs.
 
 Uses only tiny synthetic 2D data; no model is ever trained (Trainer and the
 Optuna tuner are monkeypatched to capture their configs).
@@ -19,7 +22,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.config.data import ScalerConfig
 from src.config.experiment import ExperimentConfig
 from src.config.training import OptunaConfig
 from src.data.adapters.preparation import PreparedData
@@ -59,7 +61,7 @@ class _FakeTrainer:
         return {"evaluation_metrics": {}}
 
 
-def _run_train_model(monkeypatch, tmp_path, *, patience, optimize_hyperparams=False):
+def _run_train_model(monkeypatch, tmp_path, *, patience, optimize_hyperparams=False, **extra):
     """Drive ModelTrainingService.train_model with a fake Trainer, capture config."""
     import src.models as models_pkg
     from src.models.training.services.model_training import (
@@ -81,6 +83,7 @@ def _run_train_model(monkeypatch, tmp_path, *, patience, optimize_hyperparams=Fa
         hyperparam_trials=1,
         n_splits=2,
         optuna_timeout=1234,
+        **extra,
     )
     result = ModelTrainingService().train_model(request)
     return _FakeTrainer.last_config, result
@@ -243,7 +246,7 @@ class TestToPipelineConfig:
 
 
 # =============================================================================
-# 4. YAML ROUND-TRIP + ScalerConfig NORMALIZATION
+# 4. YAML ROUND-TRIP + BACKWARD-COMPATIBLE LOADING
 # =============================================================================
 
 
@@ -270,11 +273,55 @@ class TestYamlRoundTrip:
         text = path.read_text()
         assert "!!python" not in text
 
-    def test_scaler_config_normalizes_list_clip_range_to_tuple(self):
-        scaler = ScalerConfig(clip_range=[-3, 3])
+    def test_removed_and_unknown_keys_warn_and_are_ignored(self, caplog):
+        """YAML written before Phase 116 still loads; dropped keys are reported."""
+        old = {
+            "run_id": "fixed_run",
+            "data": {
+                "symbol": "MGC",
+                "scaler": {"scaler_type": "robust", "clip_range": [-5, 5]},
+                "features": {"mode": "full", "selection_enabled": False},
+                "labeling": {"method": "triple_barrier", "upper_mult": 2.0},
+            },
+            "training": {
+                "device": "cuda",
+                "checkpoint": {"enabled": True},
+                "optuna": {"n_trials": 3, "n_startup_trials": 5},
+                "walk_forward": {"n_windows": 3, "gap_bars": 5},
+            },
+            "evaluation": {"compute_shap": True, "run_backtest": True},
+            "bundling": {"bundle_format": "tar.gz"},
+        }
 
-        assert isinstance(scaler.clip_range, tuple)
-        assert scaler.clip_range == (-3.0, 3.0)
+        with caplog.at_level("WARNING", logger="src.config.experiment"):
+            cfg = ExperimentConfig.from_dict(old)
+
+        # Known values survive
+        assert cfg.data.symbol == "MGC"
+        assert cfg.data.features.selection_enabled is False
+        assert cfg.data.labeling.upper_mult == 2.0
+        assert cfg.training.optuna.n_trials == 3
+        assert cfg.training.walk_forward.n_windows == 3
+        assert cfg.evaluation.run_backtest is True
+        # Every dropped key is named in a warning
+        text = caplog.text
+        for key in (
+            "scaler",
+            "mode",
+            "method",
+            "device",
+            "checkpoint",
+            "n_startup_trials",
+            "gap_bars",
+            "compute_shap",
+            "bundle_format",
+        ):
+            assert key in text, f"no warning for dropped key {key!r}"
+
+    def test_empty_section_uses_defaults(self):
+        cfg = ExperimentConfig.from_dict({"run_id": "r", "data": {"mtf": None}})
+
+        assert cfg.data.mtf.enabled is True
 
 
 # =============================================================================
@@ -365,3 +412,56 @@ class TestRegimeAdxThreshold:
         config = _pipeline_config(tmp_path, "MES", regime_adx_threshold=25.0)
 
         assert config.regime_adx_threshold == 25.0
+
+
+# =============================================================================
+# 8. PHASE 116 WIRING
+# =============================================================================
+
+
+class TestPhase116Wiring:
+    def test_split_ratios_reach_pipeline_config(self):
+        cfg = _experiment_config()
+        cfg.data.splits.train_ratio = 0.6
+        cfg.data.splits.val_ratio = 0.25
+        cfg.data.splits.test_ratio = 0.15
+
+        pipeline = cfg.to_pipeline_config()
+
+        assert (pipeline.train_ratio, pipeline.val_ratio, pipeline.test_ratio) == (
+            0.6,
+            0.25,
+            0.15,
+        )
+
+    def test_calibration_settings_reach_pipeline_config(self):
+        cfg = _experiment_config()
+        cfg.training.calibration.enabled = False
+        cfg.training.calibration.method = "isotonic"
+
+        pipeline = cfg.to_pipeline_config()
+
+        assert pipeline.auto_calibrate is False
+        assert pipeline.calibration_method == "isotonic"
+
+    def test_calibration_settings_reach_trainer_config(self, monkeypatch, tmp_path):
+        """The Trainer self-calibrates from TrainerConfig — it must not fall back
+        to global.yaml when the experiment disabled calibration."""
+        config, _ = _run_train_model(
+            monkeypatch,
+            tmp_path,
+            patience=None,
+            use_calibration=False,
+            calibration_method="sigmoid",
+        )
+
+        assert config.use_calibration is False
+        assert config.calibration_method == "sigmoid"
+
+    def test_experiment_verbose_is_factory_default(self, tmp_path):
+        from src.factory import MLFactory
+
+        cfg = ExperimentConfig(run_id="fixed_run", output_dir=str(tmp_path), verbose=0)
+
+        assert MLFactory(cfg, enable_checkpoints=False).verbose == 0
+        assert MLFactory(cfg, verbose=2, enable_checkpoints=False).verbose == 2
