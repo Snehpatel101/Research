@@ -133,7 +133,9 @@ class TestOOFEarlyStoppingIsolation:
 
     def test_tabular_oof(self, recording_registry: type[_RecordingModel]) -> None:
         n = 600
-        X = pd.DataFrame({"row": np.arange(n, dtype=float), "noise": np.random.rand(n)})
+        X = pd.DataFrame(
+            {"row": np.arange(n, dtype=float), "noise": np.random.default_rng(0).random(n)}
+        )
         y = pd.Series(_labels(n))
         CoreOOFGenerator(_cv()).generate_tabular_oof(X, y, "logistic", config={})
 
@@ -150,7 +152,10 @@ class TestOOFEarlyStoppingIsolation:
     def test_sequence_oof(self, recording_registry: type[_RecordingModel]) -> None:
         n, seq_len = 600, 8
         idx = pd.date_range("2024-01-02", periods=n, freq="5min")
-        X = pd.DataFrame({"row": np.arange(n, dtype=float), "noise": np.random.rand(n)}, index=idx)
+        X = pd.DataFrame(
+            {"row": np.arange(n, dtype=float), "noise": np.random.default_rng(0).random(n)},
+            index=idx,
+        )
         y = pd.Series(_labels(n), index=idx)
         SequenceOOFGenerator(_cv()).generate_sequence_oof(
             X, y, "lstm", config={}, seq_len=seq_len, strict_validation=False
@@ -170,7 +175,7 @@ class TestOOFEarlyStoppingIsolation:
         n, seq_len = 600, 6
         ids = np.arange(n, dtype=np.float32)
         shape = (n, seq_len, 2) if rank == 3 else (n, 2, seq_len, 2)
-        X = np.random.rand(*shape).astype(np.float32)
+        X = np.random.default_rng(0).random(shape).astype(np.float32)
         X[..., 0] = ids.reshape((n,) + (1,) * (rank - 2))  # row id in feature 0
         prepared = SimpleNamespace(
             X_train=X,
@@ -197,6 +202,41 @@ class TestOOFEarlyStoppingIsolation:
             fit_ids = _row_ids(model.fit_X.reshape(len(model.fit_X), -1)[:, 0], pred, val_idx)
             es_ids = _row_ids(model.es_X.reshape(len(model.es_X), -1)[:, 0], pred, val_idx)
             _assert_leak_free(fit_ids, es_ids, val_idx, train_idx)
+
+
+class TestSequenceOOFScalesFromRawEveryFold:
+    def test_every_fold_sees_features_scaled_from_the_raw_values(
+        self, recording_registry: type[_RecordingModel]
+    ) -> None:
+        """Fold scaling is in place, so each fold must start from the pristine raw array.
+
+        Scaling is affine, so re-scaling an already-scaled array is invisible except through
+        the +-5 clip. This feature is wide in the early rows and narrow after, and one raw
+        outlier (2.0) is held out in fold 2: fold 1 (fit on the narrow rows) clips it to 5.0,
+        while fold 2 scaled from raw sees it at about 2.7. Left-over fold-1 output would be
+        re-standardized to a much smaller value instead.
+        """
+        n, seq_len, outlier_row = 600, 8, 300
+        rng = np.random.default_rng(0)
+        idx = pd.date_range("2024-01-02", periods=n, freq="5min")
+        feature = np.r_[rng.normal(0, 1.0, 200), rng.normal(0, 0.1, n - 200)]
+        feature[outlier_row] = 2.0
+        X = pd.DataFrame({"row": np.arange(n, dtype=float), "level": feature}, index=idx)
+        y = pd.Series(_labels(n), index=idx)
+
+        SequenceOOFGenerator(_cv()).generate_sequence_oof(
+            X, y, "lstm", config={}, seq_len=seq_len, strict_validation=False
+        )
+
+        train_idx, val_idx = list(_cv().split(X, y))[1]
+        assert outlier_row in val_idx, "outlier must be held out in fold 2"
+        fit_idx = carve_early_stopping_split(train_idx, PURGE).fit_idx
+        fit_values = feature[fit_idx].astype(np.float32)
+        expected = (2.0 - fit_values.mean()) / fit_values.std()  # 'lstm' uses z-scoring
+        assert expected < 4.8, "fixture no longer separates raw scaling from re-scaling"
+
+        seen = np.concatenate(recording_registry.instances[1].pred_X)[..., 1]
+        assert seen.max() == pytest.approx(expected, rel=1e-3)
 
 
 # ---------------------------------------------------------------------------

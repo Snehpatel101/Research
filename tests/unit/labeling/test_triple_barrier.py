@@ -236,3 +236,49 @@ class TestLabelerAPI:
         # All values should be in {-99, -1, 0, 1}
         unique = set(labels.unique())
         assert unique.issubset({-99, -1, 0, 1})
+
+
+class TestExplicitZeroMultiplier:
+    """k_up / k_down of exactly 0.0 are real overrides, not 'unset' (falsy-default trap)."""
+
+    @staticmethod
+    def _trend_frame(slope: float) -> pd.DataFrame:
+        close = 100.0 + slope * np.arange(80)
+        return pd.DataFrame(
+            {
+                "open": close,
+                "high": close + 0.2,
+                "low": close - 0.2,
+                "close": close,
+                "volume": 1000.0,
+                "atr_14": 1.0,
+            },
+            index=pd.date_range("2024-01-01", periods=80, freq="5min"),
+        )
+
+    @pytest.mark.parametrize(
+        ("slope", "overrides", "expected_label"),
+        [
+            (1.0, {"k_up": 0.0, "k_down": 5.0}, 1),  # barrier AT entry: next up-bar hits it
+            (-1.0, {"k_up": 5.0, "k_down": 0.0}, -1),
+        ],
+    )
+    def test_zero_barrier_multiplier_resolves_on_the_next_bar(
+        self, slope: float, overrides: dict, expected_label: int
+    ) -> None:
+        config = TripleBarrierConfig(
+            upper_mult=2.0,
+            lower_mult=2.0,
+            horizon=10,
+            apply_transaction_costs=False,
+            atr_column="atr_14",
+        )
+        result = TripleBarrierLabeler(config).compute_labels(
+            self._trend_frame(slope), horizon=10, **overrides
+        )
+
+        valid = result.labels != -99
+        assert valid.any()
+        assert (result.labels[valid] == expected_label).all()
+        # With the config default of 2.0 ATR the barrier would take two bars, not one
+        assert (result.metadata["bars_to_hit"][valid] == 1).all()

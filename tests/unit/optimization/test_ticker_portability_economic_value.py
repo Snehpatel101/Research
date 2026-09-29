@@ -20,28 +20,11 @@ from src.validation.ticker_portability import (
     PortabilityScore,
     TickerPortabilityTester,
 )
+from tests.helpers import make_signal_features
 
 # ---------------------------------------------------------------------------
 # Helper to generate synthetic classification data
 # ---------------------------------------------------------------------------
-
-
-def _make_data(
-    n_samples: int = 500,
-    n_features: int = 10,
-    seed: int = 42,
-    informative: int = 3,
-) -> tuple[pd.DataFrame, pd.Series]:
-    """Generate synthetic data with some informative features."""
-    rng = np.random.RandomState(seed)
-    X = pd.DataFrame(
-        rng.randn(n_samples, n_features),
-        columns=[f"feat_{i}" for i in range(n_features)],
-    )
-    # Create label from first `informative` features
-    signal = X.iloc[:, :informative].sum(axis=1)
-    y = pd.Series((signal > 0).astype(int), name="label")
-    return X, y
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +36,7 @@ class TestTickerPortability:
     """E8: Cross-symbol feature portability testing."""
 
     def test_compute_importance_returns_series(self) -> None:
-        X, y = _make_data(n_samples=200, n_features=5)
+        X, y = make_signal_features(n_samples=200, n_features=5)
         tester = TickerPortabilityTester(n_estimators=10, n_repeats=2)
         imp = tester.compute_importance(X, y)
         assert isinstance(imp, pd.Series)
@@ -61,7 +44,7 @@ class TestTickerPortability:
         assert (imp >= 0).all()
 
     def test_importance_informative_features_higher(self) -> None:
-        X, y = _make_data(n_samples=500, n_features=5, informative=2)
+        X, y = make_signal_features(n_samples=500, n_features=5, informative=2)
         tester = TickerPortabilityTester(n_estimators=20, n_repeats=3)
         imp = tester.compute_importance(X, y)
         # Informative features (feat_0, feat_1) should have higher importance
@@ -70,8 +53,8 @@ class TestTickerPortability:
 
     def test_portability_same_distribution(self) -> None:
         """Same distribution on both symbols → high portability."""
-        X1, y1 = _make_data(n_samples=300, n_features=5, seed=42)
-        X2, y2 = _make_data(n_samples=300, n_features=5, seed=43)
+        X1, y1 = make_signal_features(n_samples=300, n_features=5, seed=42)
+        X2, y2 = make_signal_features(n_samples=300, n_features=5, seed=43)
         tester = TickerPortabilityTester(n_estimators=10, n_repeats=2)
         report = tester.test_portability(X1, y1, X2, y2, "MES", "MGC")
         assert isinstance(report, PortabilityReport)
@@ -80,8 +63,8 @@ class TestTickerPortability:
         assert len(report.scores) == 5
 
     def test_portability_report_fields(self) -> None:
-        X1, y1 = _make_data(n_samples=200, n_features=3, seed=42)
-        X2, y2 = _make_data(n_samples=200, n_features=3, seed=43)
+        X1, y1 = make_signal_features(n_samples=200, n_features=3, seed=42)
+        X2, y2 = make_signal_features(n_samples=200, n_features=3, seed=43)
         tester = TickerPortabilityTester(n_estimators=10, n_repeats=2)
         report = tester.test_portability(X1, y1, X2, y2)
         assert 0.0 <= report.overall_portability <= 1.0
@@ -108,7 +91,7 @@ class TestTickerPortability:
         assert (imp == 0.0).all()
 
     def test_single_class_returns_zeros(self) -> None:
-        X, _ = _make_data(n_samples=100, n_features=3)
+        X, _ = make_signal_features(n_samples=100, n_features=3)
         y = pd.Series([1] * 100)
         tester = TickerPortabilityTester()
         imp = tester.compute_importance(X, y)
@@ -151,7 +134,7 @@ class TestEconomicValueScorer:
     """E9: Leave-one-out marginal Sharpe scoring."""
 
     def test_score_features_returns_dataframe(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
         assert isinstance(df, pd.DataFrame)
@@ -166,13 +149,13 @@ class TestEconomicValueScorer:
         assert len(df) == 5
 
     def test_ranks_are_sequential(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
         assert list(df["rank"]) == [1, 2, 3, 4, 5]
 
     def test_marginal_sharpe_computation(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
         # marginal = baseline - without
@@ -181,14 +164,14 @@ class TestEconomicValueScorer:
             assert abs(row["marginal_sharpe"] - expected) < 1e-10
 
     def test_sorted_by_marginal_descending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
         marginals = df["marginal_sharpe"].tolist()
         assert marginals == sorted(marginals, reverse=True)
 
     def test_select_valuable_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
         # Select features with marginal > 0
@@ -207,7 +190,7 @@ class TestEconomicValueScorer:
         assert len(df) == 0
 
     def test_single_class_returns_zeros(self) -> None:
-        X, _ = _make_data(n_samples=100, n_features=3)
+        X, _ = make_signal_features(n_samples=100, n_features=3)
         y = pd.Series([1] * 100)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
@@ -215,7 +198,7 @@ class TestEconomicValueScorer:
 
     def test_feature_subset(self) -> None:
         """Score only a subset of features."""
-        X, y = _make_data(n_samples=300, n_features=5)
+        X, y = make_signal_features(n_samples=300, n_features=5)
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y, feature_names=["feat_0", "feat_1"])
         assert len(df) == 2

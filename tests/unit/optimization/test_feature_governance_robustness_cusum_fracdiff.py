@@ -112,8 +112,8 @@ class TestCUSUMFilter:
     """CUSUM filter for event-driven labeling."""
 
     def test_cusum_detects_large_moves(self) -> None:
-        np.random.seed(42)
-        returns = pd.Series(np.random.randn(1000) * 0.01)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(1000) * 0.01)
         events = cusum_filter(returns, threshold=0.02)
         assert len(events) > 0
         assert len(events) < len(returns)
@@ -130,8 +130,8 @@ class TestCUSUMFilter:
         assert len(events) >= 2  # Should trigger at least twice
 
     def test_cusum_events_mask_boolean(self) -> None:
-        np.random.seed(42)
-        returns = pd.Series(np.random.randn(500) * 0.01)
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(500) * 0.01)
         mask = cusum_events_mask(returns, threshold=0.02)
         assert isinstance(mask, pd.Series)
         assert mask.dtype == bool
@@ -149,8 +149,8 @@ class TestCUSUMFilter:
         assert isinstance(events, np.ndarray)
 
     def test_get_cusum_threshold_calibration(self) -> None:
-        np.random.seed(42)
-        returns = pd.Series(np.random.randn(7800) * 0.005)  # 100 days of 78 bars
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.standard_normal(7800) * 0.005)  # 100 days of 78 bars
         threshold = get_cusum_threshold(returns, target_events_per_day=5.0, bars_per_day=78)
         assert threshold > 0
         # Verify it's roughly right
@@ -174,8 +174,8 @@ class TestFractionalDiff:
 
     def test_frac_diff_preserves_memory(self) -> None:
         """d=0.3 should keep high correlation with original."""
-        np.random.seed(42)
-        prices = pd.Series(100 + np.cumsum(np.random.randn(500) * 0.5))
+        rng = np.random.default_rng(42)
+        prices = pd.Series(100 + np.cumsum(rng.standard_normal(500) * 0.5))
         diffed = frac_diff_ffd(prices, d=0.3)
         # Drop NaN warmup period
         valid = diffed.dropna()
@@ -205,14 +205,15 @@ class TestFractionalDiff:
 
     def test_frac_diff_returns_aligned_index(self) -> None:
         idx = pd.date_range("2024-01-01", periods=100, freq="h")
-        series = pd.Series(np.random.randn(100).cumsum() + 100, index=idx)
+        rng = np.random.default_rng(42)
+        series = pd.Series(rng.standard_normal(100).cumsum() + 100, index=idx)
         result = frac_diff_ffd(series, d=0.3)
         assert result.index.equals(series.index)
 
     def test_find_min_d_returns_valid_range(self) -> None:
         pytest.importorskip("statsmodels")
-        np.random.seed(42)
+        rng = np.random.default_rng(42)
         # Random walk (non-stationary) — should need d > 0
-        prices = pd.Series(100 + np.cumsum(np.random.randn(500)))
+        prices = pd.Series(100 + np.cumsum(rng.standard_normal(500)))
         d = find_min_d(prices, p_value_threshold=0.05, d_step=0.1)
         assert 0.0 <= d <= 1.0

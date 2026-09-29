@@ -37,8 +37,8 @@ from src.core.label_spans import (
 from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig
 from src.validation.cv.walk_forward import WalkForwardConfig, WalkForwardEvaluator
+from tests.helpers import REPO_ROOT, make_intraday_ohlcv
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 LABEL_LAG = 100  # labels resolve 100 bars after their bar (t5 audit reproduction)
 
 
@@ -141,7 +141,7 @@ class TestLabelEnds:
     def test_labeler_exposes_label_end_positions(self) -> None:
         from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 
-        df = _synthetic_ohlcv(1200)
+        df = make_intraday_ohlcv(1200, index_name=None)
         max_bars = 12
         labeler = TripleBarrierLabeler(
             TripleBarrierConfig(
@@ -445,25 +445,6 @@ class TestOOFAndTunerUseSpans:
 # =============================================================================
 
 
-def _synthetic_ohlcv(n: int = 3000, seed: int = 11) -> pd.DataFrame:
-    rng = np.random.RandomState(seed)
-    idx = pd.date_range("2024-01-02 09:30", periods=n, freq="5min")
-    close = 5000.0 + np.cumsum(rng.normal(0, 2.0, n))
-    open_ = np.roll(close, 1) + rng.normal(0, 0.5, n)
-    open_[0] = close[0]
-    eps = np.abs(rng.normal(0, 0.5, n)) + 0.25
-    return pd.DataFrame(
-        {
-            "open": open_,
-            "high": np.maximum(open_, close) + eps,
-            "low": np.minimum(open_, close) - eps,
-            "close": close,
-            "volume": rng.randint(100, 5000, n).astype(float),
-        },
-        index=idx,
-    )
-
-
 def _factory_config(data_path: Path, out: Path, mode: str) -> ExperimentConfig:
     cfg = ExperimentConfig(name=f"label_overlap_{mode}", random_seed=42, verbose=0)
     cfg.output_dir = out / cfg.run_id
@@ -485,10 +466,11 @@ def _factory_config(data_path: Path, out: Path, mode: str) -> ExperimentConfig:
 @pytest.fixture(scope="module")
 def data_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     path = tmp_path_factory.mktemp("label_overlap") / "mes_5min.parquet"
-    _synthetic_ohlcv().to_parquet(path)
+    make_intraday_ohlcv(3000, index_name=None).to_parquet(path)
     return path
 
 
+@pytest.mark.slow
 def test_factory_derives_gaps_and_writes_label_ends(data_path: Path, tmp_path: Path) -> None:
     from src.factory import MLFactory
 
@@ -528,6 +510,7 @@ def _load_harness() -> Any:
     return module
 
 
+@pytest.mark.slow
 def test_meta_labeling_trains_on_sided_bars_and_serves_identically(
     data_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
