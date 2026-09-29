@@ -24,11 +24,11 @@ test-quick: ## Run fast tests only (excludes tests marked slow)
 test-slow: ## Run slow end-to-end tests only
 	pytest -m slow -n 2 --dist loadfile
 
-lint: ## Run ruff linter on src/ and tests/ (with auto-fix)
-	ruff check src/ tests/ --fix
+lint: ## Run ruff linter on src/, tests/ and scripts/ (with auto-fix)
+	ruff check src/ tests/ scripts/ --fix
 
 format: ## Format code with black
-	black src/ tests/
+	black src/ tests/ scripts/
 
 type-check: ## Run pyright (must report 0 errors)
 	pyright
@@ -37,8 +37,8 @@ dead-code: ## Report unused code (vulture, config in pyproject)
 	vulture
 
 check: ## Everything CI runs: lint, format, types, dead code, fast tests
-	ruff check src/ tests/
-	black --check src/ tests/
+	ruff check src/ tests/ scripts/
+	black --check src/ tests/ scripts/
 	pyright
 	vulture
 	pytest -m "not slow" -n auto --dist loadfile

@@ -153,6 +153,19 @@ class TestOptunaTimeoutThreading:
 
         assert _FakeTuner.captured.get("timeout") == 1234
 
+    def test_tuned_best_params_reach_trainer_model_config(self, monkeypatch, tmp_path):
+        """Optuna's best_params must be trained with, not discarded (Phase 74 regression)."""
+        import src.models.training.services.hyperparameter_tuning as ht
+
+        monkeypatch.setattr(ht, "TimeSeriesOptunaTuner", _FakeTuner)
+
+        config, _ = _run_train_model(
+            monkeypatch, tmp_path, patience=None, optimize_hyperparams=True
+        )
+
+        assert config is not None
+        assert config.model_config["n_estimators"] == 10
+
     def test_model_training_request_has_optuna_timeout_field(self):
         from src.models.training.services.model_training import ModelTrainingRequest
 
