@@ -1,111 +1,67 @@
 """
-Pipeline Commands - run, data, status, resume.
+Pipeline Commands - run, data, status, models.
 
-These commands provide the main ML pipeline orchestration using MLFactory.
+Every command runs on MLFactory: raw OHLCV bars -> FeatureEngineer -> triple-barrier
+labels (with label spans) -> models -> ensemble -> backtest -> deploy artifact.
 
-Note: This CLI uses the existing pipeline infrastructure:
-- src.config.experiment.ExperimentConfig for ML pipeline configuration
-- src.factory.MLFactory for ML pipeline orchestration
-- src.data.pipeline.runner.PipelineRunner for data pipeline
-- src.data.pipeline.data_config.DataConfig for data pipeline configuration
+- ``run``:    the full pipeline (train one model, several, or an ensemble; any training mode)
+- ``data``:   the data step only - features and labels written to parquet
+- ``status``: checkpoint progress of a run directory
+- ``models``: registered models and their default configuration
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 
 import typer
 
 from src.cli.utils import (
+    DEFAULT_OUTPUT_DIR,
+    build_experiment_config,
     console,
+    parse_horizon_list,
+    setup_logging,
     show_error,
+    show_info,
 )
 
 logger = logging.getLogger(__name__)
 
-pipeline_app = typer.Typer(
-    name="pipeline",
-    help="Pipeline orchestration commands",
-    no_args_is_help=True,
-)
+RUN_CONFIG_FILE = "experiment_config.yaml"
 
 
-def _build_ml_config(
-    symbol: str,
-    horizons: list[int],
-    models: list[str],
-    training_mode: str,
-    build_ensemble: bool,
-    optimize_features: bool,
-    data_path: Path,
-    output_dir: Path,
-    config_path: Path | None,
-    meta_learner: str = "ridge_meta",
-    bar_timeframe: str | None = None,
-    purge_bars: int | None = None,
-    embargo_bars: int | None = None,
-):
-    """Build ExperimentConfig from arguments for ML pipeline."""
-    from src.config.experiment import DataSection, ExperimentConfig, TrainingSection
-    from src.config.training import OptunaConfig
+def _print_run_result(result) -> None:
+    """Print the summary of a finished MLFactory run."""
+    console.print("\n" + "=" * 70)
+    console.print("[bold green]PIPELINE COMPLETED SUCCESSFULLY[/bold green]")
+    console.print("=" * 70)
+    console.print(f"Run ID: {result.run_id}")
+    console.print(f"Output: {result.output_dir}", soft_wrap=True)
+    console.print(f"Duration: {result.duration_seconds:.1f}s")
 
-    if config_path:
-        return ExperimentConfig.from_yaml(config_path)
+    if result.best_model:
+        console.print(f"\nBest model: {result.best_model}")
 
-    n_trials = 100 if optimize_features else 0
-
-    return ExperimentConfig(
-        name=f"{symbol}_pipeline",
-        output_dir=output_dir,
-        data=DataSection(
-            symbol=symbol,
-            data_path=data_path,
-            bar_timeframe=bar_timeframe,
-        ),
-        training=TrainingSection(
-            models=models,
-            horizons=horizons,
-            training_mode=training_mode,
-            build_ensemble=build_ensemble,
-            meta_learner=meta_learner,
-            optuna=OptunaConfig(n_trials=n_trials),
-            # None = derived from the label span / bar timeframe (resolve_cv_gaps)
-            purge_bars=purge_bars,
-            embargo_bars=embargo_bars,
-        ),
-    )
+    for title, values in (("Metrics", result.metrics), ("Backtest", result.backtest_metrics)):
+        scalars = {k: v for k, v in (values or {}).items() if isinstance(v, int | float | str)}
+        if scalars:
+            console.print(f"\n{title}:")
+            for k, v in scalars.items():
+                console.print(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
 
 
-def _build_data_config(
-    symbol: str,
-    horizons: list[int],
-    timeframe: str,
-    start_date: str | None,
-    end_date: str | None,
-    config_path: Path | None,
-):
-    """Build DataConfig from arguments for data pipeline."""
-    from src.data.pipeline.data_config import DataConfig
-
-    if config_path:
-        return DataConfig.load_config(config_path)
-
-    return DataConfig(
-        symbols=[symbol],
-        label_horizons=horizons,
-        target_timeframe=timeframe,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-
-@pipeline_app.command("run")
 def run_pipeline(
+    ctx: typer.Context,
+    data_path: Path | None = typer.Option(
+        None, "--data-path", "-d", help="Raw OHLCV file (parquet or csv)"
+    ),
     symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option("20", "--horizons", "-h", help="Label horizons (comma-separated)"),
     models: str = typer.Option(
-        "xgboost", "--models", "-m", help="Models to train (comma-separated)"
+        "xgboost", "--models", "-m", help="Models to train (comma-separated; see `ml models`)"
     ),
     training_mode: str = typer.Option(
         "standard",
@@ -113,7 +69,7 @@ def run_pipeline(
         help="Training mode: standard, walk_forward, regime_aware, meta_labeling",
     ),
     build_ensemble: bool = typer.Option(
-        False, "--build-ensemble", help="Build ensemble from base models"
+        False, "--build-ensemble", help="Stack the base models into an ensemble"
     ),
     meta_learner: str = typer.Option(
         "ridge_meta",
@@ -123,6 +79,10 @@ def run_pipeline(
     bar_timeframe: str | None = typer.Option(
         None, "--bar-timeframe", help="Resample input bars before training, e.g. 5min"
     ),
+    mtf: bool = typer.Option(
+        True, "--mtf/--no-mtf", help="Multi-timeframe features (shift(1) anti-lookahead)"
+    ),
+    n_splits: int | None = typer.Option(None, "--n-splits", help="Purged CV folds (default 5)"),
     purge_bars: int | None = typer.Option(
         None,
         "--purge-bars",
@@ -135,291 +95,274 @@ def run_pipeline(
         help="CV embargo gap in bars (default: one trading day at the bar timeframe, "
         "capped at 25% of a CV fold)",
     ),
-    optimize_features: bool = typer.Option(
-        False, "--optimize-features", help="Run feature optimization"
+    n_trials: int = typer.Option(
+        0, "--n-trials", help="Optuna hyperparameter trials per model (0 = no tuning)"
     ),
-    data_path: Path = typer.Option(
-        ..., "--data-path", "-d", help="Path to input data file (parquet)"
+    max_epochs: int | None = typer.Option(None, "--max-epochs", help="Neural max epochs"),
+    batch_size: int | None = typer.Option(None, "--batch-size", help="Neural batch size"),
+    backtest: bool = typer.Option(
+        False,
+        "--backtest/--no-backtest",
+        help="Backtest the predictions with barrier-aligned exits",
+    ),
+    deploy: bool = typer.Option(
+        True, "--deploy/--no-deploy", help="Write the bundle and deploy artifact"
     ),
     output_dir: Path = typer.Option(
-        Path("./experiments"), "--output-dir", "-o", help="Output directory for results"
+        DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output root; the run writes <dir>/<run_id>/"
     ),
     config: Path | None = typer.Option(
-        None, "--config", "-c", help="Path to ExperimentConfig YAML file"
+        None, "--config", "-c", help="ExperimentConfig YAML (replaces the options above)"
     ),
-    resume: bool = typer.Option(
-        False, "--resume", help="Resume from the last MLFactory checkpoint in output dir"
+    resume: Path | None = typer.Option(
+        None,
+        "--resume",
+        help="Run directory to resume from its last checkpoint (settings come from the "
+        "run's experiment_config.yaml)",
     ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
 ):
     """
-    Run full ML pipeline (data + training + evaluation).
+    Run the full pipeline: features, labels, training, ensemble, backtest, deploy.
 
-    This orchestrates the complete pipeline including data preparation,
-    model training, and evaluation using MLFactory.
+    One model or many, any training mode. This is the single training entry point.
 
-    Example:
-        pipeline run --symbol MES --data-path ./data/mes.parquet --output-dir ./exp
+    Examples:
 
-        # Mix and match: tabular + sequence + multi-stream models, soft-vote ensemble
-        pipeline run -d ./data/mes_1m.parquet --bar-timeframe 5min \\
+        ml run -d data/mes_5min.parquet -m xgboost
+
+        ml run -d data/mes_1m.parquet --bar-timeframe 5min \\
             -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta
+
+        ml run -d data/mes_5min.parquet -m xgboost --training-mode walk_forward --backtest
+
+        ml run --resume experiments/<run_id>
     """
+    from src.config.experiment import ExperimentConfig
     from src.factory import MLFactory
 
-    # Parse comma-separated arguments
-    horizon_list = [int(h.strip()) for h in horizons.split(",") if h.strip()]
-    model_list = [m.strip() for m in models.split(",") if m.strip()]
+    setup_logging(verbose)
+
+    if resume is not None:
+        # A resumed run keeps the settings it was started with; silently ignoring
+        # other options would hide that they have no effect
+        ignored = sorted(
+            "--" + name.replace("_", "-")
+            for name in ctx.params
+            if name not in ("resume", "verbose")
+            and getattr(ctx.get_parameter_source(name), "name", "") == "COMMANDLINE"
+        )
+        if ignored:
+            show_error(
+                f"--resume takes the run's saved settings; remove {', '.join(ignored)} "
+                f"(or start a new run)"
+            )
+            raise typer.Exit(1)
 
     try:
-        ml_config = _build_ml_config(
-            symbol=symbol,
-            horizons=horizon_list,
-            models=model_list,
-            training_mode=training_mode,
-            build_ensemble=build_ensemble,
-            optimize_features=optimize_features,
-            data_path=data_path,
-            output_dir=output_dir,
-            config_path=config,
-            meta_learner=meta_learner,
-            bar_timeframe=bar_timeframe,
-            purge_bars=purge_bars,
-            embargo_bars=embargo_bars,
-        )
-    except (FileNotFoundError, ValueError) as e:
+        if resume is not None:
+            config_path = resume / RUN_CONFIG_FILE
+            if not config_path.exists():
+                raise FileNotFoundError(f"No {RUN_CONFIG_FILE} in run directory {resume}")
+            ml_config = ExperimentConfig.from_yaml(config_path)
+        elif config is not None:
+            ml_config = ExperimentConfig.from_yaml(config)
+            if data_path is not None:
+                ml_config.data.data_path = data_path.resolve()
+        else:
+            if data_path is None:
+                raise ValueError("--data-path is required (or use --config / --resume)")
+            ml_config = build_experiment_config(
+                data_path=data_path,
+                output_dir=output_dir,
+                symbol=symbol,
+                horizons=parse_horizon_list(horizons),
+                models=[m.strip() for m in models.split(",") if m.strip()],
+                bar_timeframe=bar_timeframe,
+                mtf=mtf,
+                training_mode=training_mode,
+                build_ensemble=build_ensemble,
+                meta_learner=meta_learner,
+                n_trials=n_trials,
+                max_epochs=max_epochs,
+                batch_size=batch_size,
+                n_splits=n_splits,
+                purge_bars=purge_bars,
+                embargo_bars=embargo_bars,
+                run_backtest=backtest,
+                deploy=deploy,
+            )
+    except (FileNotFoundError, ValueError, KeyError, TypeError) as e:
         show_error(f"Configuration error: {e}")
         raise typer.Exit(1) from None
 
-    console.print("\n[bold]Starting full ML pipeline[/bold]")
+    console.print("\n[bold]Starting ML pipeline[/bold]")
     console.print(f"Symbol: {ml_config.symbol}")
     console.print(f"Horizons: {ml_config.horizons}")
     console.print(f"Models: {ml_config.models}")
+    console.print(f"Mode: {ml_config.training.training_mode}")
     console.print(f"Data path: {ml_config.data.data_path}")
     console.print(f"Output dir: {ml_config.output_dir}")
     console.print()
 
-    factory = MLFactory(ml_config)
-
     try:
-        result = factory.run(resume=resume)
-
-        console.print("\n" + "=" * 70)
-        console.print("[bold green]PIPELINE COMPLETED SUCCESSFULLY[/bold green]")
-        console.print("=" * 70)
-        console.print(f"Run ID: {result.run_id}")
-        console.print(f"Output: {result.output_dir}")
-        console.print(f"Duration: {result.duration_seconds:.1f}s")
-
-        if result.best_model:
-            console.print(f"\nBest model: {result.best_model}")
-
-        if result.metrics:
-            console.print("\nMetrics:")
-            for k, v in result.metrics.items():
-                if isinstance(v, float):
-                    console.print(f"  {k}: {v:.4f}")
-                else:
-                    console.print(f"  {k}: {v}")
-
-        raise typer.Exit(0)
-
-    except typer.Exit:
-        raise
+        factory = MLFactory(ml_config)
+        result = factory.resume_from_checkpoint() if resume is not None else factory.run()
     except Exception as e:
         show_error(f"Pipeline failed: {e}")
         raise typer.Exit(1) from None
 
+    _print_run_result(result)
 
-@pipeline_app.command("data")
+
 def run_data(
+    data_path: Path = typer.Option(
+        ..., "--data-path", "-d", help="Raw OHLCV file (parquet or csv)"
+    ),
     symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option("20", "--horizons", "-h", help="Label horizons (comma-separated)"),
-    timeframe: str = typer.Option("5min", "--timeframe", "-t", help="Primary timeframe"),
-    start_date: str | None = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
-    end_date: str | None = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
-    resume: bool = typer.Option(False, "--resume", help="Resume from last successful stage"),
-    config: Path | None = typer.Option(None, "--config", "-c", help="Path to JSON config file"),
+    bar_timeframe: str | None = typer.Option(
+        None, "--bar-timeframe", help="Resample input bars first, e.g. 5min"
+    ),
+    mtf: bool = typer.Option(True, "--mtf/--no-mtf", help="Multi-timeframe features"),
+    output_dir: Path = typer.Option(
+        DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output root; writes <dir>/<run_id>/"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
 ):
     """
-    Run data pipeline only.
+    Compute features and triple-barrier labels and write them to parquet (no training).
 
-    Prepares and processes raw data for training without actually training models.
-    Uses PipelineRunner from src.data.pipeline for stage-based execution.
+    The frame is exactly what `ml run` trains on: engineered features, one
+    `label_h<H>` column per horizon and the `label_end_h<H>` row positions at
+    which each label resolves (used for purging).
 
     Example:
-        pipeline data --symbol MES --timeframe 5min --horizons 20
+
+        ml data -d data/mes_5min.parquet --horizons 5,20
     """
-    from src.data.pipeline.runner import PipelineRunner
+    from src.factory import MLFactory
 
-    # Parse comma-separated arguments
-    horizon_list = [int(h.strip()) for h in horizons.split(",") if h.strip()]
+    setup_logging(verbose)
 
-    data_config = _build_data_config(
-        symbol=symbol,
-        horizons=horizon_list,
-        timeframe=timeframe,
-        start_date=start_date,
-        end_date=end_date,
-        config_path=config,
-    )
-
-    console.print("\n[bold]Running data pipeline[/bold]")
-    console.print(f"Symbol: {data_config.symbols}")
-    console.print(f"Horizons: {data_config.label_horizons}")
-    console.print(f"Timeframe: {data_config.target_timeframe}")
-    console.print(f"Run ID: {data_config.run_id}")
-    console.print()
-
+    factory = None
     try:
-        runner = PipelineRunner(data_config, resume=resume)
-        success = runner.run()
-
-        console.print("\n" + "=" * 70)
-        if success:
-            console.print("[bold green]DATA PIPELINE COMPLETED[/bold green]")
-        else:
-            console.print("[bold red]DATA PIPELINE FAILED[/bold red]")
-        console.print("=" * 70)
-        console.print(f"Run ID: {data_config.run_id}")
-        console.print(f"Completed stages: {runner.get_completed_stages()}")
-
-        raise typer.Exit(0 if success else 1)
-
-    except typer.Exit:
-        raise
+        ml_config = build_experiment_config(
+            data_path=data_path,
+            output_dir=output_dir,
+            symbol=symbol,
+            horizons=parse_horizon_list(horizons),
+            models=["xgboost"],
+            bar_timeframe=bar_timeframe,
+            mtf=mtf,
+            name=f"{symbol}_data",
+        )
+        factory = MLFactory(ml_config, enable_checkpoints=False)
+        df, _ = factory.prepare_data()
     except Exception as e:
-        show_error(f"Data pipeline failed: {e}")
+        if factory is not None:
+            shutil.rmtree(factory.output_dir, ignore_errors=True)
+        show_error(f"Data step failed: {e}")
         raise typer.Exit(1) from None
 
+    out_path = factory.output_dir / "features_labels.parquet"
+    df.to_parquet(out_path)
 
-@pipeline_app.command("status")
+    console.print("\n[bold green]DATA STEP COMPLETED[/bold green]")
+    console.print(f"Rows: {len(df)}  Columns: {len(df.columns)}")
+    for horizon in ml_config.horizons:
+        counts = df[f"label_h{horizon}"].value_counts().to_dict()
+        console.print(f"label_h{horizon}: {counts}")
+    console.print(f"Written: {out_path}", soft_wrap=True)
+
+
 def show_status(
-    run_id: str = typer.Option(..., "--run-id", "-r", help="Run ID to check"),
-    project_root: Path = typer.Option(
-        Path("."), "--project-root", "-p", help="Project root directory"
+    run_dir: Path = typer.Argument(..., help="Run directory (<output_dir>/<run_id>)"),
+):
+    """
+    Show checkpoint progress of a run.
+
+    Lists the stages `ml run` completed (data, training, evaluation, bundling) and
+    what `ml run --resume <run_dir>` would do next.
+
+    Example:
+
+        ml status experiments/20260929_101500_123456_ab12
+    """
+    from src.core.checkpoint import PipelineCheckpointManager
+    from src.factory import MLFactory
+
+    if not run_dir.is_dir():
+        show_error(f"Run directory not found: {run_dir}")
+        raise typer.Exit(1)
+
+    checkpoint_dir = run_dir / "checkpoints"
+    checkpoints = (
+        PipelineCheckpointManager(run_dir).get_all_checkpoints() if checkpoint_dir.is_dir() else []
+    )
+
+    console.print("=" * 70)
+    console.print(f"[bold]RUN STATUS[/bold]  {run_dir}")
+    console.print("=" * 70)
+    if not checkpoints:
+        console.print("No checkpoints: the run has not completed its first stage.")
+        show_info(f"Start it with `ml run --resume {run_dir}` (needs {RUN_CONFIG_FILE})")
+        return
+
+    for state in checkpoints:
+        console.print(
+            f"  [green]+ {state.stage_name}[/green]  "
+            f"{state.completed_at:%Y-%m-%d %H:%M:%S}  "
+            + " ".join(f"{k}={v}" for k, v in state.metadata.items())
+        )
+    last = checkpoints[-1].stage_index
+    if last >= MLFactory.STAGE_BUNDLING:
+        console.print("\nAll stages completed.")
+    else:
+        console.print(f"\nNext: stage {last + 1} - `ml run --resume {run_dir}`")
+
+
+def list_models(
+    model: str | None = typer.Argument(
+        None, help="Model name for its default configuration; omit to list all models"
     ),
 ):
     """
-    Show pipeline status for a specific run.
+    List registered models, or show one model's details and default configuration.
 
-    Displays the current state, completed phases, and any errors.
-    Reads state from data/runs/{run_id}/artifacts/pipeline_state.json.
+    Examples:
 
-    Example:
-        pipeline status --run-id 20250101_120000_abc123
+        ml models
+
+        ml models xgboost
     """
-    import json
+    import src.models  # noqa: F401 - registers models
+    from src.models.registry import ModelRegistry
 
-    # Look for pipeline state file in the expected location
-    state_path = project_root / "data" / "runs" / run_id / "artifacts" / "pipeline_state.json"
-
-    if not state_path.exists():
-        show_error(f"Run ID '{run_id}' not found at {state_path}")
-        console.print(
-            "\n[dim]Pipeline state file not found. The run may not exist or "
-            "may have been created with a different project root.[/dim]"
-        )
-        raise typer.Exit(1) from None
+    if model is None:
+        console.print("\n[bold]Available Models:[/bold]")
+        console.print("=" * 60)
+        for family, names in sorted(ModelRegistry.list_models().items()):
+            console.print(f"\n[bold cyan]{family.upper()}:[/bold cyan]")
+            for name in sorted(names):
+                description = ModelRegistry.get_metadata(name).get("description", "")
+                console.print(f"  - {name}: {description}")
+        console.print(f"\n[bold]Total: {ModelRegistry.count()} models[/bold]")
+        return
 
     try:
-        with open(state_path) as f:
-            state = json.load(f)
-
-        console.print("=" * 70)
-        console.print("[bold]PIPELINE STATUS[/bold]")
-        console.print("=" * 70)
-        console.print(f"Run ID: {state.get('run_id', run_id)}")
-        console.print(f"Saved at: {state.get('saved_at', 'Unknown')}")
-
-        completed = state.get("completed_stages", [])
-        console.print(f"\nCompleted stages ({len(completed)}):")
-        for stage in completed:
-            console.print(f"  [green]+ {stage}[/green]")
-
-        # Show stage results if available
-        stage_results = state.get("stage_results", {})
-        if stage_results:
-            console.print("\nStage results:")
-            for stage_name, result in stage_results.items():
-                status = result.get("status", "unknown")
-                duration = result.get("duration_seconds", 0)
-                if status == "completed":
-                    console.print(f"  [green]{stage_name}[/green]: {duration:.2f}s")
-                else:
-                    error = result.get("error", "")
-                    console.print(f"  [red]{stage_name}[/red]: {status} - {error}")
-
-        raise typer.Exit(0)
-
-    except typer.Exit:
-        raise
-    except json.JSONDecodeError as e:
-        show_error(f"Failed to parse pipeline state: {e}")
-        raise typer.Exit(1) from None
-    except Exception as e:
+        info = ModelRegistry.get_model_info(model)
+    except ValueError as e:
         show_error(str(e))
         raise typer.Exit(1) from None
 
-
-@pipeline_app.command("resume")
-def resume_pipeline(
-    run_id: str = typer.Option(..., "--run-id", "-r", help="Run ID to resume"),
-    symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
-    horizons: str = typer.Option("20", "--horizons", "-h", help="Label horizons (comma-separated)"),
-    timeframe: str = typer.Option("5min", "--timeframe", "-t", help="Primary timeframe"),
-    start_date: str | None = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
-    end_date: str | None = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
-    from_stage: str | None = typer.Option(None, "--from-stage", help="Stage to resume from"),
-    config: Path | None = typer.Option(None, "--config", "-c", help="Path to JSON config file"),
-):
-    """
-    Resume data pipeline from checkpoint.
-
-    Continues a previously interrupted pipeline run from where it left off.
-    Uses PipelineRunner with resume=True to load previous state.
-
-    Example:
-        pipeline resume --run-id 20250101_120000_abc123 --symbol MES
-    """
-    from src.data.pipeline.runner import PipelineRunner
-
-    # Parse comma-separated arguments
-    horizon_list = [int(h.strip()) for h in horizons.split(",") if h.strip()]
-
-    data_config = _build_data_config(
-        symbol=symbol,
-        horizons=horizon_list,
-        timeframe=timeframe,
-        start_date=start_date,
-        end_date=end_date,
-        config_path=config,
-    )
-
-    # Override run_id to resume the specific run
-    data_config.run_id = run_id
-
-    console.print("\n[bold]Resuming data pipeline[/bold]")
-    console.print(f"Run ID: {data_config.run_id}")
-    console.print(f"Symbol: {data_config.symbols}")
-    console.print()
-
-    try:
-        runner = PipelineRunner(data_config, resume=True)
-        success = runner.run(from_stage=from_stage)
-
-        console.print("\n" + "=" * 70)
-        if success:
-            console.print("[bold green]RESUME COMPLETED[/bold green]")
-        else:
-            console.print("[bold red]RESUME FAILED[/bold red]")
-        console.print("=" * 70)
-        console.print(f"Run ID: {data_config.run_id}")
-        console.print(f"Completed stages: {runner.get_completed_stages()}")
-
-        raise typer.Exit(0 if success else 1)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        show_error(f"Resume failed: {e}")
-        raise typer.Exit(1) from None
+    console.print(f"\n[bold]Model: {info['name']}[/bold]")
+    console.print("=" * 60)
+    console.print(f"Family: {info['family']}")
+    console.print(f"Description: {info.get('description', 'N/A')}")
+    console.print(f"Requires Scaling: {info['requires_scaling']}")
+    console.print(f"Requires Sequences: {info['requires_sequences']}")
+    console.print(f"Requires 4D: {info.get('requires_4d', False)}")
+    console.print("\n[bold]Default Configuration:[/bold]")
+    for key, value in sorted(info["default_config"].items()):
+        console.print(f"  {key}: {value}")

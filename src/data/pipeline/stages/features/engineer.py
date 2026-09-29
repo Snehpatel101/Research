@@ -201,6 +201,7 @@ class FeatureEngineer:
         wavelet_level: int = 3,
         wavelet_window: int = 64,
         nan_threshold: float = 0.9,
+        cache_dir: str | Path | None = None,
     ):
         """
         Initialize feature engineer.
@@ -247,12 +248,17 @@ class FeatureEngineer:
             Columns with NaN rate above this threshold are dropped before
             row-wise NaN removal. Range: 0.0 to 1.0. Set to 1.0 to disable
             column dropping (original behavior).
+        cache_dir : Union[str, Path], optional
+            Feature cache directory (default ``output_dir/.feature_cache``). Point
+            several runs at one directory to reuse features computed from the same
+            data and settings; entries are keyed by data + settings hash.
         """
         # Directories are only needed for the file-based stage API (caching,
         # save_features, process_all). Pure feature computation — used at
         # inference via from_spec() — runs without touching the filesystem.
         self.input_dir = Path(input_dir) if input_dir is not None else None
         self.output_dir = Path(output_dir) if output_dir is not None else None
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
 
         # Validate input directory exists
         if self.input_dir is not None and not self.input_dir.exists():
@@ -603,7 +609,7 @@ class FeatureEngineer:
                 "engineer_features() needs output_dir (feature cache + manifest). "
                 "Use compute_features() for pure in-memory feature computation."
             )
-        cache_dir = self.output_dir / ".feature_cache"
+        cache_dir = self.cache_dir or self.output_dir / ".feature_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Hash input data + config for cache key

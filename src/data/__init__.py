@@ -2,19 +2,17 @@
 Data Domain - Consolidates data lifecycle modules.
 
 This domain provides a unified interface for data processing:
-- pipeline: Data preparation pipeline stages (the live feature engine is
-  src/data/pipeline/stages/features/)
+- pipeline: Feature-engineering building blocks (FeatureEngineer in
+  src/data/pipeline/stages/features/); the pipeline itself is MLFactory
 - adapters: Model-specific data format adapters
 - features: Per-model feature-set resolution (strategies) + event utilities
 - labeling: Label generation (triple-barrier, etc.)
-- store: Feature storage and versioning
 
 Import paths:
-    from src.data.pipeline import PipelineRunner, DataConfig
+    from src.data.pipeline.stages.features import FeatureEngineer
     from src.data.adapters import TabularAdapter, SequenceAdapter
     from src.data.features import get_features_for_model
     from src.data.labeling import TripleBarrierLabeler
-    from src.data.store import FeatureStore
 """
 
 # Re-export from pipeline (now in data/pipeline)
@@ -67,45 +65,8 @@ from .labeling import (
     triple_barrier_numba,
     triple_barrier_numba_with_costs,
 )
-from .pipeline import (
-    DataConfig,
-    PipelineRunner,
-    PipelineStage,
-    StageResult,
-    StageStatus,
-    get_stage_definitions,
-)
-
-# Re-export from feature_store (now in data/store)
-from .store import (
-    CacheMetadata,
-    DataSource,
-    FeatureCache,
-    FeatureIntegrityError,
-    FeatureLineage,
-    FeatureNotFoundError,
-    FeatureStore,
-    FeatureStoreError,
-    LineageTracker,
-    SemanticVersion,
-    Transformation,
-    TransformationType,
-    VersionInfo,
-    VersionManager,
-    compute_config_hash,
-    compute_dataframe_checksum,
-    compute_file_checksum,
-    compute_schema_hash,
-)
 
 __all__ = [
-    # Pipeline
-    "PipelineRunner",
-    "DataConfig",
-    "PipelineStage",
-    "StageResult",
-    "StageStatus",
-    "get_stage_definitions",
     # Adapters
     "AdapterRegistry",
     "get_adapter",
@@ -147,23 +108,4 @@ __all__ = [
     "TripleBarrierLabeler",
     "triple_barrier_numba",
     "triple_barrier_numba_with_costs",
-    # Feature Store
-    "FeatureStore",
-    "FeatureStoreError",
-    "FeatureNotFoundError",
-    "FeatureIntegrityError",
-    "FeatureCache",
-    "CacheMetadata",
-    "compute_file_checksum",
-    "compute_dataframe_checksum",
-    "LineageTracker",
-    "FeatureLineage",
-    "DataSource",
-    "Transformation",
-    "TransformationType",
-    "SemanticVersion",
-    "VersionInfo",
-    "VersionManager",
-    "compute_schema_hash",
-    "compute_config_hash",
 ]

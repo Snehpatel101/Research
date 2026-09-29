@@ -6,6 +6,8 @@ Uses Optuna's TPE sampler with time-series aware objective.
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import gc
 import logging
 from typing import Any
@@ -21,6 +23,7 @@ from src.validation.deflated_sharpe import (
 )
 
 from .early_stopping_split import carve_early_stopping_split
+from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from .param_spaces import (
     PARAM_SPACES,
     get_max_leaves_for_depth,
@@ -57,11 +60,16 @@ class TimeSeriesOptunaTuner:
         max_samples: int = _DEFAULT_MAX_SAMPLES,
         timeout: int | None = None,
         purge_bars: int | None = None,
+        scale_per_fold: bool = False,
     ) -> None:
         """
         Args:
             purge_bars: Bars dropped between a fold's fit rows and its
                 early-stopping tail (default: ``cv.config.purge_bars``).
+            scale_per_fold: Scale each fold's features with the model's scaler fit
+                on that fold's fit rows only (2D data). Set it when ``X`` is
+                unscaled (standalone ``ml cv``); leave it off when ``X`` was
+                already scaled by the training pipeline.
         """
         self.model_name = model_name
         self.cv = cv
@@ -77,6 +85,7 @@ class TimeSeriesOptunaTuner:
         self.variance_penalty = variance_penalty
         self.max_samples = max_samples
         self.timeout = timeout
+        self.scale_per_fold = scale_per_fold
 
     def tune(
         self,
@@ -125,6 +134,7 @@ class TimeSeriesOptunaTuner:
         # IMPORTANT: Use strided (every-Nth) sampling instead of random to preserve
         # temporal structure. Random sampling collapses temporal gaps so that
         # purge/embargo becomes ~2 real bars on 1.6M rows.
+        cv = self.cv
         max_samples = self.max_samples
         original_n = X.shape[0] if isinstance(X, np.ndarray) else len(X)
         stride = 1
@@ -156,10 +166,13 @@ class TimeSeriesOptunaTuner:
                     sample_weights = sample_weights.iloc[sub_indices].reset_index(drop=True)
             # Scale embargo proportionally: subsampled data has compressed indices
             # so the original embargo_bars must be scaled down by the same stride.
-            if hasattr(self.cv, "config") and hasattr(self.cv.config, "embargo_bars"):
-                orig_embargo = self.cv.config.embargo_bars
+            # A copy: the caller's CV (shared across models and horizons) must keep
+            # its embargo.
+            if hasattr(cv, "config") and hasattr(cv.config, "embargo_bars"):
+                orig_embargo = cv.config.embargo_bars
                 scaled_embargo = max(1, orig_embargo // stride)
-                self.cv.config.embargo_bars = scaled_embargo
+                cv = copy.copy(cv)
+                cv.config = dataclasses.replace(cv.config, embargo_bars=scaled_embargo)
                 logger.info(
                     f"  Scaled embargo: {orig_embargo} -> {scaled_embargo} " f"(stride={stride})"
                 )
@@ -206,11 +219,9 @@ class TimeSeriesOptunaTuner:
             n_samples = X.shape[0]
             X_for_cv = pd.DataFrame(index=range(n_samples))
             y_for_cv = pd.Series(y) if isinstance(y, np.ndarray) else y
-            self._precomputed_splits = list(
-                self.cv.split(X_for_cv, y_for_cv, label_spans=label_spans)
-            )
+            self._precomputed_splits = list(cv.split(X_for_cv, y_for_cv, label_spans=label_spans))
         else:
-            self._precomputed_splits = list(self.cv.split(X, y, label_spans=label_spans))
+            self._precomputed_splits = list(cv.split(X, y, label_spans=label_spans))
 
         # Early stopping (boosting rounds, best-epoch restore) selects on a
         # purged tail of each fold's TRAIN rows, never on the scored fold —
@@ -245,6 +256,26 @@ class TimeSeriesOptunaTuner:
         X_arr = X if isinstance(X, np.ndarray) else X.to_numpy()
         w_arr = np.asarray(sample_weights) if sample_weights is not None else None
 
+        # Unscaled input (standalone `ml cv`): scale each fold with statistics from
+        # its fit rows only. Fold scaling does not depend on the trial, so it is
+        # computed once and reused by every trial.
+        scaled_folds: list[tuple[np.ndarray, np.ndarray, np.ndarray]] | None = None
+        if self.scale_per_fold and data_rank == 2 and not degenerate_folds:
+            scaler = FoldAwareScaler(method=get_scaling_method_for_model(self.model_name))
+            scaled_folds = []
+            for es_split, val_idx in fold_plans:
+                fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
+                scaled = scaler.fit_transform_fold(
+                    X_arr[fit_idx], np.vstack([X_arr[es_idx], X_arr[val_idx]])
+                )
+                scaled_folds.append(
+                    (
+                        scaled.X_train_scaled,
+                        scaled.X_val_scaled[: len(es_idx)],
+                        scaled.X_val_scaled[len(es_idx) :],
+                    )
+                )
+
         def objective(trial: optuna.Trial) -> float:
             params = self._sample_params(trial, param_space)
             if degenerate_folds:
@@ -253,9 +284,11 @@ class TimeSeriesOptunaTuner:
             scores = []
             for fold_idx, (es_split, val_idx) in enumerate(fold_plans):
                 fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
-                X_train, y_train = X_arr[fit_idx], y_arr[fit_idx]
-                X_es, y_es = X_arr[es_idx], y_arr[es_idx]
-                X_val, y_val = X_arr[val_idx], y_arr[val_idx]
+                y_train, y_es, y_val = y_arr[fit_idx], y_arr[es_idx], y_arr[val_idx]
+                if scaled_folds is not None:
+                    X_train, X_es, X_val = scaled_folds[fold_idx]
+                else:
+                    X_train, X_es, X_val = X_arr[fit_idx], X_arr[es_idx], X_arr[val_idx]
                 w_train = w_arr[fit_idx] if w_arr is not None else None
 
                 # Train and evaluate - inject max_epochs if configured

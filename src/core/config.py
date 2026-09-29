@@ -33,10 +33,7 @@ import logging
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from src.data.pipeline.data_config import DataConfig
+from typing import Any
 
 from src.core.constants import (
     ALL_MODELS,
@@ -566,12 +563,6 @@ class PipelineConfig:
             f"  output_dir={self.output_dir!r},\n"
             f")"
         )
-
-    def to_data_config(self) -> DataConfig:
-        """Convert to DataConfig for PipelineRunner."""
-        from src.data.pipeline.config_adapter import to_data_config
-
-        return to_data_config(self)
 
 
 # =============================================================================

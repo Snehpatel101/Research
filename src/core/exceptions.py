@@ -210,48 +210,6 @@ class LookaheadError(MLFactoryError):
     pass
 
 
-class FeatureStoreError(MLFactoryError):
-    """Raised when feature store operations fail."""
-
-    pass
-
-
-class FeatureNotFoundError(FeatureStoreError):
-    """Raised when requested feature is not found in store."""
-
-    pass
-
-
-class FeatureIntegrityError(FeatureStoreError):
-    """Raised when feature integrity check fails."""
-
-    pass
-
-
-class RawMTFStoreError(MLFactoryError):
-    """Raised when raw MTF store operations fail."""
-
-    pass
-
-
-class TimeframeNotFoundError(RawMTFStoreError):
-    """Raised when requested timeframe is not found."""
-
-    pass
-
-
-class InvalidTimeframeError(RawMTFStoreError):
-    """Raised when timeframe specification is invalid."""
-
-    pass
-
-
-class InvalidSplitError(RawMTFStoreError):
-    """Raised when split specification is invalid."""
-
-    pass
-
-
 class NumericalInstabilityError(MLFactoryError):
     """Raised when numerical instability is detected in neural network operations."""
 
@@ -334,16 +292,7 @@ __all__ = [
     "ScalerFitError",
     # Inference errors
     "InferenceError",
-    # Feature store errors
-    "FeatureStoreError",
-    "FeatureNotFoundError",
-    "FeatureIntegrityError",
     "FeatureSchemaError",
-    # Raw MTF store errors
-    "RawMTFStoreError",
-    "TimeframeNotFoundError",
-    "InvalidTimeframeError",
-    "InvalidSplitError",
     # Other errors
     "NumericalInstabilityError",
     "EnsembleCompatibilityError",

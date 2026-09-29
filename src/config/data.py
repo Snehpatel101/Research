@@ -2,7 +2,7 @@
 Data-section configuration classes for ExperimentConfig.
 
 Every field of these classes reaches the pipeline (see
-``ExperimentConfig.to_pipeline_config()`` and ``MLFactory._run_data_pipeline``):
+``ExperimentConfig.to_pipeline_config()`` and ``MLFactory.prepare_data``):
 
 - FeatureConfig: feature-selection switch
 - LabelingConfig: triple-barrier overrides + binary mode

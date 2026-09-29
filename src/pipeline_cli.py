@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-Phase 1 Pipeline CLI
-Typer-based command-line interface for pipeline management.
+ML Factory CLI entry point (``ensemble-pipeline`` console script).
 
-This is the main entry point that delegates to the cli submodule.
+Delegates to ``src.cli`` (``python -m src.cli --help``).
 """
 
 from src.cli import main

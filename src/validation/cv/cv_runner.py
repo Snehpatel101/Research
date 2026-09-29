@@ -96,7 +96,7 @@ from .param_spaces import (
     get_max_leaves_for_depth,
     validate_lightgbm_params,
 )
-from .purged_kfold import ModelAwareCV, PurgedKFold
+from .purged_kfold import PurgedKFold
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ class CrossValidationRunner:
             logger.warning(
                 "No label end times in the container; purging uses the fixed "
                 "purge/embargo only. This may cause label leakage for overlapping "
-                "labels (e.g., triple-barrier). Add a label_end_time_h{horizon} column."
+                "labels (e.g., triple-barrier). Add a label_end_h{horizon} column (row positions)."
             )
             self._label_spans_warning_shown = True
 
@@ -249,20 +249,13 @@ class CrossValidationRunner:
         X, y, weights = container.get_sklearn_arrays("train", return_df=True)
         all_feature_names = list(X.columns)
 
-        # Get model family for CV adaptation
-        try:
-            model_info = ModelRegistry.get_model_info(model_name)
-            model_family = model_info.get("family", "boosting")
-        except ValueError:
-            model_family = "boosting"
-
         # Label spans (row positions) for overlap-aware purging
         label_spans = container.get_label_spans("train")
         self._warn_if_no_label_spans(label_spans)
 
-        # Adapt CV for model family
-        model_cv = ModelAwareCV(model_family, self.cv)
-        cv_splits = list(model_cv.get_cv_splits(X, y, label_spans=label_spans))
+        # The caller's CV (its n_splits, purge and embargo) is used as given; the
+        # family-adapted fold counts of ModelAwareCV would override --n-splits.
+        cv_splits = list(self.cv.split(X, y, label_spans=label_spans))
 
         # ==================================================================
         # HYPERPARAMETER TUNING (if enabled)
@@ -277,8 +270,9 @@ class CrossValidationRunner:
                 model_name=model_name,
                 cv=self.cv,
                 n_trials=self.tuning_trials,
+                scale_per_fold=True,
             )
-            tuning_result = tuner.tune(X, y, weights)
+            tuning_result = tuner.tune(X, y, weights, label_spans=label_spans)
             tuned_params = tuning_result.get("best_params", {})
             logger.debug(f"  Tuned params: {tuned_params}")
 
@@ -306,6 +300,7 @@ class CrossValidationRunner:
                 tune_per_fold=self.tune_per_fold and self.tune_hyperparams,
                 cv=self.cv,
                 tuning_trials=self.tuning_trials,
+                label_spans=label_spans,
             )
             oof_pred = oof_result["oof_prediction"]
             selected_features = oof_result["selected_features"]

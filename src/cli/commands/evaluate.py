@@ -1,14 +1,24 @@
 """
 Evaluate Commands - cv, walk-forward, cpcv-pbo.
 
-Commands for model evaluation including cross-validation, walk-forward analysis,
-and CPCV/PBO for model selection gating.
+Standalone model evaluation on MLFactory-prepared data. Each command loads raw
+OHLCV bars, runs the same FeatureEngineer + triple-barrier labeling step as
+``ml run`` (labels carry their resolution bar, so purging follows the actual
+label spans), and evaluates tabular models on the chronological TRAIN split with
+per-fold scaling. Validation and test rows are never touched.
+
+- ``cv``:          purged k-fold cross-validation (fold stability, stacking datasets)
+- ``walk-forward``: expanding/rolling walk-forward windows
+- ``cpcv-pbo``:    combinatorial purged CV backtest paths + PBO overfitting gate
+
+Sequence models are evaluated through ``ml run --training-mode walk_forward``.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import shutil
 import time
 from pathlib import Path
 
@@ -17,25 +27,62 @@ import pandas as pd  # type: ignore[import-untyped]
 import typer
 
 from src.cli.utils import (
-    DEFAULT_CPCV_OUTPUT_DIR,
-    DEFAULT_DATA_DIR,
-    DEFAULT_STACKING_OUTPUT_DIR,
-    DEFAULT_WALK_FORWARD_OUTPUT_DIR,
+    DEFAULT_OUTPUT_DIR,
+    build_experiment_config,
     console,
-    generate_run_id,
     parse_horizon_list,
-    parse_model_list,
+    parse_tabular_model_list,
     setup_logging,
     show_error,
     show_warning,
-    validate_data_dir,
 )
 
-evaluate_app = typer.Typer(
-    name="evaluate",
-    help="Model evaluation commands",
-    no_args_is_help=True,
-)
+
+def _load_evaluation_data(
+    *,
+    data_path: Path,
+    output_dir: Path,
+    symbol: str,
+    horizons: list[int],
+    models: list[str],
+    bar_timeframe: str | None,
+    mtf: bool,
+    n_splits: int | None,
+    purge_bars: int | None,
+    embargo_bars: int | None,
+    command: str,
+):
+    """
+    Prepare data through MLFactory and open the command's result directory.
+
+    Returns:
+        (factory, {horizon: TimeSeriesDataContainer}, results_dir)
+    """
+    from src.factory import MLFactory
+
+    config = build_experiment_config(
+        data_path=data_path,
+        output_dir=output_dir,
+        symbol=symbol,
+        horizons=horizons,
+        models=models,
+        bar_timeframe=bar_timeframe,
+        mtf=mtf,
+        n_splits=n_splits,
+        purge_bars=purge_bars,
+        embargo_bars=embargo_bars,
+        name=f"{symbol}_{command}",
+    )
+    factory = MLFactory(config, enable_checkpoints=False)
+    try:
+        containers = factory.build_evaluation_containers()
+    except Exception:
+        # A failed data step leaves no half-made run directory behind
+        shutil.rmtree(factory.output_dir, ignore_errors=True)
+        raise
+    results_dir = factory.output_dir / command
+    results_dir.mkdir(parents=True, exist_ok=True)
+    return factory, containers, results_dir
 
 
 # =============================================================================
@@ -43,19 +90,30 @@ evaluate_app = typer.Typer(
 # =============================================================================
 
 
-@evaluate_app.command("cv")
 def run_cv(
+    data_path: Path = typer.Option(
+        ..., "--data-path", "-d", help="Raw OHLCV file (parquet or csv)"
+    ),
     models: str = typer.Option(..., "--models", "-m", help="Comma-separated models or 'all'"),
+    symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option(
         "5,10,15,20", "--horizons", "-h", help="Comma-separated horizons or 'all'"
     ),
+    bar_timeframe: str | None = typer.Option(
+        None, "--bar-timeframe", help="Resample input bars first, e.g. 5min"
+    ),
+    mtf: bool = typer.Option(True, "--mtf/--no-mtf", help="Multi-timeframe features"),
     # CV configuration
     n_splits: int = typer.Option(5, "--n-splits", help="Number of CV folds"),
-    purge_bars: int = typer.Option(60, "--purge-bars", help="Purge bars before test set"),
-    embargo_bars: int = typer.Option(1440, "--embargo-bars", help="Embargo bars after test set"),
+    purge_bars: int | None = typer.Option(
+        None, "--purge-bars", help="Purge bars before each test fold (default: label span)"
+    ),
+    embargo_bars: int | None = typer.Option(
+        None, "--embargo-bars", help="Embargo bars after each test fold (default: one day)"
+    ),
     # Feature selection
     no_feature_selection: bool = typer.Option(
-        False, "--no-feature-selection", help="Disable feature selection"
+        False, "--no-feature-selection", help="Disable per-fold feature selection"
     ),
     n_features: int = typer.Option(
         50, "--n-features", help="Number of features to select per fold"
@@ -63,71 +121,58 @@ def run_cv(
     # Hyperparameter tuning
     tune: bool = typer.Option(False, "--tune", help="Enable Optuna hyperparameter tuning"),
     n_trials: int = typer.Option(50, "--n-trials", help="Number of Optuna trials per model"),
-    # Paths
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Input data directory"
-    ),
     output_dir: Path = typer.Option(
-        DEFAULT_STACKING_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+        DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output root; writes <dir>/<run_id>/cv/"
     ),
-    output_name: str | None = typer.Option(
-        None, "--output-name", help="Custom subdirectory name for this CV run"
-    ),
-    # Verbosity
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """
-    Run purged k-fold cross-validation for model evaluation.
+    Run purged k-fold cross-validation for tabular models.
 
-    Generates out-of-fold predictions for ensemble stacking (Phase 4).
+    Reports per-fold F1 and stability, prediction correlation between models, and
+    saves the out-of-fold stacking datasets.
 
     Examples:
 
-        ml cv --models xgboost,lightgbm --horizons 5,10,20
+        ml cv -d data/mes_5min.parquet -m xgboost,lightgbm --horizons 5,20
 
-        ml cv --models xgboost --horizons 20 --tune --n-trials 100
-
-        ml cv --models all --horizons all --no-feature-selection
+        ml cv -d data/mes_5min.parquet -m xgboost --horizons 20 --tune --n-trials 100
     """
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
 
-    # Parse model and horizon lists
-    model_list = parse_model_list(models)
+    model_list = parse_tabular_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
     logger.info(f"Models: {model_list}")
     logger.info(f"Horizons: {horizon_list}")
 
-    # Validate data directory exists
-    if not validate_data_dir(data_dir):
-        raise typer.Exit(1) from None
-
-    # Import CV modules
-    from src.core.container import TimeSeriesDataContainer
     from src.validation.cv.cv_runner import CrossValidationRunner, analyze_cv_stability
     from src.validation.cv.oof_generator import analyze_prediction_correlation
     from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
-    # Generate unique run ID for this CV run
-    cv_run_id = output_name if output_name else generate_run_id()
-    cv_output_dir = output_dir / cv_run_id
+    try:
+        factory, containers, cv_output_dir = _load_evaluation_data(
+            data_path=data_path,
+            output_dir=output_dir,
+            symbol=symbol,
+            horizons=horizon_list,
+            models=model_list,
+            bar_timeframe=bar_timeframe,
+            mtf=mtf,
+            n_splits=n_splits,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
+            command="cv",
+        )
+    except Exception as e:
+        show_error(f"Data preparation failed: {e}")
+        raise typer.Exit(1) from None
 
-    # Create run-specific output directory
-    cv_output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"CV output directory: {cv_output_dir}")
-
-    # Configure CV
-    cv_config = PurgedKFoldConfig(
-        n_splits=n_splits,
-        purge_bars=purge_bars,
-        embargo_bars=embargo_bars,
-    )
-    cv = PurgedKFold(cv_config)
-
+    purge, embargo = factory.cv_gaps
+    cv = PurgedKFold(PurgedKFoldConfig(n_splits=n_splits, purge_bars=purge, embargo_bars=embargo))
     logger.info(f"CV config: {cv}")
 
-    # Process each horizon
     all_results = {}
     all_stacking_datasets = {}
 
@@ -136,18 +181,7 @@ def run_cv(
         console.print(f"[bold]Processing horizon H{horizon}[/bold]")
         console.print("=" * 60)
 
-        # Load data container
-        try:
-            container = TimeSeriesDataContainer.from_parquet_dir(
-                path=data_dir,
-                horizon=horizon,
-            )
-            logger.info(f"Loaded container: {container}")
-        except Exception as e:
-            show_error(f"Failed to load data for H{horizon}: {e}")
-            continue
-
-        # Create CV runner
+        container = containers[horizon]
         runner = CrossValidationRunner(
             cv=cv,
             models=model_list,
@@ -158,15 +192,10 @@ def run_cv(
             tuning_trials=n_trials,
         )
 
-        # Run CV
         try:
             cv_results = runner.run(container)
             all_results.update(cv_results)
-
-            # Build stacking dataset
-            stacking_datasets = runner.build_stacking_datasets(cv_results, container)
-            all_stacking_datasets.update(stacking_datasets)
-
+            all_stacking_datasets.update(runner.build_stacking_datasets(cv_results, container))
         except Exception as e:
             show_error(f"CV failed for H{horizon}: {e}")
             if verbose:
@@ -179,7 +208,6 @@ def run_cv(
         show_error("No CV results generated. Check errors above.")
         raise typer.Exit(1) from None
 
-    # Analyze stability
     console.print("\n" + "=" * 60)
     console.print("[bold]STABILITY ANALYSIS[/bold]")
     console.print("=" * 60)
@@ -187,7 +215,6 @@ def run_cv(
     stability_df = analyze_cv_stability(all_results)
     console.print("\n" + stability_df.to_string(index=False))
 
-    # Analyze prediction correlation (if multiple models)
     if len(model_list) > 1:
         console.print("\n" + "=" * 60)
         console.print("[bold]PREDICTION CORRELATION ANALYSIS[/bold]")
@@ -201,12 +228,10 @@ def run_cv(
             )
             console.print(corr_df.to_string(index=False))
 
-    # Save results
     console.print("\n" + "=" * 60)
     console.print("[bold]SAVING RESULTS[/bold]")
     console.print("=" * 60)
 
-    # Create fresh CV runner for saving (with all horizons)
     save_runner = CrossValidationRunner(
         cv=cv,
         models=model_list,
@@ -216,7 +241,6 @@ def run_cv(
     )
     save_runner.save_results(all_results, all_stacking_datasets, cv_output_dir)
 
-    # Print summary
     console.print("\n" + "=" * 60)
     console.print("[bold green]SUMMARY[/bold green]")
     console.print("=" * 60)
@@ -229,13 +253,8 @@ def run_cv(
             f"Time={result.total_time:.1f}s"
         )
 
-    console.print(f"\nCV Run ID: {cv_run_id}")
-    console.print(f"Results saved to: {cv_output_dir}")
-    console.print(f"Stacking datasets saved to: {cv_output_dir / 'stacking'}")
-    console.print("\n[bold]To use in Phase 4:[/bold]")
-    console.print(f"  ml train model --model stacking --horizon <H> --stacking-data {cv_run_id}")
-
-    raise typer.Exit(0)
+    console.print(f"\nResults saved to: {cv_output_dir}", soft_wrap=True)
+    console.print(f"Stacking datasets saved to: {cv_output_dir / 'stacking'}", soft_wrap=True)
 
 
 # =============================================================================
@@ -405,12 +424,19 @@ def _run_walk_forward_for_model(
     )
 
 
-@evaluate_app.command("walk-forward")
 def run_walk_forward(
+    data_path: Path = typer.Option(
+        ..., "--data-path", "-d", help="Raw OHLCV file (parquet or csv)"
+    ),
     models: str = typer.Option(..., "--models", "-m", help="Comma-separated models or 'all'"),
+    symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option(
         "5,10,15,20", "--horizons", "-h", help="Comma-separated horizons or 'all'"
     ),
+    bar_timeframe: str | None = typer.Option(
+        None, "--bar-timeframe", help="Resample input bars first, e.g. 5min"
+    ),
+    mtf: bool = typer.Option(True, "--mtf/--no-mtf", help="Multi-timeframe features"),
     # Walk-forward configuration
     n_windows: int = typer.Option(5, "--n-windows", help="Number of walk-forward windows"),
     window_type: str = typer.Option(
@@ -420,55 +446,63 @@ def run_walk_forward(
         0.4, "--min-train-pct", help="Minimum training data percentage"
     ),
     test_pct: float = typer.Option(0.1, "--test-pct", help="Test window percentage"),
-    gap_bars: int = typer.Option(0, "--gap-bars", help="Gap bars between train and test"),
-    # Paths
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"
+    gap_bars: int | None = typer.Option(
+        None, "--gap-bars", help="Gap bars between train and test (default: label span)"
     ),
     output_dir: Path = typer.Option(
-        DEFAULT_WALK_FORWARD_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+        DEFAULT_OUTPUT_DIR,
+        "--output-dir",
+        "-o",
+        help="Output root; writes <dir>/<run_id>/walk-forward/",
     ),
-    # Verbosity
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """
-    Run walk-forward evaluation on ML models.
+    Run walk-forward evaluation on tabular models.
 
-    More realistic than k-fold for trading applications as it respects temporal ordering.
+    More realistic than k-fold for trading applications as it respects temporal
+    ordering. Sequence models: `ml run --training-mode walk_forward`.
 
     Examples:
 
-        ml walk-forward --models xgboost --horizons 20
+        ml walk-forward -d data/mes_5min.parquet -m xgboost --horizons 20
 
-        ml walk-forward --models xgboost,lightgbm --window-type rolling --n-windows 10
-
-        ml walk-forward --models all --horizons all
+        ml walk-forward -d data/mes_5min.parquet -m xgboost,lightgbm --window-type rolling
     """
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
 
-    # Parse arguments
-    model_list = parse_model_list(models)
+    model_list = parse_tabular_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
-    # Validate data directory
-    if not validate_data_dir(data_dir):
-        raise typer.Exit(1) from None
-
-    # Create output directory
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Import modules
-    from src.core.container import TimeSeriesDataContainer
     from src.validation.cv.walk_forward import WalkForwardConfig, WalkForwardResult
 
-    # Build config
+    try:
+        factory, containers, results_dir = _load_evaluation_data(
+            data_path=data_path,
+            output_dir=output_dir,
+            symbol=symbol,
+            horizons=horizon_list,
+            models=model_list,
+            bar_timeframe=bar_timeframe,
+            mtf=mtf,
+            n_splits=None,
+            purge_bars=gap_bars,
+            embargo_bars=None,
+            command="walk-forward",
+        )
+    except Exception as e:
+        show_error(f"Data preparation failed: {e}")
+        raise typer.Exit(1) from None
+
+    purge, embargo = factory.cv_gaps
     config = WalkForwardConfig(
         n_windows=n_windows,
         window_type=window_type,
         min_train_pct=min_train_pct,
         test_pct=test_pct,
-        gap_bars=gap_bars,
+        embargo_bars=embargo,
+        gap_bars=purge,
     )
 
     console.print("=" * 60)
@@ -477,8 +511,7 @@ def run_walk_forward(
     console.print(f"Models: {model_list}")
     console.print(f"Horizons: {horizon_list}")
     console.print(f"Config: {config}")
-    console.print(f"Data dir: {data_dir}")
-    console.print(f"Output dir: {output_dir}")
+    console.print(f"Output dir: {results_dir}", soft_wrap=True)
 
     all_results: list[WalkForwardResult] = []
 
@@ -487,18 +520,8 @@ def run_walk_forward(
         console.print(f"[bold]HORIZON {horizon}[/bold]")
         console.print("-" * 60)
 
-        try:
-            container = TimeSeriesDataContainer.from_parquet_dir(
-                path=data_dir,
-                horizon=horizon,
-            )
-            logger.info(f"Loaded container: {container}")
-            # Label spans (row positions) from the label end time column, if present
-            label_spans = container.get_label_spans("train")
-        except Exception as e:
-            show_error(f"Failed to load data for H{horizon}: {e}")
-            continue
-
+        container = containers[horizon]
+        label_spans = container.get_label_spans("train")
         if label_spans is not None:
             logger.info("  Using label spans for overlap-aware purging")
 
@@ -520,13 +543,11 @@ def run_walk_forward(
                     f"time={result.total_time:.1f}s"
                 )
 
-                # Save individual result
-                result_path = output_dir / f"wf_{model_name}_h{horizon}.json"
+                result_path = results_dir / f"wf_{model_name}_h{horizon}.json"
                 with open(result_path, "w") as f:
                     json.dump(result.to_dict(), f, indent=2, default=str)
 
-                # Save predictions
-                pred_path = output_dir / f"wf_preds_{model_name}_h{horizon}.parquet"
+                pred_path = results_dir / f"wf_preds_{model_name}_h{horizon}.parquet"
                 result.predictions.to_parquet(pred_path, index=False)
 
             except Exception as e:
@@ -537,39 +558,34 @@ def run_walk_forward(
                     traceback.print_exc()
                 continue
 
-    # Summary
     console.print("=" * 60)
     console.print("[bold green]SUMMARY[/bold green]")
     console.print("=" * 60)
 
-    if all_results:
-        summary_data = []
-        for r in all_results:
-            summary_data.append(
-                {
-                    "model": r.model_name,
-                    "horizon": r.horizon,
-                    "mean_acc": f"{r.mean_accuracy:.3f}",
-                    "std_acc": f"{r.std_accuracy:.3f}",
-                    "mean_f1": f"{r.mean_f1:.3f}",
-                    "n_windows": r.n_windows,
-                    "time_s": f"{r.total_time:.1f}",
-                }
-            )
-
-        summary_df = pd.DataFrame(summary_data)
-        console.print(summary_df.to_string(index=False))
-
-        # Save summary
-        summary_path = output_dir / "walk_forward_summary.csv"
-        summary_df.to_csv(summary_path, index=False)
-        console.print(f"\nSummary saved to: {summary_path}")
-    else:
+    if not all_results:
         show_error("No results generated: every model failed")
         raise typer.Exit(1)
 
-    console.print(f"Results saved to: {output_dir}")
-    raise typer.Exit(0)
+    summary_df = pd.DataFrame(
+        [
+            {
+                "model": r.model_name,
+                "horizon": r.horizon,
+                "mean_acc": f"{r.mean_accuracy:.3f}",
+                "std_acc": f"{r.std_accuracy:.3f}",
+                "mean_f1": f"{r.mean_f1:.3f}",
+                "n_windows": r.n_windows,
+                "time_s": f"{r.total_time:.1f}",
+            }
+            for r in all_results
+        ]
+    )
+    console.print(summary_df.to_string(index=False))
+
+    summary_path = results_dir / "walk_forward_summary.csv"
+    summary_df.to_csv(summary_path, index=False)
+    console.print(f"\nSummary saved to: {summary_path}", soft_wrap=True)
+    console.print(f"Results saved to: {results_dir}", soft_wrap=True)
 
 
 # =============================================================================
@@ -726,18 +742,25 @@ def _run_cpcv_for_model(
     return result, np.mean(path_returns, axis=0)
 
 
-@evaluate_app.command("cpcv-pbo")
 def run_cpcv_pbo(
+    data_path: Path = typer.Option(
+        ..., "--data-path", "-d", help="Raw OHLCV file (parquet or csv)"
+    ),
     models: str = typer.Option(..., "--models", "-m", help="Comma-separated models or 'all'"),
+    symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option("20", "--horizons", "-h", help="Comma-separated horizons"),
+    bar_timeframe: str | None = typer.Option(
+        None, "--bar-timeframe", help="Resample input bars first, e.g. 5min"
+    ),
+    mtf: bool = typer.Option(True, "--mtf/--no-mtf", help="Multi-timeframe features"),
     # CPCV configuration
     n_groups: int = typer.Option(6, "--n-groups", help="Number of time groups"),
     n_test_groups: int = typer.Option(2, "--n-test-groups", help="Groups held out as test"),
-    purge_bars: int = typer.Option(
-        60, "--purge-bars", help="Label span in bars purged around each test group"
+    purge_bars: int | None = typer.Option(
+        None, "--purge-bars", help="Bars purged around each test group (default: label span)"
     ),
-    embargo_bars: int = typer.Option(
-        1440, "--embargo-bars", help="Bars embargoed after each test group"
+    embargo_bars: int | None = typer.Option(
+        None, "--embargo-bars", help="Bars embargoed after each test group (default: one day)"
     ),
     # PBO configuration
     n_partitions: int = typer.Option(16, "--n-partitions", help="CSCV row blocks S for PBO (even)"),
@@ -746,14 +769,12 @@ def run_cpcv_pbo(
     no_costs: bool = typer.Option(
         False, "--no-costs", help="Compute strategy returns without transaction costs"
     ),
-    # Paths
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"
-    ),
     output_dir: Path = typer.Option(
-        DEFAULT_CPCV_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+        DEFAULT_OUTPUT_DIR,
+        "--output-dir",
+        "-o",
+        help="Output root; writes <dir>/<run_id>/cpcv-pbo/",
     ),
-    # Verbosity
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """
@@ -763,36 +784,46 @@ def run_cpcv_pbo(
     out-of-sample predictions are assembled into the CPCV backtest paths and
     traded as position = sign(prediction) on the next-bar return (minus
     per-symbol costs). PBO is estimated with CSCV over the T x N matrix of
-    path-averaged per-bar returns of the N models.
+    path-averaged per-bar returns of the N models, so it needs at least two models.
 
     Examples:
 
-        ml cpcv-pbo --models xgboost,lightgbm --horizons 20
+        ml cpcv-pbo -d data/mes_5min.parquet -m xgboost,lightgbm --horizons 20
 
-        ml cpcv-pbo --models all --n-groups 8 --n-test-groups 2
-
-        ml cpcv-pbo --models xgboost,catboost --pbo-warn 0.4 --pbo-block 0.7
+        ml cpcv-pbo -d data/mes_5min.parquet -m xgboost,catboost --pbo-warn 0.4 --pbo-block 0.7
     """
     setup_logging(verbose)
-    logger = logging.getLogger(__name__)
 
-    model_list = parse_model_list(models)
+    model_list = parse_tabular_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
-    if not validate_data_dir(data_dir):
-        raise typer.Exit(1) from None
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    from src.core.container import TimeSeriesDataContainer
     from src.validation.cv.cpcv import CPCVConfig, CPCVResult
     from src.validation.cv.pbo import PBOConfig, compute_pbo, pbo_gate
 
+    try:
+        factory, containers, results_dir = _load_evaluation_data(
+            data_path=data_path,
+            output_dir=output_dir,
+            symbol=symbol,
+            horizons=horizon_list,
+            models=model_list,
+            bar_timeframe=bar_timeframe,
+            mtf=mtf,
+            n_splits=None,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
+            command="cpcv-pbo",
+        )
+    except Exception as e:
+        show_error(f"Data preparation failed: {e}")
+        raise typer.Exit(1) from None
+
+    purge, embargo = factory.cv_gaps
     cpcv_config = CPCVConfig(
         n_groups=n_groups,
         n_test_groups=n_test_groups,
-        purge_bars=purge_bars,
-        embargo_bars=embargo_bars,
+        purge_bars=purge,
+        embargo_bars=embargo,
     )
     pbo_config = PBOConfig(
         n_partitions=n_partitions,
@@ -808,7 +839,7 @@ def run_cpcv_pbo(
     console.print(
         f"CPCV: {n_groups} groups, {n_test_groups} test -> "
         f"{cpcv_config.total_combinations} splits, {cpcv_config.n_paths} paths "
-        f"(purge={purge_bars}, embargo={embargo_bars})"
+        f"(purge={purge}, embargo={embargo})"
     )
     console.print(f"PBO: S={n_partitions}, thresholds warn={pbo_warn}, block={pbo_block}")
 
@@ -820,19 +851,15 @@ def run_cpcv_pbo(
         console.print(f"[bold]HORIZON {horizon}[/bold]")
         console.print("-" * 60)
 
+        container = containers[horizon]
         try:
-            container = TimeSeriesDataContainer.from_parquet_dir(
-                path=data_dir,
-                horizon=horizon,
-            )
-            logger.info(f"Loaded container: {container}")
             split = container.get_split("train")
             forward_returns, costs, groups = _forward_returns_and_costs(
                 split.df, split.symbol_column, include_costs=not no_costs
             )
             label_spans = container.get_label_spans("train")
         except Exception as e:
-            show_error(f"Failed to load data for H{horizon}: {e}")
+            show_error(f"Failed to prepare H{horizon}: {e}")
             continue
 
         cpcv_results: dict[str, CPCVResult] = {}
@@ -898,14 +925,14 @@ def run_cpcv_pbo(
 
             pbo_payload = pbo_result.to_dict()
             pbo_payload["strategies"] = names
-            with open(output_dir / f"pbo_h{horizon}.json", "w") as f:
+            with open(results_dir / f"pbo_h{horizon}.json", "w") as f:
                 json.dump(pbo_payload, f, indent=2)
         elif model_returns:
             show_warning("PBO needs at least 2 successfully evaluated models; skipped")
 
         n_models_evaluated += len(cpcv_results)
         for model_name, result in cpcv_results.items():
-            result_path = output_dir / f"cpcv_{model_name}_h{horizon}.json"
+            result_path = results_dir / f"cpcv_{model_name}_h{horizon}.json"
             with open(result_path, "w") as f:
                 json.dump(result.to_dict(), f, indent=2, default=str)
 
@@ -917,9 +944,9 @@ def run_cpcv_pbo(
         summary_df = pd.DataFrame(all_results)
         console.print(summary_df.to_string(index=False))
 
-        summary_path = output_dir / "cpcv_pbo_summary.csv"
+        summary_path = results_dir / "cpcv_pbo_summary.csv"
         summary_df.to_csv(summary_path, index=False)
-        console.print(f"\nSummary saved to: {summary_path}")
+        console.print(f"\nSummary saved to: {summary_path}", soft_wrap=True)
 
         if any(r["should_block"] for r in all_results):
             show_warning("Some horizons have PBO > block threshold!")
@@ -930,5 +957,4 @@ def run_cpcv_pbo(
     else:
         show_warning("No PBO results generated (needs 2+ evaluated models per horizon)")
 
-    console.print(f"Results saved to: {output_dir}")
-    raise typer.Exit(0)
+    console.print(f"Results saved to: {results_dir}", soft_wrap=True)

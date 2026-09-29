@@ -13,5 +13,4 @@ class _ModeConfig:
     symbol: str
     horizons: list[int]
     models: list[str]
-    data_dir: Path = field(default_factory=lambda: Path("data/splits/scaled"))
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))

@@ -182,10 +182,19 @@ class WalkForwardResult:
                     "test_size": m.test_size,
                     "accuracy": m.accuracy,
                     "f1": m.f1,
+                    "train_start_time": _iso(m.train_start_time),
+                    "train_end_time": _iso(m.train_end_time),
+                    "test_start_time": _iso(m.test_start_time),
+                    "test_end_time": _iso(m.test_end_time),
                 }
                 for m in self.window_metrics
             ],
         }
+
+
+def _iso(value: Any) -> str | None:
+    """ISO timestamp for JSON output (None when the frame had no bar times)."""
+    return None if value is None else pd.Timestamp(value).isoformat()
 
 
 # =============================================================================

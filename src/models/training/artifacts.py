@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from ..base import PredictionResult, TrainingMetrics
-from ..config import detect_environment, get_applied_overrides, save_config_json
+from ..config import detect_environment, save_config_json
 from .checksums import ArtifactIntegrityManager
 
 # Import MODEL_DATA_REQUIREMENTS for model requirements saving (MOD-008)
@@ -99,18 +99,16 @@ class TrainerArtifactsMixin:
 
     def _save_environment_info(self) -> None:
         """
-        Save environment and override information for reproducibility.
+        Save environment information for reproducibility.
 
         Creates environment_info.json containing:
         - Detected environment (gpu/cpu/colab)
-        - Applied configuration overrides from each source
+        - Resolved device
         - Timestamp of run
 
-        This enables debugging which configuration sources affected the run
-        and helps reproduce experiments across different environments.
+        This helps reproduce experiments across different environments.
         """
         env = detect_environment()
-        applied_overrides = get_applied_overrides()
 
         env_info = {
             "environment": env.value,
@@ -118,7 +116,6 @@ class TrainerArtifactsMixin:
             "run_id": self.run_id,
             "model_name": self.config.model_name,
             "device_resolved": self.config.get_resolved_device(),
-            "applied_overrides": applied_overrides,
         }
 
         env_info_path = self.output_path / "config" / "environment_info.json"

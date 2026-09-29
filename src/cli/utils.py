@@ -5,7 +5,7 @@ This module provides shared utilities for all CLI commands including:
 - Display helpers (errors, warnings, success messages)
 - Argument parsing helpers (parse_model_list, parse_horizon_list)
 - Logging setup
-- Project path resolution
+- ExperimentConfig construction from CLI arguments (one config class for every command)
 """
 
 from __future__ import annotations
@@ -13,24 +13,21 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
+
+if TYPE_CHECKING:
+    from src.config.experiment import ExperimentConfig
 
 console = Console()
 
 # =============================================================================
-# PROJECT ROOT AND PATHS
+# DEFAULTS
 # =============================================================================
 
-# Get project root from file location (src/cli/utils.py -> project root)
-PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
-
-# Default paths used across CLI commands
-DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "splits" / "scaled"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "experiments" / "runs"
-DEFAULT_STACKING_OUTPUT_DIR = PROJECT_ROOT / "data" / "stacking"
-DEFAULT_WALK_FORWARD_OUTPUT_DIR = PROJECT_ROOT / "data" / "walk_forward"
-DEFAULT_CPCV_OUTPUT_DIR = PROJECT_ROOT / "data" / "cpcv_pbo"
+# Root of experiment output; each run writes into ``<output_dir>/<run_id>/``
+DEFAULT_OUTPUT_DIR = Path("experiments")
 
 # Default horizons for evaluation commands
 DEFAULT_HORIZONS = [5, 10, 15, 20]
@@ -117,6 +114,35 @@ def parse_model_list(model_arg: str) -> list[str]:
     return models
 
 
+def parse_tabular_model_list(model_arg: str) -> list[str]:
+    """
+    Models for the standalone evaluation commands (``cv``, ``walk-forward``, ``cpcv-pbo``).
+
+    ``'all'`` expands to the tabular base models (boosting and classical families);
+    explicit names must be tabular (2D) models: sequence and multi-timeframe models are
+    evaluated with ``ml run --training-mode walk_forward``.
+
+    Raises:
+        SystemExit: If a model name is unknown or not tabular.
+    """
+    import src.models  # noqa: F401 - ensures models are registered
+    from src.core.contracts import get_model_contract
+    from src.core.types import DataRank
+    from src.models.registry import ModelRegistry
+
+    if model_arg.lower() == "all":
+        families = ModelRegistry.list_models()
+        return sorted(families.get("boosting", []) + families.get("classical", []))
+
+    models = parse_model_list(model_arg)
+    non_tabular = [m for m in models if get_model_contract(m).input_rank != DataRank.TABULAR_2D]
+    if non_tabular:
+        show_error(f"Standalone evaluation supports tabular models only, not {non_tabular}")
+        show_info("Evaluate sequence models with `ml run --training-mode walk_forward`")
+        sys.exit(1)
+    return models
+
+
 def parse_horizon_list(horizon_arg: str) -> list[int]:
     """
     Parse horizon argument into list of integers.
@@ -141,41 +167,77 @@ def parse_horizon_list(horizon_arg: str) -> list[int]:
         sys.exit(1)
 
 
-def validate_data_dir(data_dir: Path) -> bool:
-    """
-    Validate that a data directory exists.
-
-    Args:
-        data_dir: Path to data directory.
-
-    Returns:
-        True if valid, False otherwise.
-    """
-    if not data_dir.exists():
-        show_error(f"Data directory not found: {data_dir}")
-        show_info("Run the data pipeline first to generate scaled data")
-        return False
-    return True
-
-
 # =============================================================================
-# ID GENERATION
+# EXPERIMENT CONFIG
 # =============================================================================
 
 
-def generate_run_id() -> str:
+def build_experiment_config(
+    *,
+    data_path: Path,
+    output_dir: Path,
+    symbol: str,
+    horizons: list[int],
+    models: list[str],
+    bar_timeframe: str | None = None,
+    mtf: bool = True,
+    training_mode: str = "standard",
+    build_ensemble: bool = False,
+    meta_learner: str = "ridge_meta",
+    n_trials: int = 0,
+    max_epochs: int | None = None,
+    batch_size: int | None = None,
+    n_splits: int | None = None,
+    purge_bars: int | None = None,
+    embargo_bars: int | None = None,
+    run_backtest: bool = False,
+    deploy: bool = True,
+    name: str | None = None,
+) -> ExperimentConfig:
     """
-    Generate unique run ID for output directories.
+    Build the ExperimentConfig every CLI command runs on.
 
-    Format: {timestamp_with_ms}_{random_suffix}
-    Example: 20251228_143025_789456_a3f9
-
-    Returns:
-        Unique run ID string.
+    ``None`` for purge/embargo/epochs/batch size/splits keeps the config
+    defaults (purge and embargo are derived from the label span and the bar
+    timeframe).
     """
-    import secrets
-    from datetime import datetime
+    from src.config.experiment import (
+        BundlingSection,
+        DataSection,
+        EvaluationSection,
+        ExperimentConfig,
+        TrainingSection,
+    )
+    from src.config.training import OptunaConfig
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    random_suffix = secrets.token_hex(2)  # 2 bytes = 4 hex chars
-    return f"{timestamp}_{random_suffix}"
+    # Absolute: the saved config must resolve from any directory (`ml run --resume`)
+    data = DataSection(
+        symbol=symbol, data_path=Path(data_path).resolve(), bar_timeframe=bar_timeframe
+    )
+    data.mtf.enabled = mtf
+
+    training = TrainingSection(
+        models=models,
+        horizons=horizons,
+        training_mode=training_mode,
+        build_ensemble=build_ensemble,
+        meta_learner=meta_learner,
+        optuna=OptunaConfig(n_trials=n_trials),
+        purge_bars=purge_bars,
+        embargo_bars=embargo_bars,
+    )
+    if max_epochs is not None:
+        training.max_epochs = max_epochs
+    if batch_size is not None:
+        training.batch_size = batch_size
+    if n_splits is not None:
+        training.n_splits = n_splits
+
+    return ExperimentConfig(
+        name=name or f"{symbol}_pipeline",
+        output_dir=output_dir,
+        data=data,
+        training=training,
+        evaluation=EvaluationSection(run_backtest=run_backtest),
+        bundling=BundlingSection(create_bundle=deploy, deploy_artifact=deploy),
+    )

@@ -107,10 +107,8 @@ from src.config.global_config import (
 # =============================================================================
 from src.config.models import (
     TrainerConfig,
-    build_config,
     detect_environment,
     is_colab,
-    load_model_config,
     save_config_json,
 )
 
@@ -204,8 +202,6 @@ __all__ = [
     # Model config
     "detect_environment",
     "is_colab",
-    "load_model_config",
-    "build_config",
     "save_config_json",
     # Pipeline config
     "MODEL_DATA_REQUIREMENTS",

@@ -1,16 +1,12 @@
 """
-Unified CLI for ML pipeline.
+Unified CLI for ML Factory.
 
-Provides a Typer-based command-line interface for the complete ML workflow:
-- ml run: Full pipeline (data + training + evaluation)
-- ml data: Data pipeline only
-- ml train model: Train model(s)
-- ml train ensemble: Train ensemble
-- ml cv: Cross-validation
-- ml walk-forward: Walk-forward evaluation
-- ml cpcv-pbo: CPCV/PBO evaluation
-- ml status: Show pipeline status
-- ml resume: Resume from checkpoint
+Typer-based command line over MLFactory (raw OHLCV in, models and deploy artifacts out):
+- ml run: full pipeline (features, labels, training, ensemble, backtest, deploy)
+- ml data: features + labels to parquet
+- ml status: checkpoint progress of a run
+- ml models: registered models
+- ml cv / walk-forward / cpcv-pbo: standalone evaluation of tabular models
 
 Usage:
     python -m src.cli --help
