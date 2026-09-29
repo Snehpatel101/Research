@@ -18,11 +18,9 @@ import logging
 import numpy as np
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from src.core.constants import FRAC_DIFF_PRICE_COLUMNS
 
-# Price-level columns FFD features can be built from
-FRAC_DIFF_PRICE_COLUMNS = ("open", "high", "low", "close")
-DEFAULT_FRAC_DIFF_COLUMNS = ("close", "open", "high", "low")
+logger = logging.getLogger(__name__)
 
 
 def frac_diff_feature_name(column: str) -> str:

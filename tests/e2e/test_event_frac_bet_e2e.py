@@ -289,3 +289,31 @@ def test_harness_cross_rank_stack_with_all_three_options(raw_path: Path, tmp_pat
     record = harness.run_one(spec, raw_path, tmp_path)
     assert "exception" not in record, record.get("traceback")
     assert record["ok"], record["problems"]
+
+
+# ---------------------------------------------------------------------------
+# Review regression: d="auto" when the train prefix already passes ADF at d=0
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_data_with_auto_d_on_an_already_stationary_prefix(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """make_intraday_ohlcv(3000, seed=14): the raw ADF finding is d=0, which the spec rejects."""
+    pytest.importorskip("statsmodels")
+    data = tmp_path_factory.mktemp("seed14") / "mes.parquet"
+    make_intraday_ohlcv(3000, seed=14).to_parquet(data)
+    cfg = ExperimentConfig()
+    cfg.verbose = 0
+    cfg.output_dir = tmp_path_factory.mktemp("seed14_run") / cfg.run_id
+    cfg.data.symbol = "MES"
+    cfg.data.data_path = data
+    cfg.data.mtf.enabled = False
+    cfg.data.features.frac_diff.enabled = True  # d="auto"
+    factory = MLFactory(cfg, verbose=0, enable_checkpoints=False)
+
+    df, _ = factory.prepare_data()
+
+    assert factory._feature_pipeline is not None
+    assert factory._feature_pipeline["engineer"]["frac_diff_d"] >= 0.05
+    assert "ffd_log_close" in df.columns

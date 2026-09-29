@@ -10,11 +10,17 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning", Chapt
 
 from __future__ import annotations
 
+import logging
 import warnings
 
 import numpy as np
 import pandas as pd
 from numba import njit
+
+logger = logging.getLogger(__name__)
+
+# Smallest differentiation order the feature pipeline accepts (d=0 is the raw level)
+MIN_FRAC_DIFF_D = 0.05
 
 
 @njit
@@ -190,7 +196,17 @@ def resolve_frac_diff_d(
     if isinstance(d, str):
         if d != "auto":
             raise ValueError(f"frac_diff d must be a number or 'auto', got {d!r}")
-        return find_min_d(train_log_price, threshold=threshold, max_window=max_window)
+        found = find_min_d(train_log_price, threshold=threshold, max_window=max_window)
+        if found < MIN_FRAC_DIFF_D:
+            # The log price already passes ADF undifferenced (a random walk does
+            # ~5% of the time by chance). d=0 would return the raw price level, which
+            # the feature spec rejects, so keep the smallest supported order.
+            logger.info(
+                f"frac_diff d='auto': the training log price is already stationary "
+                f"(ADF at d=0); using the smallest supported d={MIN_FRAC_DIFF_D}"
+            )
+            return MIN_FRAC_DIFF_D
+        return found
     value = float(d)
     if not 0.0 < value <= 1.0:
         raise ValueError(f"frac_diff d must be in (0, 1], got {value}")

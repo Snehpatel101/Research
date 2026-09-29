@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from src.config.base import BaseConfig
+from src.core.constants import FRAC_DIFF_PRICE_COLUMNS
 
 # =============================================================================
 # ENUMS
@@ -63,9 +64,6 @@ class MTFMode(StrEnum):
 # =============================================================================
 
 
-FRAC_DIFF_PRICE_COLUMNS = ("open", "high", "low", "close")
-
-
 @dataclass
 class FracDiffConfig(BaseConfig):
     """
@@ -79,10 +77,11 @@ class FracDiffConfig(BaseConfig):
     Attributes:
         enabled: Add the FFD features (default False = features unchanged)
         d: Differentiation order in (0, 1], or ``"auto"``: the smallest d whose
-            FFD log close passes the ADF stationarity test, fitted on the
-            TRAINING rows only and then frozen into the feature spec (inference
-            replays the same d). ``"auto"`` needs the ``stats`` extra
-            (statsmodels).
+            FFD log close passes the ADF stationarity test (at least 0.05, even
+            for a series that is already stationary), fitted on the leading
+            training bars only (same prefix as the CUSUM threshold) and then
+            frozen into the feature spec (inference replays the same d).
+            ``"auto"`` needs the ``stats`` extra (statsmodels).
         columns: Price columns (of open/high/low/close) to differentiate
         window: Fixed FFD window cap in bars (the first ``window`` bars of a
             series are warmup NaN)
@@ -112,10 +111,14 @@ class FracDiffConfig(BaseConfig):
             issues.append(
                 f"frac_diff.columns must be among {list(FRAC_DIFF_PRICE_COLUMNS)}, got {unknown}"
             )
-        if self.window < 2:
-            issues.append(f"frac_diff.window must be >= 2, got {self.window}")
-        if not 0.0 < self.threshold < 1.0:
-            issues.append(f"frac_diff.threshold must be in (0, 1), got {self.threshold}")
+        if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
+            issues.append(f"frac_diff.window must be an integer >= 2, got {self.window!r}")
+        if (
+            isinstance(self.threshold, bool)
+            or not isinstance(self.threshold, (int, float))
+            or not 0.0 < self.threshold < 1.0
+        ):
+            issues.append(f"frac_diff.threshold must be a number in (0, 1), got {self.threshold!r}")
 
         return issues
 
@@ -175,7 +178,11 @@ class LabelingConfig(BaseConfig):
             ``metadata["is_event"]``.
         cusum_threshold: CUSUM threshold in log-return units, or ``"auto"``:
             ``cusum_vol_multiple`` x the per-bar return volatility of the
-            TRAINING rows only (frozen into the deployment bundle).
+            leading bars only — the training split (walk-forward: the bars
+            before the first test window) — frozen into the deployment bundle.
+            The validation/test holdout never influences it; purged-CV folds
+            inside the training split see a value fitted on all of it (the
+            same convention as the labeler's cost calibration).
         cusum_vol_multiple: Multiple for the ``"auto"`` threshold. For i.i.d.
             returns an event fires about every ``multiple^2`` bars.
 
@@ -214,8 +221,14 @@ class LabelingConfig(BaseConfig):
                 )
         elif isinstance(self.cusum_threshold, bool) or self.cusum_threshold <= 0:
             issues.append(f"cusum_threshold must be positive or 'auto', got {self.cusum_threshold}")
-        if self.cusum_vol_multiple <= 0:
-            issues.append(f"cusum_vol_multiple must be positive, got {self.cusum_vol_multiple}")
+        if (
+            isinstance(self.cusum_vol_multiple, bool)
+            or not isinstance(self.cusum_vol_multiple, (int, float))
+            or self.cusum_vol_multiple <= 0
+        ):
+            issues.append(
+                f"cusum_vol_multiple must be a positive number, got {self.cusum_vol_multiple!r}"
+            )
 
         if self.upper_mult is not None and self.upper_mult <= 0:
             issues.append(f"upper_mult must be positive, got {self.upper_mult}")

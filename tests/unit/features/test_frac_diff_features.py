@@ -295,3 +295,44 @@ def test_explicit_d_needs_no_statsmodels(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_resolve_rejects_bad_d(bad: object) -> None:
     with pytest.raises(ValueError, match="frac_diff d"):
         resolve_frac_diff_d(bad, _log_price(300))  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# d="auto" on a log price that already passes ADF undifferenced (review finding)
+# ---------------------------------------------------------------------------
+
+
+def _stationary_log_price(n: int = 2000, seed: int = 0) -> pd.Series:
+    rng = np.random.default_rng(seed)
+    return pd.Series(np.log(5000.0) + rng.normal(0, 0.002, n))
+
+
+def test_auto_d_is_never_zero_for_an_already_stationary_series(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    pytest.importorskip("statsmodels")
+    from src.data.features.frac_diff import MIN_FRAC_DIFF_D
+
+    series = _stationary_log_price()
+    assert find_min_d(series, threshold=1e-5, max_window=WINDOW) == 0.0  # the raw finding
+    with caplog.at_level(logging.INFO, logger="src.data.features.frac_diff"):
+        d = resolve_frac_diff_d("auto", series, threshold=1e-5, max_window=WINDOW)
+    assert d == MIN_FRAC_DIFF_D
+    assert "already stationary" in caplog.text
+    # the feature spec accepts it
+    engineer = _engineer(frac_diff_columns=["close"], frac_diff_d=d)
+    assert engineer.to_spec()["frac_diff_d"] == MIN_FRAC_DIFF_D
+
+
+def test_auto_d_on_the_seed_14_random_walk_builds_a_feature_engineer(tmp_path: Path) -> None:
+    """make_intraday_ohlcv(3000, seed=14): the train prefix passes ADF at d=0."""
+    pytest.importorskip("statsmodels")
+    from src.data.features.frac_diff import MIN_FRAC_DIFF_D
+
+    raw = make_intraday_ohlcv(3000, seed=14)
+    factory = _factory(tmp_path, d="auto", window=100)
+    kwargs = factory._resolve_frac_diff(raw)
+    assert kwargs["frac_diff_d"] >= MIN_FRAC_DIFF_D
+    FeatureEngineer(timeframe="5min", enable_mtf=False, enable_wavelets=False, **kwargs)

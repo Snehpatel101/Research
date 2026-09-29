@@ -171,18 +171,3 @@ def auto_cusum_threshold(train_returns: pd.Series, vol_multiple: float = 3.0) ->
     if not np.isfinite(sigma) or sigma <= 0:
         raise ValueError("Training returns have no variance; cannot calibrate a CUSUM threshold")
     return vol_multiple * sigma
-
-
-def cusum_event_mask(close: pd.Series, threshold: float) -> np.ndarray:
-    """Boolean event mask over the bars of ``close`` (True = CUSUM event bar).
-
-    The filter runs forward over the log returns of ``close``: the decision for
-    bar ``t`` depends on bars ``<= t`` only, so the mask of a prefix equals the
-    prefix of the mask. It is path dependent (the sums reset at every event),
-    so the same history start must be used when the mask is replayed.
-    """
-    mask = np.zeros(len(close), dtype=bool)
-    events = cusum_filter(log_returns(close), threshold)
-    if len(events):
-        mask[events] = True
-    return mask

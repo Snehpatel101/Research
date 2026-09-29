@@ -22,6 +22,7 @@ Example:
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from datetime import datetime
@@ -43,6 +44,9 @@ from src.config.training import CalibrationConfig, OptunaConfig
 logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
+
+# A number written in scientific notation without a dot, e.g. 1e-5 or 2E-3
+_SCIENTIFIC_FLOAT = re.compile(r"[+-]?\d+[eE][+-]?\d+")
 
 # Derived embargo: one trading day. CME equity/metal futures trade ~23h a day,
 # so 1440 minutes of bars spans one session at any bar timeframe.
@@ -82,6 +86,13 @@ def _dataclass_from_dict(cls: type[_T], raw: dict[str, Any], where: str) -> _T: 
     for name, value in raw.items():
         if name not in known:
             continue
+        # YAML 1.1 (PyYAML) reads 1e-5 / 2e-3 — no dot — as a string
+        if (
+            isinstance(value, str)
+            and "float" in str(known[name].type)
+            and _SCIENTIFIC_FLOAT.fullmatch(value.strip())
+        ):
+            value = float(value)
         factory = known[name].default_factory
         if isinstance(factory, type) and is_dataclass(factory):
             if value is None:
@@ -337,11 +348,11 @@ class ExperimentConfig:
         and position-sizing options. ``MLFactory`` raises on a non-empty result.
         """
         issues = self.data.labeling.validate() + self.data.features.validate()
-        sizing = self.evaluation.position_sizing
+        sizing = str(self.evaluation.position_sizing).lower()
         if sizing not in POSITION_SIZING_CHOICES:
             issues.append(
                 f"evaluation.position_sizing must be one of {list(POSITION_SIZING_CHOICES)}, "
-                f"got {sizing!r}"
+                f"got {self.evaluation.position_sizing!r}"
             )
         if self.evaluation.bet_max_contracts < 1:
             issues.append(
@@ -550,6 +561,7 @@ class ExperimentConfig:
         cv_gaps: tuple[int, int] | None = None,
         bar_timeframe: str | None = None,
         n_rows: int | None = None,
+        split_embargo_bars: int | None = None,
     ) -> Any:
         """
         Convert to the PipelineConfig consumed by the training orchestrator
@@ -560,6 +572,9 @@ class ExperimentConfig:
                 they are resolved here via ``resolve_cv_gaps``.
             bar_timeframe: Training bar timeframe, for the derived embargo.
             n_rows: Rows of the labeled training frame, for the embargo cap.
+            split_embargo_bars: Embargo of the chronological val/test gap in bars
+                when it differs from the CV embargo (event sampling: the CV
+                embargo counts event samples). None = the CV embargo.
 
         Returns:
             PipelineConfig instance
@@ -587,6 +602,7 @@ class ExperimentConfig:
             n_splits=self.training.n_splits,
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
+            split_embargo_bars=split_embargo_bars,
             sample_weighting=self.training.sample_weighting,
             # Chronological split ratios (purge/embargo gaps sit between them)
             train_ratio=self.data.splits.train_ratio,

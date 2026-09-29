@@ -248,6 +248,9 @@ class MLFactory:
         self._feature_pipeline: dict[str, Any] | None = None
         # (purge_bars, embargo_bars) resolved once the labeled frame is known
         self._cv_gaps: tuple[int, int] | None = None
+        # Bar embargo of the chronological split when the CV embargo counts
+        # event samples (None = same as the CV embargo)
+        self._split_embargo_bars: int | None = None
 
         # Backtest artifacts (populated by _run_evaluation)
         self._last_equity_curve: Any = None
@@ -318,7 +321,7 @@ class MLFactory:
                         self._label_cost_in_atr = {int(h): c for h, c in json.load(f).items()}
 
             # Resolve purge/embargo for this data, then validate sufficiency
-            self._pipeline_config(n_rows=self._n_cv_samples(df))
+            self._pipeline_config(df=df)
             self._validate_data_sufficiency(df)
 
             # Phase 2: Training
@@ -695,16 +698,57 @@ class MLFactory:
         """
         return self.config.resolve_barrier_params(horizon)
 
-    def _train_prefix(self, raw_df: pd.DataFrame) -> pd.DataFrame:
-        """Leading raw bars that certainly belong to the training split.
+    def _fit_fraction(self, n_rows: int) -> float:
+        """Leading fraction of the bars that statistics fitted for the data step may use.
 
-        ``data.splits.train_ratio`` of the raw bars. Feature warmup drops rows
-        from the head of the labeled frame, so its training split (the first
-        ``train_ratio`` of THOSE rows) ends at or after this prefix: anything
-        fitted here (fractional-differentiation d, CUSUM threshold) never sees
-        a validation or test bar.
+        Standard modes: ``data.splits.train_ratio`` — the chronological
+        training split, so the validation and test holdout never influence
+        what is fitted. Walk-forward: the first window already tests from
+        ``min_train_pct`` of the samples, so fitting stops there, one label
+        span earlier. Applies to the labeler's cost calibration, the CUSUM
+        auto threshold and the auto fractional-differentiation d.
+
+        The boundary is in bars while walk-forward windows are counted in
+        samples: with event sampling the first test window can start a little
+        earlier in bars where events cluster. Purged-CV folds (OOF, tuner)
+        lie inside the training split, so they see values fitted on all of it
+        — the same convention as the cost calibration.
         """
-        return raw_df.iloc[: int(len(raw_df) * self.config.data.splits.train_ratio)]
+        fraction = self.config.data.splits.train_ratio
+        if self.config.training.training_mode == "walk_forward":
+            fraction = min(fraction, self.config.training.walk_forward.min_train_pct)
+            fraction = max(fraction - self.config.label_span_bars() / max(n_rows, 1), 0.0)
+        return fraction
+
+    def _train_prefix(self, raw_df: pd.DataFrame) -> pd.DataFrame:
+        """Leading raw bars that certainly belong to the training data.
+
+        ``_fit_fraction`` of the raw bars. Feature warmup drops rows from the
+        head of the labeled frame, so its training split (the first fraction
+        of THOSE rows) ends at or after this prefix: anything fitted here
+        (fractional-differentiation d, CUSUM threshold) never sees a
+        validation or test bar (``_check_fit_prefix`` guards the assumption).
+        """
+        return raw_df.iloc[: int(len(raw_df) * self._fit_fraction(len(raw_df)))]
+
+    def _check_fit_prefix(self, raw_df: pd.DataFrame, df_features: pd.DataFrame) -> None:
+        """Raise if the fit prefix reaches past the training split of the labeled frame.
+
+        Holds because feature engineering only drops warmup rows at the head;
+        a row dropped mid-series or at the tail would shift the split earlier.
+        """
+        n_prefix = len(self._train_prefix(raw_df))
+        if n_prefix == 0:
+            return
+        train_rows = int(len(df_features) * self.config.data.splits.train_ratio)
+        train_end = pd.Timestamp(df_features["datetime"].iloc[max(train_rows - 1, 0)])
+        if raw_df.index[n_prefix - 1] > train_end:
+            raise ValueError(
+                "Feature engineering dropped rows after the warmup, so the bars used to fit "
+                "the CUSUM threshold / fractional-differentiation d reach past the training "
+                f"split (fit prefix ends {raw_df.index[n_prefix - 1]}, training split ends "
+                f"{train_end}). Clean the raw bars (gaps, NaN prices) and rerun."
+            )
 
     def _resolve_frac_diff(self, raw_df: pd.DataFrame) -> dict[str, Any]:
         """FeatureEngineer kwargs for the fractional-differentiation features.
@@ -770,21 +814,75 @@ class MLFactory:
 
         return int((df["label"] != INVALID_LABEL).sum())
 
-    def _pipeline_config(self, n_rows: int | None = None) -> Any:
+    def _pipeline_config(self, df: pd.DataFrame | None = None) -> Any:
         """PipelineConfig with the CV gaps resolved for this run's data.
 
-        Pass ``n_rows`` (rows of the labeled frame) to resolve and log
-        purge/embargo from the label span and the training bar timeframe;
-        later calls reuse the resolved gaps.
+        Pass the labeled frame ``df`` to resolve and log purge/embargo from the
+        label span and the training bar timeframe; later calls reuse the
+        resolved gaps. With event sampling the chronological split works on
+        bars of the full frame while the CV works on event rows, so the split
+        keeps the bar embargo (``split_embargo_bars``) and the CV embargo is
+        converted to samples (``_sample_embargo``).
         """
-        if self._cv_gaps is None or n_rows is not None:
-            self._cv_gaps = self.config.resolve_cv_gaps(self._bar_timeframe(), n_rows)
+        if self._cv_gaps is None or df is not None:
+            purge, embargo = self.config.resolve_cv_gaps(
+                self._bar_timeframe(), None if df is None else len(df)
+            )
+            self._split_embargo_bars = None
+            if df is not None and self.config.data.labeling.event_sampling != "none":
+                self._split_embargo_bars = embargo
+                embargo = self._sample_embargo(df, embargo)
+            self._cv_gaps = (purge, embargo)
             self._log(
                 f"  CV gaps: purge_bars={self._cv_gaps[0]} (longest label span "
                 f"{self.config.label_span_bars()} bars), embargo_bars={self._cv_gaps[1]} "
                 f"(bar timeframe {self._bar_timeframe()})"
             )
-        return self.config.to_pipeline_config(cv_gaps=self._cv_gaps)
+            if self._split_embargo_bars is not None:
+                self._log(
+                    f"  Event sampling: CV embargo of {self._cv_gaps[1]} samples covers at "
+                    f"least the {self._split_embargo_bars}-bar embargo (kept for the split)"
+                )
+        return self.config.to_pipeline_config(
+            cv_gaps=self._cv_gaps, split_embargo_bars=self._split_embargo_bars
+        )
+
+    def _sample_embargo(self, df: pd.DataFrame, bar_embargo: int) -> int:
+        """CV embargo in event SAMPLES covering at least ``bar_embargo`` bars.
+
+        The CV embargoes a number of samples after each test block. With events
+        that number must cover the bar embargo wherever events cluster, so it is
+        the largest number of events found in any ``bar_embargo``-bar stretch
+        (never more than ``bar_embargo``, as each bar holds at most one event).
+        A derived embargo is additionally capped at 25% of a CV fold of events
+        so small datasets keep training data; a cap that binds shortens the
+        embargo below the bar embargo and is logged. An explicit
+        ``training.embargo_bars`` is never capped.
+        """
+        from src.config.experiment import MAX_EMBARGO_FOLD_FRACTION
+        from src.core.label_spans import INVALID_LABEL
+
+        starts = np.flatnonzero(df["label"].to_numpy() != INVALID_LABEL)
+        if len(starts) == 0 or bar_embargo == 0:
+            return 0
+        after = np.searchsorted(starts, starts + bar_embargo, side="right") - np.arange(
+            1, len(starts) + 1
+        )
+        embargo = int(after.max())
+        if self.config.training.embargo_bars is None:
+            fold = int(len(starts) * self.config.data.splits.train_ratio) // (
+                self.config.training.n_splits
+            )
+            cap = int(fold * MAX_EMBARGO_FOLD_FRACTION)
+            if embargo > cap:
+                logger.warning(
+                    f"Event sampling: the CV embargo is capped at {cap} samples "
+                    f"(25% of a {fold}-sample fold), below the {embargo} samples "
+                    f"needed to cover the {bar_embargo}-bar embargo; more data would "
+                    "restore the full embargo"
+                )
+                embargo = cap
+        return embargo
 
     def _bar_timeframe(self) -> str | None:
         """Training bar timeframe recorded by the data pipeline (None before it ran)."""
@@ -925,6 +1023,8 @@ class MLFactory:
             symbol=self.config.data.symbol,
         )
         self._log(f"  Features: {len(df_features.columns)} columns")
+        if event_spec is not None or frac_diff_kwargs:
+            self._check_fit_prefix(raw_df, df_features)
 
         # =====================================================================
         # STEP 2: Triple Barrier Labeling
@@ -973,7 +1073,7 @@ class MLFactory:
                 # Price cost -> ATR units with the TRAINING split's median ATR
                 # (the split prepare() makes); val/test volatility must not
                 # shape the training labels. The backtest reuses this scalar.
-                cost_calibration_fraction=self.config.data.splits.train_ratio,
+                cost_calibration_fraction=self._fit_fraction(len(df_features)),
             )
             labeler = TripleBarrierLabeler(label_config)
             label_result = labeler.compute_labels(df_features, horizon=max_bars)
@@ -1101,7 +1201,7 @@ class MLFactory:
             )
 
         df, _ = self.prepare_data()
-        preparer = DataPreparer(self._pipeline_config(n_rows=self._n_cv_samples(df)))
+        preparer = DataPreparer(self._pipeline_config(df=df))
         self._validate_data_sufficiency(df)
 
         containers: dict[int, TimeSeriesDataContainer] = {}
@@ -1212,7 +1312,7 @@ class MLFactory:
                 "confidence": "bet_sizing",
                 # "kelly" stays as "kelly"
             }
-            canonical_sizing = self.config.evaluation.position_sizing
+            canonical_sizing = str(self.config.evaluation.position_sizing).lower()
             local_sizing = position_sizing_map.get(canonical_sizing, canonical_sizing)
 
             # Select contract specs based on symbol
@@ -1233,6 +1333,8 @@ class MLFactory:
             # AFML probability sizing parameters (used when position_sizing="probability")
             bt_kwargs["bet_max_contracts"] = self.config.evaluation.bet_max_contracts
             bt_kwargs["bet_step_size"] = self.config.evaluation.bet_step_size
+            # K in the AFML statistic: the run's class count (binary skips the backtest)
+            bt_kwargs["bet_n_classes"] = 2 if self.config.data.labeling.binary_mode else 3
 
             # Wire triple-barrier params from the SAME resolution the labeler
             # used (Phase 86 parity guarantee: labels and backtest play the
@@ -1435,6 +1537,13 @@ class MLFactory:
         Args:
             df: Labeled feature frame (DatetimeIndex)
             training_result: TrainingRunResult
+
+        ``confidence`` is the probability of the predicted class: the
+        UNCALIBRATED maximum class probability of the meta-learner (or of the
+        model's out-of-fold probabilities), or the vote share for a hard
+        ``voting_meta``. Calibration is fitted on the validation split, after
+        these out-of-sample predictions, so no calibrated probability exists on
+        this path; ``position_sizing="probability"`` sizes from this value.
 
         Returns:
             (DataFrame with datetime, prediction {-1, 0, 1}, confidence — or

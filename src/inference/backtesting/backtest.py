@@ -484,9 +484,9 @@ class Backtester:
             cost_calculator: Cost calculator (created from config if not provided)
             position_sizer: Position sizer (created from config if not provided)
         """
+        self.config = config or BacktestConfig()
         self.predictions = self._validate_predictions(predictions)
         self.prices = self._validate_prices(prices)
-        self.config = config or BacktestConfig()
 
         # Create cost calculator
         if cost_calculator is None:
@@ -539,6 +539,8 @@ class Backtester:
         self._flatten_at_bar: int | None = None
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+        # Entry signals skipped because the sizer returned zero contracts
+        self._zero_size_signals = 0
 
         # Running Kelly statistics from completed trades
         self._kelly_win_rate: float = 0.5
@@ -616,7 +618,17 @@ class Backtester:
         if "confidence" not in df.columns and "probability" in df.columns:
             df["confidence"] = df["probability"]
         if "confidence" not in df.columns:
-            df["confidence"] = 1.0
+            if self._resolve_sizing_method(self.config.position_sizing) == "probability":
+                # Full size for a prediction without a probability would be a
+                # silent default; NaN sizes to 0 contracts (no bet)
+                logger.warning(
+                    "position_sizing='probability' needs a 'confidence' (or 'probability') "
+                    "column with the predicted probability of the chosen side; none given, "
+                    "so no position will be opened"
+                )
+                df["confidence"] = np.nan
+            else:
+                df["confidence"] = 1.0
 
         if "label" not in df.columns:
             df["label"] = np.nan
@@ -794,6 +806,7 @@ class Backtester:
         )
 
         if contracts <= 0:
+            self._zero_size_signals += 1
             return
 
         # Calculate stop loss and take profit
@@ -1099,6 +1112,7 @@ class Backtester:
         self._flatten_at_bar = None
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+        self._zero_size_signals = 0
         self._kelly_active = False
         self._kelly_win_rate = 0.5
         self._kelly_avg_win = 100.0
@@ -1406,7 +1420,13 @@ class Backtester:
             "halted_at": str(self._halts[0].timestamp) if self._halts else None,
             "halts_by_reason": halts_by_reason,
             "bars_halted": bars_halted,
+            "zero_size_signals": self._zero_size_signals,
         }
+        if self._zero_size_signals:
+            logger.info(
+                f"{self._zero_size_signals} entry signals opened no position: the position "
+                f"sizer ({cfg.position_sizing}) returned zero contracts"
+            )
 
         return BacktestResult(
             equity_curve=equity_curve,

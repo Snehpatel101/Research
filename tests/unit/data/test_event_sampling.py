@@ -16,7 +16,6 @@ from src.config.experiment import ExperimentConfig
 from src.core.label_spans import INVALID_LABEL, NO_LABEL_END
 from src.data.features.cusum_filter import (
     auto_cusum_threshold,
-    cusum_event_mask,
     log_returns,
 )
 from src.data.labeling.event_sampling import (
@@ -26,6 +25,10 @@ from src.data.labeling.event_sampling import (
 )
 from src.factory import MLFactory
 from tests.helpers import make_intraday_ohlcv
+
+
+def cusum_event_mask(close: pd.Series, threshold: float) -> np.ndarray:
+    return EventSamplingSpec("cusum", threshold).mask(close)
 
 
 def _price_with_jumps(n: int, jumps: dict[int, float]) -> pd.Series:

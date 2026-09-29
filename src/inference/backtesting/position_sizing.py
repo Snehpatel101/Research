@@ -511,7 +511,11 @@ class ProbabilityBetSizer(BasePositionSizer):
     ``max_contracts`` as the probability approaches 1. The probability is the
     model's (or the meta-labeling bundle's) probability of the side it takes,
     passed as ``probability`` — the backtester feeds it the prediction's
-    ``confidence``, the probability of the predicted class.
+    ``confidence``, the probability of the predicted class. A probability that
+    is missing or not finite means no bet (never full size). Factory backtests
+    supply the uncalibrated maximum class probability (a vote share for a hard
+    ``voting_meta``): overconfident models size up too eagerly, so calibrate
+    the probabilities first when they come from your own pipeline.
 
     Attributes:
         max_contracts: Contracts at full size (size 1.0)

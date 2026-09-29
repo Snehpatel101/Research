@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.data.features.cusum_filter import auto_cusum_threshold, cusum_event_mask, log_returns
+from src.data.features.cusum_filter import auto_cusum_threshold, cusum_events_mask, log_returns
 
 EVENT_SAMPLING_NONE = "none"
 EVENT_SAMPLING_CUSUM = "cusum"
@@ -48,8 +48,14 @@ class EventSamplingSpec:
             raise ValueError(f"Event threshold must be positive and finite, got {self.threshold}")
 
     def mask(self, close: pd.Series) -> np.ndarray:
-        """Boolean event mask over the bars of ``close`` (causal, path dependent)."""
-        return cusum_event_mask(close, self.threshold)
+        """Boolean event mask over the bars of ``close``.
+
+        The CUSUM runs forward over the log returns: the decision for bar ``t``
+        depends on bars ``<= t`` only, so the mask of a prefix equals the prefix
+        of the mask. It is path dependent (the sums reset at every event), so
+        replaying it needs the same history start.
+        """
+        return cusum_events_mask(log_returns(close), self.threshold).to_numpy()
 
     def to_dict(self) -> dict[str, Any]:
         return {"method": self.method, "threshold": float(self.threshold)}

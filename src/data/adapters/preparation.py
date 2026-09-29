@@ -599,8 +599,13 @@ class UnifiedDataPreparation:
         # Gap after val: the purge covers the longest label span (validation
         # labels resolving inside the test period), the embargo serial
         # correlation — whichever is wider
-        test_start = val_end + max(self.config.purge_bars, self.config.embargo_bars)
+        test_start = val_end + max(self.config.purge_bars, self._split_embargo_bars())
         return train_end, val_start, val_end, test_start
+
+    def _split_embargo_bars(self) -> int:
+        """Embargo of the chronological split, in bars of the full frame."""
+        split_embargo = getattr(self.config, "split_embargo_bars", None)
+        return self.config.embargo_bars if split_embargo is None else split_embargo
 
     def _split_with_purge_embargo(
         self,
@@ -621,7 +626,7 @@ class UnifiedDataPreparation:
         """
         n = len(df)
         purge = self.config.purge_bars
-        embargo = self.config.embargo_bars
+        embargo = self._split_embargo_bars()
         train_end, val_start, val_end, test_start = self._split_bounds(n)
 
         # Extract splits

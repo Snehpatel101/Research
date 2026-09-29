@@ -28,9 +28,15 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   `evaluation.position_sizing: "probability"` (AFML ch. 10 bet size from the
   predicted probability, `ProbabilityBetSizer`).
 - `ExperimentConfig.validate()` (checked by `MLFactory`); `scripts/mix_match.py
-  --set KEY=VALUE` config overrides.
+  --set KEY=VALUE` config overrides; YAML numbers in scientific notation without a
+  dot (`1e-5`) load as numbers; backtest summaries report `zero_size_signals`.
 
 ### Changed
+- Walk-forward runs calibrate the labeler's cost term (and the CUSUM threshold /
+  auto frac-diff d) on the bars before the first test window instead of the
+  whole training split.
+- `PipelineConfig.split_embargo_bars`: the val/test embargo stays in bars when
+  event sampling makes the CV embargo count samples.
 - `frac_diff_ffd(..., max_window=)` and `find_min_d(..., threshold=, max_window=)`
   accept an explicit window (the default keeps the data-length-dependent cap).
 - The pre-training leakage check ignores invalid-label (-99) rows, and

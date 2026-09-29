@@ -15,13 +15,13 @@ from typing import Any
 
 import pandas as pd
 
-from src.core.constants import OHLCV_COLUMNS
+from src.core.constants import FRAC_DIFF_PRICE_COLUMNS, OHLCV_COLUMNS
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
 from ..mtf.generator import MTFFeatureGenerator
 from .entropy import add_entropy_features
-from .frac_diff_features import FRAC_DIFF_PRICE_COLUMNS, add_frac_diff_features
+from .frac_diff_features import add_frac_diff_features
 from .microstructure import add_microstructure_features
 from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
 from .moving_averages import add_ema, add_sma
