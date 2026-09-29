@@ -40,6 +40,7 @@ Example:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -229,6 +230,10 @@ class MLFactory:
         self._cached_df: pd.DataFrame | None = None
         self._cached_training_result: TrainingResult | None = None
 
+        # Raw-OHLCV -> features recipe (bar timeframe + FeatureEngineer spec),
+        # recorded by the data pipeline and baked into bundles for inference.
+        self._feature_pipeline: dict[str, Any] | None = None
+
         # Backtest artifacts (populated by _run_evaluation)
         self._last_equity_curve: Any = None
         self._last_backtest_trades: list = []
@@ -285,6 +290,10 @@ class MLFactory:
                 self._log("\n[Phase 1/4] Data Pipeline (cached)")
                 df = self._load_cached_data()
                 additional_dfs = self._load_cached_additional_dfs()
+                pipeline_path = self.output_dir / "cache" / "feature_pipeline.json"
+                if pipeline_path.exists():
+                    with open(pipeline_path) as f:
+                        self._feature_pipeline = json.load(f)
 
             # Validate data sufficiency for CV configuration
             self._validate_data_sufficiency(df)
@@ -416,6 +425,10 @@ class MLFactory:
         data_cache_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(data_cache_path)
 
+        if self._feature_pipeline is not None:
+            with open(self.output_dir / "cache" / "feature_pipeline.json", "w") as f:
+                json.dump(self._feature_pipeline, f, indent=2)
+
         # Save additional_dfs (multi-stream data for 4D models like PatchTST)
         if additional_dfs:
             for tf_key, tf_df in additional_dfs.items():
@@ -465,8 +478,6 @@ class MLFactory:
         """Save checkpoint after evaluation stage."""
         if not self._checkpoint_manager:
             return
-
-        import json
 
         # Save backtest metrics
         eval_cache_path = self.output_dir / "cache" / "evaluation.json"
@@ -527,18 +538,10 @@ class MLFactory:
 
         # Backward compat: regenerate from raw source file
         # (cached data_pipeline.parquet has features/labels, not raw OHLCV)
-        if self.config.data.data_path:
+        if self.config.data.data_path and Path(self.config.data.data_path).exists():
             self._log("  No cached MTF data — regenerating from raw OHLCV source")
-            data_path = Path(self.config.data.data_path)
-            if data_path.exists():
-                if data_path.suffix.lower() == ".csv":
-                    raw_df = pd.read_csv(data_path)
-                else:
-                    raw_df = pd.read_parquet(data_path)
-                if "datetime" in raw_df.columns:
-                    raw_df["datetime"] = pd.to_datetime(raw_df["datetime"])
-                    raw_df = raw_df.set_index("datetime")
-                return self._generate_additional_dfs(raw_df)
+            raw_df, _bar_tf = self._load_raw_bars()
+            return self._generate_additional_dfs(raw_df)
 
         self._log("  WARNING: 4D models need MTF data but none available")
         return None
@@ -554,7 +557,6 @@ class MLFactory:
 
     def _load_cached_evaluation(self) -> dict:
         """Load cached evaluation metrics from checkpoint."""
-        import json
 
         eval_cache_path = self.output_dir / "cache" / "evaluation.json"
         if eval_cache_path.exists():
@@ -694,16 +696,20 @@ class MLFactory:
         source = "labeling-config override" if overridden else "barriers table"
         return k_up, k_down, max_bars, source
 
-    def _run_data_pipeline(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
+    def _load_raw_bars(self) -> tuple[pd.DataFrame, str]:
         """
-        Run data pipeline to prepare features and labels.
+        Load raw OHLCV as a sorted DatetimeIndex frame at the training bar timeframe.
+
+        Applies ``data.start_date`` / ``data.end_date`` filtering and, when
+        ``data.bar_timeframe`` is coarser than the source bars, resamples to it
+        (same resample code the inference PreprocessingGraph uses).
 
         Returns:
-            Tuple of (DataFrame with features/labels, additional_dfs for multi-stream or None)
+            (raw OHLCV frame, bar timeframe string such as "5min")
         """
-        self._log("Running data pipeline...")
+        from src.core.common.timeframes import detect_timeframe, get_timeframe_minutes
+        from src.data.pipeline.stages.clean.utils import resample_ohlcv
 
-        # Load raw OHLCV data
         if not self.config.data.data_path:
             raise ValueError("data_path must be provided in config")
 
@@ -715,7 +721,7 @@ class MLFactory:
         self._log(f"  Loaded: {len(raw_df)} rows from {data_path}")
 
         # Normalize column names
-        raw_df.columns = [c.lower().strip() for c in raw_df.columns]
+        raw_df.columns = [str(c).lower().strip() for c in raw_df.columns]
 
         # Ensure datetime index
         if "datetime" in raw_df.columns:
@@ -724,16 +730,59 @@ class MLFactory:
         elif "date" in raw_df.columns:
             raw_df["date"] = pd.to_datetime(raw_df["date"])
             raw_df = raw_df.set_index("date").sort_index()
-            raw_df.index.name = "datetime"
         elif not isinstance(raw_df.index, pd.DatetimeIndex):
             raw_df.index = pd.to_datetime(raw_df.index)
             raw_df = raw_df.sort_index()
+        else:
+            raw_df = raw_df.sort_index()
+        raw_df.index.name = "datetime"
 
         # Check for OHLCV columns
         required = ["open", "high", "low", "close", "volume"]
         missing = [c for c in required if c not in raw_df.columns]
         if missing:
             raise ValueError(f"Missing required OHLCV columns: {missing}")
+        raw_df = raw_df[required]
+
+        # Date range filtering
+        if self.config.data.start_date:
+            raw_df = raw_df[raw_df.index >= pd.Timestamp(self.config.data.start_date)]
+        if self.config.data.end_date:
+            raw_df = raw_df[raw_df.index <= pd.Timestamp(self.config.data.end_date)]
+        if raw_df.empty:
+            raise ValueError(
+                f"No rows left after date filtering "
+                f"(start={self.config.data.start_date}, end={self.config.data.end_date})"
+            )
+
+        source_tf = detect_timeframe(raw_df)
+        if source_tf is None:
+            raise ValueError(
+                "Could not detect the bar timeframe of the input data (median bar "
+                "spacing is not a whole number of minutes)."
+            )
+
+        bar_tf = self.config.data.bar_timeframe or source_tf
+        if bar_tf != source_tf:
+            if get_timeframe_minutes(bar_tf) < get_timeframe_minutes(source_tf):
+                raise ValueError(
+                    f"data.bar_timeframe={bar_tf} is finer than the {source_tf} input bars"
+                )
+            resampled = resample_ohlcv(raw_df.reset_index(), bar_tf, include_metadata=False)
+            raw_df = resampled.set_index("datetime")
+            self._log(f"  Resampled {source_tf} -> {bar_tf}: {len(raw_df)} bars")
+        return raw_df, bar_tf
+
+    def _run_data_pipeline(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
+        """
+        Run data pipeline to prepare features and labels.
+
+        Returns:
+            Tuple of (DataFrame with features/labels, additional_dfs for multi-stream or None)
+        """
+        self._log("Running data pipeline...")
+
+        raw_df, bar_timeframe = self._load_raw_bars()
 
         # Generate additional_dfs for multi-stream models BEFORE feature engineering
         # (needs raw OHLCV with DatetimeIndex)
@@ -750,10 +799,18 @@ class MLFactory:
         if df_for_features.columns[0] == "index":
             df_for_features = df_for_features.rename(columns={"index": "datetime"})
 
+        mtf = self.config.data.mtf
         engineer = FeatureEngineer(
-            input_dir=self.output_dir,
             output_dir=self.output_dir,
+            timeframe=bar_timeframe,
+            enable_mtf=mtf.enabled,
+            mtf_timeframes=list(mtf.timeframes),
         )
+        # Recorded so bundles replay the exact same transform at inference
+        self._feature_pipeline = {
+            "bar_timeframe": bar_timeframe,
+            "engineer": engineer.to_spec(),
+        }
         df_features, _report = engineer.engineer_features(
             df_for_features,
             symbol=self.config.data.symbol,
@@ -778,7 +835,9 @@ class MLFactory:
                 upper_mult=k_up,
                 lower_mult=k_down,
                 atr_period=labeling.atr_period,
-                atr_column=f"atr_{labeling.atr_period}",
+                # ATR computed inline from OHLCV (Wilder, same as the backtest) — not
+                # a feature column, whose period and lag follow feature engineering
+                atr_column=None,
                 symbol=symbol,
             )
             labeler = TripleBarrierLabeler(label_config)
@@ -1007,13 +1066,18 @@ class MLFactory:
             from src.inference.builder import BundleBuilder
 
             pipeline_config = self.config.to_pipeline_config()
-            builder = BundleBuilder(pipeline_config)
+            builder = BundleBuilder(pipeline_config, feature_pipeline=self._feature_pipeline)
 
             bundle_result = builder.build_from_training_result(training_result)
+            ensemble_path = builder.build_ensemble_from_training_result(
+                training_result, base_bundles=bundle_result.bundle_paths
+            )
             bundle_path = self.output_dir / "bundles"
             bundle_path.mkdir(exist_ok=True)
 
             self._log(f"  Created {bundle_result.n_bundles} bundles")
+            if ensemble_path is not None:
+                self._log(f"  Created ensemble bundle: {ensemble_path.name}")
             self._log(f"  Bundle path: {bundle_path}")
 
             return bundle_path
@@ -1051,6 +1115,7 @@ class MLFactory:
                 DeployManifest,
                 HorizonArtifactEntry,
                 HorizonManifest,
+                describe_bundle,
             )
 
             deploy_dir = self.output_dir / "deploy"
@@ -1059,22 +1124,11 @@ class MLFactory:
             # Scan bundles directory for saved model bundles
             horizons: dict[int, HorizonManifest] = {}
 
+            best_score: dict[int, float] = {}
             for item in sorted(bundle_path.iterdir()):
-                if not item.is_dir():
+                info = describe_bundle(item) if item.is_dir() else None
+                if info is None:
                     continue
-
-                metadata_path = item / "metadata.json"
-                if not metadata_path.exists():
-                    continue
-
-                import json
-
-                with open(metadata_path) as f:
-                    meta = json.load(f)
-
-                horizon = meta.get("horizon", 0)
-                model_name = meta.get("model_name", meta.get("meta_learner_name", item.name))
-                is_ensemble = "meta_learner_name" in meta
 
                 # Build relative path from deploy dir to bundle
                 try:
@@ -1083,34 +1137,27 @@ class MLFactory:
                     rel_path = str(item.relative_to(self.output_dir))
 
                 entry = HorizonArtifactEntry(
-                    model_name=model_name,
+                    model_name=info.model_name,
                     bundle_path=rel_path,
-                    is_ensemble=is_ensemble,
-                    metrics=meta.get("training_metrics", meta.get("metrics", {})),
+                    is_ensemble=info.kind == "ensemble",
+                    metrics=info.metrics,
                 )
+                h_manifest = horizons.setdefault(
+                    info.horizon, HorizonManifest(horizon=info.horizon)
+                )
+                h_manifest.entries.append(entry)
 
-                if horizon not in horizons:
-                    horizons[horizon] = HorizonManifest(horizon=horizon)
-
-                horizons[horizon].entries.append(entry)
-
-                # Set primary: prefer ensemble, else best by macro_f1
-                if is_ensemble or not horizons[horizon].primary_model or model_name == "unknown":
-                    horizons[horizon].primary_model = model_name
-                else:
-                    # Compare macro_f1 to pick best
-                    current_f1 = entry.metrics.get("macro_f1", 0.0)
-                    best_entry = next(
-                        (
-                            e
-                            for e in horizons[horizon].entries
-                            if e.model_name == horizons[horizon].primary_model
-                        ),
-                        None,
-                    )
-                    best_f1 = best_entry.metrics.get("macro_f1", 0.0) if best_entry else 0.0
-                    if current_f1 > best_f1:
-                        horizons[horizon].primary_model = model_name
+                # Primary: the ensemble when one exists, else best validation score
+                current = h_manifest.primary_model
+                current_is_ensemble = any(
+                    e.is_ensemble for e in h_manifest.entries if e.model_name == current
+                )
+                if entry.is_ensemble or (
+                    not current_is_ensemble
+                    and (not current or info.score > best_score.get(info.horizon, -1.0))
+                ):
+                    h_manifest.primary_model = info.model_name
+                    best_score[info.horizon] = info.score
 
             if not horizons:
                 self._log("  No bundles found for deploy manifest")

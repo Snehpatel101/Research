@@ -12,12 +12,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 
-from src.core.utils.safe_pickle import safe_pickle_load
+from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
@@ -209,27 +208,27 @@ class RandomForestModel(BaseModel):
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
-        joblib.dump(self._model, path / "model.joblib")
+        safe_pickle_dump(self._model, path / "model.pkl")
 
         metadata = {
             "config": self._config,
             "feature_names": self._feature_names,
             "n_classes": self._n_classes,
         }
-        joblib.dump(metadata, path / "metadata.joblib")
+        safe_pickle_dump(metadata, path / "metadata.pkl")
 
         logger.info(f"Saved RandomForest model to {path}")
 
     def load(self, path: Path) -> None:
         """Load model from directory."""
         path = Path(path)
-        model_path = path / "model.joblib"
+        model_path = path / "model.pkl"
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
         self._model = safe_pickle_load(model_path)
 
-        metadata_path = path / "metadata.joblib"
+        metadata_path = path / "metadata.pkl"
         if metadata_path.exists():
             metadata = safe_pickle_load(metadata_path)
             self._config = metadata.get("config", self._config)

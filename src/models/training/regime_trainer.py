@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.utils.json_utils import NumpyEncoder
+
 from .regime_detector import (
     RegimeDetector,
     RegimeResult,
@@ -128,6 +130,8 @@ class RegimeTrainingResult:
     aggregated_metrics: dict[str, float] = field(default_factory=dict)
     total_time_seconds: float = 0.0
     detector: RegimeDetector | None = None
+    # Regime label of every training sample (aligned with PreparedData.y_train)
+    train_regimes: pd.Series | None = None
 
     def get_model(self, model_name: str, regime: str) -> Any | None:
         """Get trained model for a specific model/regime combination."""
@@ -312,6 +316,9 @@ class RegimeAwareTrainer:
             aggregated_metrics=aggregated_metrics,
             total_time_seconds=total_time,
             detector=self.detector,
+            train_regimes=regime_result.regimes.iloc[: len(prepared.y_train)].reset_index(
+                drop=True
+            ),
         )
 
         # Store for inference
@@ -341,10 +348,18 @@ class RegimeAwareTrainer:
         regime_result: RegimeResult,
         save_models: bool,
     ) -> dict[tuple[str, str], RegimeModelResult]:
-        """Train separate models for each regime."""
-        from src.core.container import TimeSeriesDataContainer
-        from src.models import Trainer, TrainerConfig
+        """Train separate models for each regime.
 
+        Each regime's model trains on that regime's training samples through
+        the same ModelTrainingService path as standard mode (run_prepared for
+        3D/4D data, no extra feature filtering), so a regime model is exactly
+        a standard model fit on a regime subset — and bundles like one.
+        """
+        from dataclasses import replace
+
+        from .services import ModelTrainingRequest, ModelTrainingService
+
+        service = ModelTrainingService()
         all_results: dict[tuple[str, str], RegimeModelResult] = {}
 
         for regime_label in regime_result.get_regime_labels():
@@ -352,10 +367,10 @@ class RegimeAwareTrainer:
 
             # Get mask for this regime
             mask = regime_result.get_mask(regime_label)
-            train_mask = mask[: len(prepared.y_train)].values
+            train_mask = mask[: len(prepared.y_train)].to_numpy()
 
             # Check minimum samples
-            n_train = train_mask.sum()
+            n_train = int(train_mask.sum())
             if n_train < self.config.regime_min_samples:
                 logger.warning(
                     f"Skipping {regime_label}: insufficient samples "
@@ -365,116 +380,71 @@ class RegimeAwareTrainer:
 
             logger.info(f"Training samples: {n_train}")
 
-            # Extract regime-specific data
-            X_train_regime = prepared.X_train[train_mask]
-            y_train_regime = prepared.y_train[train_mask]
-
-            # Handle validation set
-            # Note: We train on regime-specific data but may validate on all data
-            # or regime-specific validation data depending on use case
-            X_val = prepared.X_val
-            y_val = prepared.y_val
+            # Regime subset of the training split; validation stays on all data
+            regime_prepared = replace(
+                prepared,
+                X_train=prepared.X_train[train_mask],
+                y_train=prepared.y_train[train_mask],
+                train_weights=(
+                    prepared.train_weights[train_mask]
+                    if prepared.train_weights is not None
+                    else None
+                ),
+                train_indices=(
+                    prepared.train_indices[train_mask]
+                    if prepared.train_indices is not None
+                    else None
+                ),
+            )
 
             for model_name in models:
                 logger.info(f"\n  Training {model_name}...")
-                model_start = time.time()
+                model_dir = self.output_dir / f"h{horizon}" / regime_label
+                model_dir.mkdir(parents=True, exist_ok=True)
 
-                try:
-                    # Prepare data for model
-                    if prepared.data_rank == 2:
-                        X_train_df = pd.DataFrame(
-                            X_train_regime,
-                            columns=prepared.feature_names,
-                        )
-                        X_val_df = pd.DataFrame(
-                            X_val,
-                            columns=prepared.feature_names,
-                        )
-                    else:
-                        # Flatten 3D/4D for tabular models
-                        n_train = X_train_regime.shape[0]
-                        n_val = X_val.shape[0]
-                        n_features = np.prod(X_train_regime.shape[1:])
-
-                        X_train_df = pd.DataFrame(
-                            X_train_regime.reshape(n_train, -1),
-                            columns=[f"f{i}" for i in range(n_features)],
-                        )
-                        X_val_df = pd.DataFrame(
-                            X_val.reshape(n_val, -1),
-                            columns=[f"f{i}" for i in range(n_features)],
-                        )
-
-                    # Create container using from_dataframes
-                    feature_columns = list(X_train_df.columns)
-                    train_df = X_train_df.copy()
-                    train_df[f"label_h{horizon}"] = y_train_regime
-                    train_df[f"sample_weight_h{horizon}"] = np.ones(len(y_train_regime))
-
-                    val_container_df = X_val_df.copy()
-                    val_container_df[f"label_h{horizon}"] = y_val
-                    val_container_df[f"sample_weight_h{horizon}"] = np.ones(len(y_val))
-
-                    container = TimeSeriesDataContainer.from_dataframes(
-                        train_df=train_df,
-                        val_df=val_container_df,
-                        test_df=None,
-                        horizon=horizon,
-                        feature_columns=feature_columns,
-                    )
-
-                    # Create trainer config
-                    model_dir = self.output_dir / f"h{horizon}" / regime_label
-                    model_dir.mkdir(parents=True, exist_ok=True)
-
-                    trainer_config = TrainerConfig(
+                trained = service.train_model(
+                    ModelTrainingRequest(
                         model_name=model_name,
                         horizon=horizon,
+                        prepared_data=regime_prepared,
+                        sequence_length=self.config.sequence_length,
                         output_dir=model_dir,
+                        n_splits=self.config.n_splits,
+                        # Features were already selected per model upstream
+                        use_feature_selection=False,
+                        max_epochs=self.config.max_epochs,
+                        batch_size=getattr(self.config, "batch_size", None),
+                        cv_method=self.config.cv_method,
+                        embargo_bars=self.config.embargo_bars,
+                        purge_bars=self.config.purge_bars,
+                        early_stopping_patience=getattr(
+                            self.config, "early_stopping_patience", None
+                        ),
                     )
+                )
+                trainer = trained.trainer
+                key = (model_name, regime_label)
+                self._trainers[key] = trainer
 
-                    # Train
-                    trainer = Trainer(trainer_config)
-                    results = trainer.run(container)
+                if save_models:
+                    trainer.model.save(model_dir / model_name)
 
-                    training_time = time.time() - model_start
+                result = RegimeModelResult(
+                    regime=regime_label,
+                    model_name=model_name,
+                    n_samples=n_train,
+                    sample_fraction=n_train / len(prepared.y_train),
+                    metrics=trained.metrics,
+                    trainer=trainer,
+                    training_time_seconds=trained.training_time_seconds,
+                )
+                all_results[key] = result
 
-                    # Store trainer
-                    key = (model_name, regime_label)
-                    self._trainers[key] = trainer
-
-                    # Save model
-                    if save_models:
-                        model_path = model_dir / f"{model_name}.pkl"
-                        try:
-                            if hasattr(trainer, "model") and hasattr(trainer.model, "save"):
-                                trainer.model.save(model_path)
-                        except Exception as e:
-                            logger.warning(f"Failed to save model: {e}")
-
-                    # Build result
-                    metrics = results.get("evaluation_metrics", {})
-                    result = RegimeModelResult(
-                        regime=regime_label,
-                        model_name=model_name,
-                        n_samples=n_train,
-                        sample_fraction=n_train / len(prepared.y_train),
-                        metrics=metrics,
-                        trainer=trainer,
-                        training_time_seconds=training_time,
-                    )
-
-                    all_results[key] = result
-
-                    logger.info(
-                        f"    val_f1={result.val_f1:.4f}, "
-                        f"val_accuracy={result.val_accuracy:.4f}, "
-                        f"time={training_time:.1f}s"
-                    )
-
-                except Exception as e:
-                    logger.error(f"Failed to train {model_name} on {regime_label}: {e}")
-                    raise
+                logger.info(
+                    f"    val_f1={result.val_f1:.4f}, "
+                    f"val_accuracy={result.val_accuracy:.4f}, "
+                    f"time={result.training_time_seconds:.1f}s"
+                )
 
         return all_results
 
@@ -811,7 +781,7 @@ class RegimeAwareTrainer:
         summary_path = self.output_dir / "regime_training_summary.json"
 
         with open(summary_path, "w") as f:
-            json.dump(result.to_dict(), f, indent=2)
+            json.dump(result.to_dict(), f, indent=2, cls=NumpyEncoder)
 
         logger.info(f"Summary saved to: {summary_path}")
 

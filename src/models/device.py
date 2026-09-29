@@ -449,7 +449,18 @@ def get_optimal_gpu_settings(model_family: str, gpu_info: GPUInfo | None = None)
     family = model_family.lower()
 
     if gpu_info is None:
-        return {"batch_size": 32, "mixed_precision": False, "num_workers": 4, "pin_memory": False}
+        # CPU: no worker processes (forked workers duplicate the parent's RAM)
+        cpu_settings: dict[str, Any] = {
+            "batch_size": 32,
+            "mixed_precision": False,
+            "num_workers": 0,
+            "pin_memory": False,
+        }
+        if family == "tft":
+            # Smallest TFT architecture (same as <20 GB GPUs): the per-feature
+            # variable-selection GRNs at d_model=256 need many GB of RAM
+            cpu_settings.update({"d_model": 64, "d_ff": 128, "n_heads": 2})
+        return cpu_settings
 
     mp_config = get_mixed_precision_config(gpu_info)
     vram = gpu_info.total_memory_gb

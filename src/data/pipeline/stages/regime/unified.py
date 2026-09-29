@@ -7,8 +7,8 @@ combines volatility, trend, and market-structure detectors.
 
 Other regime modules in the codebase:
     - ``src/data/pipeline/stages/regime/composite.py``  (implementation)
-    - ``src/models/training/regime_detector.py``         (training-time detector)
-    - ``src/inference/regime_detector.py``               (inference-time detector)
+    - ``src/models/training/regime_detector.py``         (regime-aware training mode;
+      also used at inference by ``src/inference/regime_bundle.py``)
     - ``src/models/training/modes/regime_aware.py``      (mode-level wrapper)
     - ``src/data/pipeline/stages/regime/hmm.py``         (HMM-based, experimental)
 

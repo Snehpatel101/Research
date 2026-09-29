@@ -514,12 +514,12 @@ class TestPhase3MemoryFixes:
             OOFGenerationService,
         )
 
-        source = inspect.getsource(OOFGenerationService._generate_4d_oof)
+        source = inspect.getsource(OOFGenerationService._generate_windowed_oof)
 
         # The code should have a comment explaining why .copy() is not needed
         assert (
             "Fancy indexing already returns" in source or ".copy() is redundant" in source
-        ), "_generate_4d_oof should document that fancy indexing copies are sufficient"
+        ), "_generate_windowed_oof should document that fancy indexing copies are sufficient"
 
         # Count actual .copy() calls on array slicing patterns
         # There should be zero .copy() on X_4d[train_idx] or X_4d[val_idx]

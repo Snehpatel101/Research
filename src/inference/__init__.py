@@ -65,7 +65,7 @@ Usage:
     # With preprocessing graph for raw OHLCV inference
     from src.inference import PreprocessingGraph
 
-    graph = PreprocessingGraph.from_pipeline_config(pipeline_config)
+    graph = PreprocessingGraph.load(bundle_path / "preprocessing_graph.json")
     bundle.set_preprocessing_graph(graph)
     bundle.save("./bundles/xgb_h20_with_graph")
 
@@ -133,7 +133,6 @@ from src.inference.errors import (
 from src.inference.meta_labeling_bundle import (
     META_LABELING_BUNDLE_VERSION,
     MetaLabelingBundle,
-    MetaLabelingBundleMetadata,
     MetaLabelingPrediction,
 )
 
@@ -153,23 +152,12 @@ from src.inference.pipeline import (
 from src.inference.preprocessing_graph import (
     PREPROCESSING_GRAPH_FILE,
     PREPROCESSING_GRAPH_VERSION,
-    CleaningConfig,
-    IndicatorConfig,
-    MTFConfig,
     PreprocessingGraph,
     PreprocessingGraphConfig,
-    RegimeConfig,
-    ScalingConfig,
-    WaveletConfig,
 )
 from src.inference.regime_bundle import (
     REGIME_BUNDLE_VERSION,
     RegimeBundle,
-)
-from src.inference.regime_detector import (
-    REGIME_DETECTOR_VERSION,
-    RegimeDetector,
-    RegimeDetectorConfig,
 )
 from src.inference.server import (
     ModelServer,
@@ -179,11 +167,6 @@ from src.inference.server import (
 from src.inference.universal_pipeline import (
     UniversalInferencePipeline,
     UniversalPredictionResult,
-)
-from src.inference.walk_forward_bundle import (
-    WALK_FORWARD_BUNDLE_VERSION,
-    WalkForwardBundle,
-    WalkForwardMetadata,
 )
 
 __all__ = [
@@ -197,12 +180,6 @@ __all__ = [
     # Preprocessing Graph
     "PreprocessingGraph",
     "PreprocessingGraphConfig",
-    "CleaningConfig",
-    "IndicatorConfig",
-    "MTFConfig",
-    "WaveletConfig",
-    "RegimeConfig",
-    "ScalingConfig",
     "PREPROCESSING_GRAPH_VERSION",
     "PREPROCESSING_GRAPH_FILE",
     # Pipeline
@@ -257,16 +234,9 @@ __all__ = [
     "UniversalInferencePipeline",
     "UniversalPredictionResult",
     # Special mode bundles
-    "WalkForwardBundle",
-    "WalkForwardMetadata",
-    "WALK_FORWARD_BUNDLE_VERSION",
     "RegimeBundle",
     "REGIME_BUNDLE_VERSION",
-    "RegimeDetector",
-    "RegimeDetectorConfig",
-    "REGIME_DETECTOR_VERSION",
     "MetaLabelingBundle",
     "MetaLabelingPrediction",
-    "MetaLabelingBundleMetadata",
     "META_LABELING_BUNDLE_VERSION",
 ]

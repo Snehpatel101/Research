@@ -163,6 +163,7 @@ from .validator import (
     validate_ensemble_config,
 )
 from .voting import VotingEnsemble
+from .voting_meta import VotingMetaLearner
 from .xgboost_meta import XGBoostMeta
 
 __all__ = [
@@ -172,6 +173,7 @@ __all__ = [
     "BlendingEnsemble",
     # Meta-learners
     "RidgeMetaLearner",
+    "VotingMetaLearner",
     "MLPMetaLearner",
     "CalibratedMetaLearner",
     "XGBoostMeta",

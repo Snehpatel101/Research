@@ -121,6 +121,12 @@ class FoldAwareScaler:
             # copies (fancy indexing, .values, .iloc), so in-place is safe.
             # Fit sklearn scaler FIRST (before in-place modification) for inference compat
             scaler.fit(X_train)
+            # pandas>=3 copy-on-write hands out read-only views from .values;
+            # copy only those (no extra memory for already-writable inputs).
+            if not X_train.flags.writeable:
+                X_train = X_train.copy()
+            if not X_val.flags.writeable:
+                X_val = X_val.copy()
 
             if self.method == "robust":
                 median = np.median(X_train, axis=0).astype(np.float32)

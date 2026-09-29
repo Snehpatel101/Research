@@ -11,7 +11,7 @@ pipeline, including:
 
 Key Components:
     HyperparameterResult: Result container for hyperparameter optimization
-    HyperparameterOptimizer: Optuna-based optimizer for all 23 models
+    HyperparameterOptimizer: Optuna-based optimizer for all 24 models
     HYPERPARAMETER_SPACES: Complete search spaces for all models
 
     FullOptimizationResult: Combined result for full pipeline optimization

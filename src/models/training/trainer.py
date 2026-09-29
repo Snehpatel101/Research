@@ -130,6 +130,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Scaler (set externally or during pipeline; exposes for TrainerProtocol)
         self._scaler: Any | None = None
 
+        # Timeframes of a 4D multi-stream input, anchor first (set in run_prepared)
+        self.timeframe_names: list[str] = []
+
         # Initialize experiment tracker
         self.tracker: ExperimentTracker = self._setup_tracker()
 
@@ -652,6 +655,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 f"(from {feature_selection_result.n_features_original})"
             )
 
+        # Exactly the columns the model is fitted on (TrainerProtocol.feature_columns)
+        self._feature_set_columns = list(X_train_df.columns)
+
         # Convert to numpy arrays and apply model-specific preprocessing
         # Track sequence data for heterogeneous stacking ensembles
         X_train_seq = None
@@ -1003,9 +1009,15 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         logger.info(f"Started experiment tracking run: {tracking_run_id}")
         self.tracker.log_params(self.config.to_dict())
 
-        # Capture scaler from PreparedData for TrainerProtocol
+        # Capture scaler + feature columns from PreparedData for TrainerProtocol.
+        # Bundles read trainer.feature_columns to rebuild inputs at inference;
+        # without them they fall back to generic f0..fN names and every
+        # sequence-model bundle fails predict_from_raw.
         if hasattr(prepared, "scaler") and prepared.scaler is not None:
             self._scaler = prepared.scaler
+        if prepared.feature_names:
+            self._feature_set_columns = list(prepared.feature_names)
+        self.timeframe_names = list(prepared.timeframe_names or [])
 
         # Extract data directly from PreparedData (no reshaping needed)
         X_train = prepared.X_train

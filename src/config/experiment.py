@@ -76,6 +76,9 @@ class DataSection:
     data_path: str | Path | None = None
     start_date: str | None = None
     end_date: str | None = None
+    # Training bar timeframe. None = use the input bars as-is (auto-detected);
+    # e.g. "5min" resamples 1-minute input to 5-minute bars before features.
+    bar_timeframe: str | None = None
 
     # Sub-configs
     features: FeatureConfig = field(default_factory=FeatureConfig)
@@ -89,6 +92,27 @@ class DataSection:
         """Convert string paths to Path objects."""
         if isinstance(self.data_path, str):
             self.data_path = Path(self.data_path)
+
+
+@dataclass
+class RegimeSettings:
+    """Regime-aware mode (training_mode="regime_aware"): one model per market regime."""
+
+    detection_method: str = "volatility_percentile"  # volatility_percentile, trend_adx, combined
+    n_regimes: int = 3  # 2 = low/high, 3 = low/medium/high
+    lookback: int = 60  # bars of history for the rolling regime statistic
+
+
+@dataclass
+class MetaLabelingSettings:
+    """Meta-labeling mode (training_mode="meta_labeling").
+
+    The primary (direction) model is ``training.models[0]``; the meta-model
+    learns P(primary correct) and trades are taken only above ``threshold``.
+    """
+
+    meta_model: str = "logistic"  # logistic, random_forest, xgboost, lightgbm, catboost
+    threshold: float = 0.5
 
 
 @dataclass
@@ -112,6 +136,8 @@ class TrainingSection:
 
     # Walk-forward validation settings (used when training_mode="walk_forward")
     walk_forward: WalkForwardConfig = field(default_factory=WalkForwardConfig)
+    regime: RegimeSettings = field(default_factory=RegimeSettings)
+    meta_labeling: MetaLabelingSettings = field(default_factory=MetaLabelingSettings)
 
     # Sub-configs
     optuna: OptunaConfig = field(default_factory=OptunaConfig)
@@ -276,6 +302,7 @@ class ExperimentConfig:
             data_path=data_section_dict.get("data_path"),
             start_date=data_section_dict.get("start_date"),
             end_date=data_section_dict.get("end_date"),
+            bar_timeframe=data_section_dict.get("bar_timeframe"),
             features=FeatureConfig(**data_section_dict.get("features", {})),
             labeling=LabelingConfig(**data_section_dict.get("labeling", {})),
             scaler=ScalerConfig(**data_section_dict.get("scaler", {})),
@@ -304,6 +331,8 @@ class ExperimentConfig:
             build_ensemble=training_section_dict.get("build_ensemble", True),
             meta_learner=training_section_dict.get("meta_learner", "ridge_meta"),
             walk_forward=WalkForwardConfig(**training_section_dict.get("walk_forward", {})),
+            regime=RegimeSettings(**training_section_dict.get("regime", {})),
+            meta_labeling=MetaLabelingSettings(**training_section_dict.get("meta_labeling", {})),
         )
 
         # Parse evaluation section
@@ -367,6 +396,7 @@ class ExperimentConfig:
                 "data_path": str(self.data.data_path) if self.data.data_path else None,
                 "start_date": self.data.start_date,
                 "end_date": self.data.end_date,
+                "bar_timeframe": self.data.bar_timeframe,
                 "features": asdict(self.data.features),
                 "labeling": asdict(self.data.labeling),
                 "scaler": asdict(self.data.scaler),
@@ -392,6 +422,8 @@ class ExperimentConfig:
                 "calibration": asdict(self.training.calibration),
                 "checkpoint": asdict(self.training.checkpoint),
                 "walk_forward": asdict(self.training.walk_forward),
+                "regime": asdict(self.training.regime),
+                "meta_labeling": asdict(self.training.meta_labeling),
             },
             "evaluation": {
                 "run_backtest": self.evaluation.run_backtest,
@@ -468,6 +500,14 @@ class ExperimentConfig:
             wf_window_type=self.training.walk_forward.window_type,
             wf_min_train_pct=self.training.walk_forward.min_train_pct,
             wf_test_pct=self.training.walk_forward.test_pct,
+            # Regime-aware settings
+            regime_detection_method=self.training.regime.detection_method,
+            n_regimes=self.training.regime.n_regimes,
+            regime_lookback=self.training.regime.lookback,
+            # Meta-labeling: the first listed model is the primary
+            meta_labeling_primary_model=self.training.models[0],
+            meta_labeling_meta_model=self.training.meta_labeling.meta_model,
+            meta_labeling_threshold=self.training.meta_labeling.threshold,
             random_state=self.random_seed,
             # Optimization flags — Optuna-based ones disabled when n_trials=0.
             # Feature selection is NOT Optuna-based (MDA ranking) and follows

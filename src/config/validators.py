@@ -210,6 +210,9 @@ FIELD_TYPES = {
     "mtf.default_timeframes": list,
 }
 
+# Fields where null means "auto-detect"
+NULLABLE_FIELDS = {"training.num_workers", "training.pin_memory"}
+
 # Valid values for enum-like fields
 VALID_VALUES = {
     "training.device": ["auto", "cpu", "cuda", "mps"],
@@ -287,6 +290,8 @@ def validate_field_types(
 
         if not found:
             continue  # Missing fields are handled by required validation
+        if value is None and path in NULLABLE_FIELDS:
+            continue
 
         # Check type
         if not isinstance(value, expected_type):

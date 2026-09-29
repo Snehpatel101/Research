@@ -38,6 +38,7 @@ class ModelTrainingRequest:
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
     batch_size: int | None = None  # Override batch size (used by OOM retry)
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
+    purge_bars: int | None = None  # Pipeline purge (feature-selection CV)
     early_stopping_patience: int | None = None  # None = TrainerConfig default
     optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
 
@@ -133,9 +134,15 @@ class ModelTrainingService:
         trainer_config = TrainerConfig(
             model_name=model_name,
             horizon=horizon,
+            # PreparedData columns are authoritative: the orchestrator already
+            # chose this model's features, so no named feature-set filter here
+            feature_set=None,
             sequence_length=request.sequence_length,
             output_dir=model_output_dir,
             use_feature_selection=request.use_feature_selection,
+            feature_selection_cv_splits=request.n_splits,
+            feature_selection_purge_bars=request.purge_bars,
+            feature_selection_embargo_bars=request.embargo_bars,
             max_epochs=request.max_epochs if request.max_epochs is not None else 100,
             model_config=_model_config,
             **_trainer_kwargs,
@@ -151,6 +158,10 @@ class ModelTrainingService:
 
         # Create trainer and run
         trainer = Trainer(trainer_config)
+        # Every model consumes PreparedData's scaled features, so the prepare-
+        # time scaler is part of the model's input contract. Without it, 2D
+        # bundles served unscaled features to scale-sensitive models.
+        trainer.scaler = prepared.scaler
 
         # For 3D/4D data, use run_prepared() to bypass container flattening
         # For 2D data, use traditional container path

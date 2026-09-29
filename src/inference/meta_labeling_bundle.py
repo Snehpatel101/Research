@@ -1,26 +1,24 @@
 """
-MetaLabelingBundle - Primary model + meta-model for confidence-weighted inference.
+MetaLabelingBundle - primary direction model + meta-model bet filter.
 
-Combines a primary directional model with a meta-model that predicts
-P(primary_is_correct). Uses threshold filtering to only trade when the
-meta-model is sufficiently confident.
+Meta-labeling (Lopez de Prado, AFML ch. 3) trains a primary model to call the
+direction and a meta-model to predict P(primary is correct). A trade is taken
+only when that probability clears a threshold.
 
-Implements the InferenceBundle protocol from src.core.protocols.
+The meta-model was trained on the primary model's own (scaled) inputs, so the
+bundle stores the primary ModelBundle plus the fitted meta estimator and scores
+both from the same model input.
+
+Layout on disk:
+    path/
+        meta_labeling_metadata.json
+        primary_bundle/     (ModelBundle)
+        meta_model.pkl      (fitted estimator with predict_proba)
 
 Usage:
-    bundle = MetaLabelingBundle(
-        primary_bundle=primary_model_bundle,
-        meta_bundle=meta_model_bundle,
-        threshold=0.55,
-    )
-    # Standard prediction (primary only)
-    result = bundle.predict_from_raw(raw_df)
-
-    # Meta-labeling prediction with confidence filtering
-    meta_result = bundle.predict_meta(raw_df)
-    print(meta_result.trade_mask)  # bool mask of filtered trades
-
-    bundle.save("./bundles/meta_xgb_h20")
+    bundle = MetaLabelingBundle.load("./bundles/meta_labeling_xgboost_logistic_h5")
+    result = bundle.predict_from_raw(raw_df)   # neutral where the filter says no
+    meta = bundle.predict_meta(raw_df)         # directions, P(correct), trade mask
 """
 
 from __future__ import annotations
@@ -35,20 +33,20 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.utils.json_utils import NumpyEncoder
+from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 from src.inference.bundle import ModelBundle
 from src.models.base import PredictionResult
 
 logger = logging.getLogger(__name__)
 
-META_LABELING_BUNDLE_VERSION = "1.0.0"
+META_LABELING_BUNDLE_VERSION = "2.0.0"
 META_LABELING_METADATA_FILE = "meta_labeling_metadata.json"
 PRIMARY_BUNDLE_DIR = "primary_bundle"
-META_BUNDLE_DIR = "meta_bundle"
+META_MODEL_FILE = "meta_model.pkl"
 
-
-# =============================================================================
-# DATA CLASSES
-# =============================================================================
+# Class label meaning "no trade" in both 3-class {-1,0,1} and binary {0,1} labels
+NEUTRAL_LABEL = 0
 
 
 @dataclass
@@ -58,10 +56,11 @@ class MetaLabelingPrediction:
     Attributes:
         directions: Primary model class predictions (n_samples,).
         direction_probabilities: Primary model class probabilities (n_samples, n_classes).
-        meta_probabilities: P(primary_is_correct) from meta-model (n_samples,).
+        meta_probabilities: P(primary_is_correct) from the meta-model (n_samples,).
         positions: Signed position sizes = direction * meta_probability (n_samples,).
         trade_mask: Boolean mask where meta_probability >= threshold (n_samples,).
         threshold: The threshold used for filtering.
+        timestamps: Bar timestamp of every row.
     """
 
     directions: np.ndarray
@@ -70,6 +69,7 @@ class MetaLabelingPrediction:
     positions: np.ndarray
     trade_mask: np.ndarray
     threshold: float
+    timestamps: pd.DatetimeIndex
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -80,86 +80,53 @@ class MetaLabelingPrediction:
     @property
     def trade_ratio(self) -> float:
         """Fraction of samples passing the threshold filter."""
-        if len(self.trade_mask) == 0:
-            return 0.0
-        return float(self.trade_mask.mean())
-
-
-@dataclass
-class MetaLabelingBundleMetadata:
-    """Metadata for meta-labeling bundle."""
-
-    version: str
-    threshold: float
-    primary_model_name: str
-    meta_model_name: str
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "version": self.version,
-            "threshold": self.threshold,
-            "primary_model_name": self.primary_model_name,
-            "meta_model_name": self.meta_model_name,
-            "extra": self.extra,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> MetaLabelingBundleMetadata:
-        return cls(
-            version=data["version"],
-            threshold=data["threshold"],
-            primary_model_name=data.get("primary_model_name", "unknown"),
-            meta_model_name=data.get("meta_model_name", "unknown"),
-            extra=data.get("extra", {}),
-        )
-
-
-# =============================================================================
-# META LABELING BUNDLE
-# =============================================================================
+        return float(self.trade_mask.mean()) if len(self.trade_mask) else 0.0
 
 
 class MetaLabelingBundle:
-    """Primary model + meta-model for confidence-weighted predictions.
+    """Primary ModelBundle + meta estimator + threshold.
 
-    The primary bundle produces direction predictions. The meta bundle
-    produces P(primary_is_correct). Together they enable:
-    - Threshold filtering: only trade when meta-model confidence >= threshold
-    - Position sizing: scale position by meta-model confidence
-
-    Satisfies the InferenceBundle protocol (predict / predict_from_raw / load).
+    Satisfies the InferenceBundle protocol.
     """
 
     def __init__(
         self,
         primary_bundle: ModelBundle,
-        meta_bundle: ModelBundle,
-        threshold: float = 0.5,
-        extra: dict[str, Any] | None = None,
+        meta_model: Any,
+        threshold: float,
+        meta_model_name: str,
+        horizon: int,
+        metrics: dict[str, Any] | None = None,
     ) -> None:
         """
         Args:
             primary_bundle: Bundle producing directional predictions.
-            meta_bundle: Bundle producing P(primary_is_correct) as binary
-                classifier (class 1 = correct).
-            threshold: Minimum meta-probability to execute a trade.
-            extra: Additional metadata.
+            meta_model: Fitted binary classifier (class 1 = primary correct)
+                with ``predict_proba``, trained on the primary's model input.
+            threshold: Minimum P(correct) to take a trade.
+            meta_model_name: Meta-model family name (e.g. "logistic").
+            horizon: Prediction horizon in bars.
+            metrics: Training metrics recorded for the deploy manifest.
         """
         self.primary_bundle = primary_bundle
-        self.meta_bundle = meta_bundle
+        self.meta_model = meta_model
         self.threshold = threshold
-        self.ml_metadata = MetaLabelingBundleMetadata(
-            version=META_LABELING_BUNDLE_VERSION,
-            threshold=threshold,
-            primary_model_name=primary_bundle.metadata.model_name,
-            meta_model_name=meta_bundle.metadata.model_name,
-            extra=extra or {},
-        )
+        self.meta_model_name = meta_model_name
+        self.horizon = horizon
+        self.metrics = metrics or {}
+
+    @property
+    def model_name(self) -> str:
+        return f"meta_labeling_{self.primary_bundle.metadata.model_name}_{self.meta_model_name}"
 
     # -----------------------------------------------------------------
     # Meta-labeling prediction
     # -----------------------------------------------------------------
+
+    def meta_probability(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
+        """P(primary is correct) for unscaled primary input X (as accepted by predict)."""
+        model_input = self.primary_bundle.model_input(X)
+        return self.meta_model.predict_proba(model_input.reshape(len(model_input), -1))[:, 1]
 
     def predict_meta(
         self,
@@ -167,90 +134,29 @@ class MetaLabelingBundle:
         calibrate: bool = True,
         skip_cleaning: bool = False,
     ) -> MetaLabelingPrediction:
-        """Full meta-labeling prediction from raw OHLCV data.
-
-        1. Primary model produces directions.
-        2. Meta model produces P(primary_is_correct).
-        3. Positions = direction * meta_probability.
-        4. Trade mask = meta_probability >= threshold.
-
-        Args:
-            raw_df: DataFrame with raw OHLCV data.
-            calibrate: Whether to apply calibration.
-            skip_cleaning: If True, skip resampling step.
-
-        Returns:
-            MetaLabelingPrediction with directions, meta-probabilities,
-            positions, and trade mask.
-        """
-        # Primary model predictions
-        primary_result = self.primary_bundle.predict_from_raw(
-            raw_df, calibrate=calibrate, skip_cleaning=skip_cleaning
-        )
-        directions = primary_result.class_predictions
-        direction_probs = primary_result.class_probabilities
-
-        # Meta model predictions
-        meta_result = self.meta_bundle.predict_from_raw(
-            raw_df, calibrate=calibrate, skip_cleaning=skip_cleaning
-        )
-        # P(correct) = probability of class 1 in binary meta-classifier
-        meta_probs = meta_result.class_probabilities
-        if meta_probs.ndim == 2 and meta_probs.shape[1] >= 2:
-            p_correct = meta_probs[:, 1]
-        else:
-            p_correct = meta_result.confidence
-
-        # Align lengths (meta and primary may differ for sequence models)
-        min_len = min(len(directions), len(p_correct))
-        directions = directions[-min_len:]
-        direction_probs = direction_probs[-min_len:]
-        p_correct = p_correct[-min_len:]
-
-        # Compute positions: direction sign * meta-probability
-        # Map class predictions to signed direction (-1, 0, +1)
-        signed_dir = directions.astype(np.float64)
-        positions = signed_dir * p_correct
-
-        # Threshold filter
-        trade_mask = p_correct >= self.threshold
-
+        """Directions, P(correct), positions and trade mask from raw OHLCV."""
+        X, timestamps = self.primary_bundle.raw_to_input(raw_df, skip_cleaning=skip_cleaning)
+        primary = self.primary_bundle.predict(X, calibrate=calibrate)
+        p_correct = self.meta_probability(X)
         return MetaLabelingPrediction(
-            directions=directions,
-            direction_probabilities=direction_probs,
+            directions=primary.class_predictions,
+            direction_probabilities=primary.class_probabilities,
             meta_probabilities=p_correct,
-            positions=positions,
-            trade_mask=trade_mask,
+            positions=primary.class_predictions.astype(np.float64) * p_correct,
+            trade_mask=p_correct >= self.threshold,
             threshold=self.threshold,
-            metadata={
-                "primary_model": self.ml_metadata.primary_model_name,
-                "meta_model": self.ml_metadata.meta_model_name,
-                "n_total": min_len,
-                "n_trades": int(trade_mask.sum()),
-            },
+            timestamps=timestamps,
+            metadata={"primary_model": self.primary_bundle.metadata.model_name},
         )
 
     # -----------------------------------------------------------------
     # InferenceBundle protocol
     # -----------------------------------------------------------------
 
-    def predict(
-        self,
-        X: pd.DataFrame | np.ndarray,
-        calibrate: bool = True,
-    ) -> PredictionResult:
-        """Predict using the primary model only.
-
-        For meta-labeling with confidence, use predict_meta() instead.
-
-        Args:
-            X: Input features.
-            calibrate: Whether to apply calibration.
-
-        Returns:
-            PredictionResult from the primary bundle.
-        """
-        return self.primary_bundle.predict(X, calibrate=calibrate)
+    def predict(self, X: pd.DataFrame | np.ndarray, calibrate: bool = True) -> PredictionResult:
+        """Primary predictions with filtered-out bars set to neutral."""
+        primary = self.primary_bundle.predict(X, calibrate=calibrate)
+        return self._apply_filter(primary, self.meta_probability(X))
 
     def predict_from_raw(
         self,
@@ -258,20 +164,19 @@ class MetaLabelingBundle:
         calibrate: bool = True,
         skip_cleaning: bool = False,
     ) -> PredictionResult:
-        """Standard prediction from raw OHLCV (primary model only).
+        """Primary predictions from raw OHLCV, neutral where the meta filter rejects."""
+        X, timestamps = self.primary_bundle.raw_to_input(raw_df, skip_cleaning=skip_cleaning)
+        result = self.predict(X, calibrate=calibrate)
+        result.metadata["timestamps"] = timestamps
+        return result
 
-        For meta-labeling with confidence, use predict_meta() instead.
-
-        Args:
-            raw_df: DataFrame with raw OHLCV data.
-            calibrate: Whether to apply calibration.
-            skip_cleaning: If True, skip resampling step.
-
-        Returns:
-            PredictionResult from the primary bundle.
-        """
-        return self.primary_bundle.predict_from_raw(
-            raw_df, calibrate=calibrate, skip_cleaning=skip_cleaning
+    def _apply_filter(self, primary: PredictionResult, p_correct: np.ndarray) -> PredictionResult:
+        trade = p_correct >= self.threshold
+        return PredictionResult(
+            class_predictions=np.where(trade, primary.class_predictions, NEUTRAL_LABEL),
+            class_probabilities=primary.class_probabilities,
+            confidence=primary.confidence,
+            metadata={**primary.metadata, "meta_probability": p_correct, "trade_mask": trade},
         )
 
     # -----------------------------------------------------------------
@@ -279,108 +184,55 @@ class MetaLabelingBundle:
     # -----------------------------------------------------------------
 
     def save(self, path: str | Path, overwrite: bool = False) -> Path:
-        """Save meta-labeling bundle to disk.
-
-        Structure:
-            path/
-                meta_labeling_metadata.json
-                primary_bundle/    (ModelBundle)
-                meta_bundle/       (ModelBundle)
-
-        Args:
-            path: Directory path.
-            overwrite: If True, overwrite existing.
-
-        Returns:
-            Path to saved bundle.
-        """
+        """Save metadata, the primary bundle, and the meta estimator."""
         path = Path(path)
-
         if path.exists():
-            if overwrite:
-                shutil.rmtree(path)
-            else:
-                raise FileExistsError(
-                    f"Bundle already exists at {path}. Use overwrite=True to replace."
-                )
+            if not overwrite:
+                raise FileExistsError(f"Bundle already exists at {path}. Use overwrite=True.")
+            shutil.rmtree(path)
+        path.mkdir(parents=True)
 
-        path.mkdir(parents=True, exist_ok=True)
-
-        # Save metadata
+        metadata = {
+            "version": META_LABELING_BUNDLE_VERSION,
+            "model_name": self.model_name,
+            "horizon": self.horizon,
+            "threshold": self.threshold,
+            "primary_model_name": self.primary_bundle.metadata.model_name,
+            "meta_model_name": self.meta_model_name,
+            "metrics": self.metrics,
+        }
         with open(path / META_LABELING_METADATA_FILE, "w") as f:
-            json.dump(self.ml_metadata.to_dict(), f, indent=2)
-
-        # Save inner bundles
-        self.primary_bundle.save(path / PRIMARY_BUNDLE_DIR, overwrite=overwrite)
-        self.meta_bundle.save(path / META_BUNDLE_DIR, overwrite=overwrite)
-
-        logger.info(
-            "Saved MetaLabelingBundle (primary=%s, meta=%s, threshold=%.3f) to %s",
-            self.ml_metadata.primary_model_name,
-            self.ml_metadata.meta_model_name,
-            self.threshold,
-            path,
-        )
+            json.dump(metadata, f, indent=2, cls=NumpyEncoder)
+        self.primary_bundle.save(path / PRIMARY_BUNDLE_DIR)
+        safe_pickle_dump(self.meta_model, path / META_MODEL_FILE)
+        logger.info(f"Saved MetaLabelingBundle ({self.model_name}, threshold={self.threshold})")
         return path
 
     @classmethod
     def load(cls, path: str | Path) -> MetaLabelingBundle:
-        """Load meta-labeling bundle from disk.
-
-        Args:
-            path: Path to bundle directory.
-
-        Returns:
-            Loaded MetaLabelingBundle.
-
-        Raises:
-            FileNotFoundError: If bundle or components are missing.
-        """
+        """Load a bundle saved with :meth:`save`."""
         path = Path(path)
-
-        if not path.is_dir():
-            raise FileNotFoundError(f"MetaLabelingBundle not found at {path}")
-
-        # Load metadata
-        meta_path = path / META_LABELING_METADATA_FILE
-        if not meta_path.exists():
+        metadata_path = path / META_LABELING_METADATA_FILE
+        if not metadata_path.exists():
             raise FileNotFoundError(f"Missing {META_LABELING_METADATA_FILE} in {path}")
-
-        with open(meta_path) as f:
-            ml_meta = MetaLabelingBundleMetadata.from_dict(json.load(f))
-
-        # Load inner bundles
-        primary_bundle = ModelBundle.load(path / PRIMARY_BUNDLE_DIR)
-        meta_bundle = ModelBundle.load(path / META_BUNDLE_DIR)
-
-        bundle = cls(
-            primary_bundle=primary_bundle,
-            meta_bundle=meta_bundle,
-            threshold=ml_meta.threshold,
-            extra=ml_meta.extra,
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        return cls(
+            primary_bundle=ModelBundle.load(path / PRIMARY_BUNDLE_DIR),
+            meta_model=safe_pickle_load(path / META_MODEL_FILE),
+            threshold=metadata["threshold"],
+            meta_model_name=metadata["meta_model_name"],
+            horizon=metadata["horizon"],
+            metrics=metadata.get("metrics", {}),
         )
-        bundle.ml_metadata = ml_meta
-
-        logger.info(
-            "Loaded MetaLabelingBundle (primary=%s, meta=%s, threshold=%.3f) from %s",
-            ml_meta.primary_model_name,
-            ml_meta.meta_model_name,
-            ml_meta.threshold,
-            path,
-        )
-        return bundle
 
     def __repr__(self) -> str:
-        return (
-            f"MetaLabelingBundle(primary={self.ml_metadata.primary_model_name!r}, "
-            f"meta={self.ml_metadata.meta_model_name!r}, "
-            f"threshold={self.threshold:.3f})"
-        )
+        return f"MetaLabelingBundle({self.model_name!r}, threshold={self.threshold:.3f})"
 
 
 __all__ = [
     "MetaLabelingBundle",
     "MetaLabelingPrediction",
-    "MetaLabelingBundleMetadata",
     "META_LABELING_BUNDLE_VERSION",
+    "META_LABELING_METADATA_FILE",
 ]

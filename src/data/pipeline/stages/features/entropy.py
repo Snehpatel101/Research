@@ -1235,7 +1235,7 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
     # Calculate tolerance from data std
     std = np.std(data)
     if std == 0:
-        return np.nan
+        return 0.0  # constant window: perfectly regular
 
     tolerance = r * std
 
@@ -1246,13 +1246,10 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
     B = _count_template_matches_numba(data_f64, m, tolerance)
     A = _count_template_matches_numba(data_f64, m + 1, tolerance)
 
-    # Avoid division by zero
-    if B == 0:
-        return np.nan
-
-    # Sample entropy: -ln(A/B)
-    # Handle case where A = 0 (maximum entropy/randomness)
-    if A == 0:
+    # No template matches at length m (B == 0) or m+1 (A == 0): the window is
+    # maximally irregular. SampEn is undefined there; report the cap instead
+    # of NaN (a NaN here dropped ~20% of bars mid-series downstream).
+    if B == 0 or A == 0:
         return np.inf  # Will be clipped to a large value
 
     return float(-np.log(A / B))

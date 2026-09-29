@@ -172,6 +172,97 @@ class OOFPrediction:
         return probs[local_start:local_end]
 
 
+def reindex_oof_to_rows(
+    oof: OOFPrediction | None, row_positions: np.ndarray | None
+) -> OOFPrediction | None:
+    """
+    Re-index OOF predictions from sample order to source-DataFrame rows.
+
+    Samples of different input ranks cover different bars (a 3D window's
+    sample 0 is the bar at row seq_len - 1). Stacking ensembles and the
+    backtest align models on ``original_indices``, so every model must
+    report predictions at the rows its labels come from.
+
+    Args:
+        oof: OOF predictions indexed by sample (0..n_samples-1).
+        row_positions: Row of the source DataFrame for each sample
+            (``PreparedData.train_indices``); None keeps sample order.
+    """
+    if oof is None or row_positions is None:
+        return oof
+    row_positions = np.asarray(row_positions, dtype=np.int64)
+    local = oof.predictions
+    if len(local) != len(row_positions):
+        raise ValueError(
+            f"OOF for {oof.model_name} has {len(local)} rows but "
+            f"{len(row_positions)} sample row positions"
+        )
+
+    n_rows = int(row_positions.max()) + 1
+    columns: dict[str, Any] = {"datetime": np.arange(n_rows)}
+    for col in local.columns:
+        if col == "datetime":
+            continue
+        # Rows without a sample: fold_id -1, everything else NaN
+        full = np.full(n_rows, -1, dtype=np.int64) if col == "fold_id" else np.full(n_rows, np.nan)
+        full[row_positions] = local[col].to_numpy()
+        columns[col] = full
+    valid_local = (
+        oof.original_indices
+        if oof.original_indices is not None
+        else np.flatnonzero(local.filter(like="_prob_").notna().all(axis=1).to_numpy())
+    )
+    return OOFPrediction(
+        model_name=oof.model_name,
+        predictions=pd.DataFrame(columns),
+        fold_info=oof.fold_info,
+        coverage=oof.coverage,
+        original_indices=row_positions[valid_local],
+        sequence_length=oof.sequence_length,
+        n_total_samples=n_rows,
+    )
+
+
+def merge_oof_predictions(parts: list[OOFPrediction]) -> OOFPrediction:
+    """
+    Merge OOF predictions that cover disjoint source rows into one model's OOF.
+
+    Used for regime-routed models: each regime's model predicts its own
+    regime's rows. All parts must be in source-row coordinates
+    (see :func:`reindex_oof_to_rows`) and share one model name.
+    """
+    if not parts:
+        raise ValueError("merge_oof_predictions needs at least one OOFPrediction")
+    n_rows = max(len(p.predictions) for p in parts)
+    columns: dict[str, Any] = {"datetime": np.arange(n_rows)}
+    for part in parts:
+        rows = part.original_indices
+        if rows is None:
+            raise ValueError(f"OOF part for {part.model_name} has no original_indices")
+        for col in part.predictions.columns:
+            if col == "datetime":
+                continue
+            if col not in columns:
+                columns[col] = (
+                    np.full(n_rows, -1, dtype=np.int64)
+                    if col == "fold_id"
+                    else np.full(n_rows, np.nan)
+                )
+            columns[col][rows] = part.predictions[col].to_numpy()[rows]
+
+    rows = np.unique(np.concatenate([p.original_indices for p in parts]))
+    n_samples = sum(len(p.original_indices) / p.coverage for p in parts if p.coverage > 0)
+    return OOFPrediction(
+        model_name=parts[0].model_name,
+        predictions=pd.DataFrame(columns),
+        fold_info=[info for p in parts for info in p.fold_info],
+        coverage=len(rows) / n_samples if n_samples else 0.0,
+        original_indices=rows,
+        sequence_length=parts[0].sequence_length,
+        n_total_samples=n_rows,
+    )
+
+
 # =============================================================================
 # CORE OOF GENERATOR
 # =============================================================================

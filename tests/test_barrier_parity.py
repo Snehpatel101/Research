@@ -171,7 +171,7 @@ def test_labeling_and_backtest_use_same_resolved_params(tmp_path):
         upper_mult=k_up,
         lower_mult=k_down,
         atr_period=labeling.atr_period,
-        atr_column=f"atr_{labeling.atr_period}",
+        atr_column=None,
         symbol=factory.config.data.symbol.upper(),
     )
 

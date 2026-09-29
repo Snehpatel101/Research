@@ -99,6 +99,7 @@ class EnsembleResult:
     n_base_models: int = 0
     coverage: float = 1.0
     alignment_offset: int = 0
+    meta_learner: Any = None  # Fitted meta-learner (serialized into ensemble bundles)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -387,6 +388,7 @@ class EnsembleOrchestrator:
             n_base_models=len(oof_predictions),
             coverage=min_coverage,
             alignment_offset=alignment_offset,
+            meta_learner=meta_learner,
         )
 
         # Save results

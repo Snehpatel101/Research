@@ -57,6 +57,7 @@ from src.core.constants import (
     DEFAULT_PURGE_BARS,
     DEFAULT_SEQUENCE_LENGTH,
     DEFAULT_SPLIT_RATIOS,
+    MODEL_FAMILIES,
 )
 from src.core.types import CVMethod, LabelingMethod, TrainingMode
 from src.core.validation import ValidationError, validate_model_list, validate_path_exists
@@ -134,7 +135,7 @@ class PipelineConfig:
 
     build_ensemble: bool = True  # Build stacking ensemble?
     meta_learner: str = "ridge_meta"
-    # Options: "ridge_meta", "mlp_meta", "xgboost_meta", "calibrated_meta"
+    # Options: MODEL_FAMILIES["meta_learner"] (ridge/mlp/xgboost/calibrated/voting _meta)
 
     # =========================================================================
     # META-LABELING CONFIGURATION (Lopez de Prado 2018)
@@ -340,7 +341,7 @@ class PipelineConfig:
         validate_model_list(self.models, "config.models")
 
         # Validate meta-learner
-        valid_meta = ["ridge_meta", "mlp_meta", "xgboost_meta", "calibrated_meta"]
+        valid_meta = MODEL_FAMILIES["meta_learner"]
         if self.meta_learner not in valid_meta:
             raise ValidationError(
                 f"Invalid meta_learner: {self.meta_learner}",

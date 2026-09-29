@@ -26,6 +26,7 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
+from src.core.common.timeframes import detect_timeframe
 from src.core.config import PipelineConfig
 from src.core.constants import (
     MODEL_ADAPTER_MAP,
@@ -38,53 +39,6 @@ from .registry import get_adapter
 from .scaling import AdapterScaler, ScalerConfig
 
 logger = logging.getLogger(__name__)
-
-
-def _detect_timeframe(df: pd.DataFrame) -> str | None:
-    """
-    Detect the timeframe of a DataFrame from its datetime index or column.
-
-    Returns the timeframe as a string (e.g., "1min", "5min") or None if
-    detection fails.
-    """
-    try:
-        # Get datetime column
-        if "datetime" in df.columns:
-            dt = pd.to_datetime(df["datetime"])
-        elif isinstance(df.index, pd.DatetimeIndex):
-            dt = df.index
-        else:
-            return None
-
-        if len(dt) < 2:
-            return None
-
-        # Calculate median time difference (robust to gaps)
-        diffs = dt.diff().dropna()
-        if len(diffs) == 0:
-            return None
-
-        median_diff = diffs.median()
-        minutes = median_diff.total_seconds() / 60
-
-        # Map to standard timeframes
-        tf_map = {
-            1: "1min",
-            5: "5min",
-            10: "10min",
-            15: "15min",
-            30: "30min",
-            60: "60min",
-        }
-
-        # Find closest match
-        closest = min(tf_map.keys(), key=lambda x: abs(x - minutes))
-        if abs(closest - minutes) < 0.5:  # Within 30 seconds
-            return tf_map[closest]
-
-        return None
-    except Exception:
-        return None
 
 
 def _resample_for_model(df: pd.DataFrame, source_tf: str, target_tf: str) -> pd.DataFrame:
@@ -146,9 +100,9 @@ class PreparedData:
         adapter_type: Type of adapter used ("tabular", "sequence", "multi_stream")
         data_rank: Dimensionality of the data (2, 3, or 4)
         feature_names: List of feature column names
-        train_indices: Original DataFrame indices for training samples
-        val_indices: Original DataFrame indices for validation samples
-        test_indices: Original DataFrame indices for test samples
+        train_indices: Row positions (in the prepared DataFrame) of training samples
+        val_indices: Row positions (in the prepared DataFrame) of validation samples
+        test_indices: Row positions (in the prepared DataFrame) of test samples
         scaler: The fitted scaler (for inference)
         sequence_length: Sequence length if applicable (3D/4D)
         n_timeframes: Number of timeframes if multi-stream (4D)
@@ -487,7 +441,7 @@ class UnifiedDataPreparation:
             try:
                 contract = get_model_contract(model_key)
                 target_tf = contract.primary_timeframe
-                source_tf = _detect_timeframe(df)
+                source_tf = detect_timeframe(df)
 
                 if source_tf and target_tf and source_tf != target_tf:
                     logger.info(
@@ -507,6 +461,7 @@ class UnifiedDataPreparation:
 
         # 2. Split data chronologically with purge/embargo
         train_df, val_df, test_df = self._split_with_purge_embargo(df)
+        _, val_start, _, test_start = self._split_bounds(len(df))
 
         logger.debug(
             f"Split sizes: train={len(train_df)}, val={len(val_df)}, "
@@ -623,9 +578,11 @@ class UnifiedDataPreparation:
             adapter_type=adapter_type,
             data_rank=data_rank,
             feature_names=train_result.feature_columns,
+            # Adapters report rows within their split; shift to rows of df so
+            # every split (and every model rank) shares one coordinate system
             train_indices=train_result.original_indices,
-            val_indices=val_result.original_indices,
-            test_indices=test_result.original_indices if test_result else None,
+            val_indices=val_result.original_indices + val_start,
+            test_indices=(test_result.original_indices + test_start if test_result else None),
             scaler=scaler,
             sequence_length=train_result.sequence_length,
             n_timeframes=train_result.n_timeframes,
@@ -692,6 +649,14 @@ class UnifiedDataPreparation:
 
         return results
 
+    def _split_bounds(self, n: int) -> tuple[int, int, int, int]:
+        """(train_end, val_start, val_end, test_start) row positions for n rows."""
+        train_end = int(n * self.config.train_ratio)
+        val_start = train_end + self.config.purge_bars  # Gap after train
+        val_end = int(n * (self.config.train_ratio + self.config.val_ratio))
+        test_start = val_end + self.config.embargo_bars  # Gap after val
+        return train_end, val_start, val_end, test_start
+
     def _split_with_purge_embargo(
         self,
         df: pd.DataFrame,
@@ -712,12 +677,7 @@ class UnifiedDataPreparation:
         n = len(df)
         purge = self.config.purge_bars
         embargo = self.config.embargo_bars
-
-        # Calculate split indices
-        train_end = int(n * self.config.train_ratio)
-        val_start = train_end + purge  # Gap after train
-        val_end = int(n * (self.config.train_ratio + self.config.val_ratio))
-        test_start = val_end + embargo  # Gap after val
+        train_end, val_start, val_end, test_start = self._split_bounds(n)
 
         # Extract splits
         train_df = df.iloc[:train_end].copy()

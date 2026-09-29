@@ -265,33 +265,96 @@ def load_deploy_artifact(
         model_name: Specific model (None = primary/ensemble).
 
     Returns:
-        ModelBundle or EnsembleBundle instance ready for prediction.
+        Model, ensemble, regime or meta-labeling bundle ready for prediction.
 
     Raises:
         FileNotFoundError: If deploy dir or bundle not found.
         KeyError: If horizon or model not in manifest.
     """
-    bundle_path = select_deploy_artifact(deploy_dir, horizon, model_name)
+    return load_bundle(select_deploy_artifact(deploy_dir, horizon, model_name))
 
-    # Determine bundle type by checking for ensemble metadata
-    ensemble_metadata = bundle_path / "metadata.json"
-    if ensemble_metadata.exists():
-        with open(ensemble_metadata) as f:
-            meta = json.load(f)
 
-        if "meta_learner_name" in meta:
-            from src.inference.ensemble_bundle import EnsembleBundle
+# =============================================================================
+# BUNDLE KINDS
+# =============================================================================
 
-            logger.info(f"Loading ensemble bundle from {bundle_path}")
-            return EnsembleBundle.load(bundle_path)
+
+@dataclass
+class BundleInfo:
+    """What a bundle directory holds, read from its metadata file."""
+
+    kind: str  # "model" | "ensemble" | "regime" | "meta_labeling"
+    model_name: str
+    horizon: int
+    metrics: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def score(self) -> float:
+        """Validation score used to pick a horizon's primary model."""
+        return float(self.metrics.get("macro_f1", self.metrics.get("val_f1", 0.0)) or 0.0)
+
+
+def describe_bundle(path: str | Path) -> BundleInfo | None:
+    """Identify a bundle directory by its metadata file (None if not a bundle)."""
+    from src.inference.meta_labeling_bundle import META_LABELING_METADATA_FILE
+    from src.inference.regime_bundle import REGIME_BUNDLE_METADATA_FILE
+
+    path = Path(path)
+    for kind, filename in (
+        ("regime", REGIME_BUNDLE_METADATA_FILE),
+        ("meta_labeling", META_LABELING_METADATA_FILE),
+    ):
+        if (path / filename).exists():
+            with open(path / filename) as f:
+                meta = json.load(f)
+            return BundleInfo(kind, meta["model_name"], meta["horizon"], meta.get("metrics", {}))
+
+    if not (path / "metadata.json").exists():
+        return None
+    with open(path / "metadata.json") as f:
+        meta = json.load(f)
+    if "meta_learner_name" in meta:
+        return BundleInfo(
+            "ensemble", meta["meta_learner_name"], meta["horizon"], meta.get("metrics", {})
+        )
+    return BundleInfo(
+        "model",
+        meta.get("model_name", path.name),
+        meta["horizon"],
+        meta.get("training_metrics", {}),
+    )
+
+
+def load_bundle(path: str | Path) -> Any:
+    """Load any bundle kind (model, ensemble, regime, meta-labeling) from its directory."""
+    path = Path(path)
+    info = describe_bundle(path)
+    if info is None:
+        raise FileNotFoundError(f"No bundle metadata found in {path}")
+    logger.info(f"Loading {info.kind} bundle from {path}")
+
+    if info.kind == "ensemble":
+        from src.inference.ensemble_bundle import EnsembleBundle
+
+        return EnsembleBundle.load(path)
+    if info.kind == "regime":
+        from src.inference.regime_bundle import RegimeBundle
+
+        return RegimeBundle.load(path)
+    if info.kind == "meta_labeling":
+        from src.inference.meta_labeling_bundle import MetaLabelingBundle
+
+        return MetaLabelingBundle.load(path)
 
     from src.inference.bundle import ModelBundle
 
-    logger.info(f"Loading model bundle from {bundle_path}")
-    return ModelBundle.load(bundle_path)
+    return ModelBundle.load(path)
 
 
 __all__ = [
+    "BundleInfo",
+    "describe_bundle",
+    "load_bundle",
     "DEPLOY_MANIFEST_FILE",
     "DEPLOY_VERSION",
     "DeployManifest",

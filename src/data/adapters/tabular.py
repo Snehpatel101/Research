@@ -132,6 +132,7 @@ class TabularAdapter(BaseAdapter):
             feature_columns=feature_cols,
             data_contract=data_contract,
             adapter_name=self.adapter_id,
+            original_indices=np.arange(X.shape[0], dtype=np.int64),
         )
 
         # Validate the result

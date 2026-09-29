@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import json
 import logging
-import pickle
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -191,14 +190,20 @@ class BundleBuilder:
         )
     """
 
-    def __init__(self, config: PipelineConfig) -> None:
+    def __init__(
+        self, config: PipelineConfig, feature_pipeline: dict[str, Any] | None = None
+    ) -> None:
         """
         Initialize BundleBuilder.
 
         Args:
             config: PipelineConfig instance - THE single source of truth
+            feature_pipeline: Raw-OHLCV -> features recipe recorded by training
+                (``{"bar_timeframe": ..., "engineer": FeatureEngineer.to_spec()}``).
+                Required for bundles that can predict from raw OHLCV.
         """
         self.config = config
+        self.feature_pipeline = feature_pipeline
         self.output_dir = Path(config.output_dir)
         self.bundles_dir = self.output_dir / "bundles"
         self.bundles_dir.mkdir(parents=True, exist_ok=True)
@@ -277,7 +282,6 @@ class BundleBuilder:
         Returns:
             BundleBuildResult with paths to created bundles
         """
-        from src.inference.bundle import ModelBundle
         from src.inference.preprocessing_graph import PreprocessingGraph
 
         bundle_paths: list[Path] = []
@@ -287,96 +291,77 @@ class BundleBuilder:
             "models_skipped": [],
         }
 
-        # Create preprocessing graph if needed
-        preprocessing_graph: PreprocessingGraph | None = None
+        # Create preprocessing graph if needed (restricted per model below)
+        base_graph: PreprocessingGraph | None = None
         if include_preprocessing_graph:
-            preprocessing_graph = self._create_preprocessing_graph()
+            base_graph = self._create_preprocessing_graph()
 
         # Build bundle for each model
         for key, model_result in training_result.model_results.items():
             model_name = model_result.model_name
             horizon = model_result.horizon
+            kind = model_result.mode_artifacts.get("kind", "model")
+            logger.info(f"Building {kind} bundle for {key}...")
 
-            logger.info(f"Building bundle for {key}...")
-
-            # Get trainer and extract components
-            trainer = model_result.trainer
-            if trainer is None:
-                logger.warning(f"No trainer for {key}, skipping bundle")
-                build_metadata["models_skipped"].append(key)
-                continue
-
-            # Extract model - try multiple attribute names for compatibility
-            model = self._extract_model(trainer)
-            if model is None:
-                logger.warning(f"No model in trainer for {key}, skipping")
-                build_metadata["models_skipped"].append(key)
-                continue
-
-            # Extract scaler
-            scaler = self._extract_scaler(trainer)
-
-            # Extract feature columns
-            feature_columns = self._extract_feature_columns(trainer, model_result.n_features)
-
-            # Propagate feature names to the model if it supports it
-            if hasattr(model, "set_feature_names") and callable(model.set_feature_names):
-                model.set_feature_names(feature_columns)
-
-            # Extract calibrator if requested
-            calibrator = None
-            if include_calibrator:
-                calibrator = self._extract_calibrator(trainer)
-                # Also check model_result (calibrator propagated from orchestrator)
-                if calibrator is None and getattr(model_result, "calibrator", None) is not None:
-                    calibrator = model_result.calibrator
-
-            # Get feature spec: explicit dict, or auto-generate as fallback
-            feature_spec = None
-            if feature_specs is not None:
-                feature_spec = feature_specs.get(key)
-            if feature_spec is None:
-                feature_spec = self._auto_generate_feature_spec(
-                    model_name=model_name,
-                    feature_columns=feature_columns,
-                    horizon=horizon,
-                    model_result=model_result,
+            def make(trainer: Any, name: str, key: str = key, mr: Any = model_result) -> Any:
+                return self._make_model_bundle(
+                    key=key,
+                    model_result=mr,
+                    model_name=name,
+                    trainer=trainer,
+                    base_graph=base_graph,
+                    include_calibrator=include_calibrator,
+                    feature_specs=feature_specs,
+                    run_id=training_result.run_id,
                 )
 
-            # Create bundle
             try:
-                bundle = ModelBundle.from_training(
-                    model=model,
-                    scaler=scaler,
-                    feature_columns=feature_columns,
-                    horizon=horizon,
-                    calibrator=calibrator,
-                    preprocessing_graph=preprocessing_graph,
-                    feature_spec=feature_spec,
-                    symbol=self.config.symbol,
-                    training_metrics=model_result.metrics,
-                    extra_metadata={
-                        "training_run_id": training_result.run_id,
-                        "training_time_seconds": model_result.training_time_seconds,
-                        "data_rank": model_result.data_rank,
-                    },
-                    model_name=model_name,
-                )
+                if kind == "regime":
+                    from src.inference.regime_bundle import RegimeBundle
 
-                # Save bundle
+                    art = model_result.mode_artifacts
+                    bundle: Any = RegimeBundle(
+                        regime_bundles={
+                            regime: make(trainer, model_name)
+                            for regime, trainer in art["regime_trainers"].items()
+                        },
+                        detector_config=art["detector_config"],
+                        default_regime=art["default_regime"],
+                        model_name=model_name,
+                        horizon=horizon,
+                        metrics=model_result.metrics,
+                    )
+                elif kind == "meta_labeling":
+                    from src.inference.meta_labeling_bundle import MetaLabelingBundle
+
+                    art = model_result.mode_artifacts
+                    bundle = MetaLabelingBundle(
+                        primary_bundle=make(model_result.trainer, art["primary_model"]),
+                        meta_model=art["meta_model"],
+                        threshold=art["threshold"],
+                        meta_model_name=art["meta_model_name"],
+                        horizon=horizon,
+                        metrics=model_result.metrics,
+                    )
+                else:
+                    if model_result.trainer is None:
+                        logger.warning(f"No trainer for {key}, skipping bundle")
+                        build_metadata["models_skipped"].append(key)
+                        continue
+                    bundle = make(model_result.trainer, model_name)
+
                 bundle_path = self.bundles_dir / f"{model_name}_h{horizon}"
                 bundle.save(bundle_path, overwrite=True)
                 bundle_paths.append(bundle_path)
-
                 build_metadata["models_bundled"].append(
                     {
                         "key": key,
+                        "kind": kind,
                         "model_name": model_name,
                         "horizon": horizon,
                         "bundle_path": str(bundle_path),
                     }
                 )
-
                 logger.info(f"Built bundle: {bundle_path}")
 
             except Exception as e:
@@ -392,6 +377,117 @@ class BundleBuilder:
             n_bundles=len(bundle_paths),
             total_size_mb=total_size,
             metadata=build_metadata,
+        )
+
+    def _make_model_bundle(
+        self,
+        key: str,
+        model_result: Any,
+        model_name: str,
+        trainer: Any,
+        base_graph: Any,
+        include_calibrator: bool,
+        feature_specs: dict[str, Any] | None,
+        run_id: str,
+    ) -> Any:
+        """Assemble (without saving) the ModelBundle for one trained model."""
+        from src.inference.bundle import ModelBundle
+
+        model = self._extract_model(trainer)
+        if model is None:
+            raise ValueError(f"No model in trainer for {key}")
+
+        scaler = self._extract_scaler(trainer)
+        feature_columns = self._extract_feature_columns(trainer, model_result.n_features)
+
+        # Propagate feature names to the model if it supports it
+        if hasattr(model, "set_feature_names") and callable(model.set_feature_names):
+            model.set_feature_names(feature_columns)
+
+        calibrator = None
+        if include_calibrator:
+            calibrator = self._extract_calibrator(trainer)
+            # Also check model_result (calibrator propagated from orchestrator)
+            if calibrator is None and getattr(model_result, "calibrator", None) is not None:
+                calibrator = model_result.calibrator
+
+        # Get feature spec: explicit dict, or auto-generate as fallback
+        feature_spec = feature_specs.get(key) if feature_specs is not None else None
+        if feature_spec is None:
+            feature_spec = self._auto_generate_feature_spec(
+                model_name=model_name,
+                feature_columns=feature_columns,
+                horizon=model_result.horizon,
+                model_result=model_result,
+            )
+
+        return ModelBundle.from_training(
+            model=model,
+            scaler=scaler,
+            feature_columns=feature_columns,
+            horizon=model_result.horizon,
+            calibrator=calibrator,
+            preprocessing_graph=(
+                base_graph.with_feature_columns(feature_columns) if base_graph else None
+            ),
+            feature_spec=feature_spec,
+            symbol=self.config.symbol,
+            training_metrics=model_result.metrics,
+            extra_metadata={
+                "training_run_id": run_id,
+                "training_time_seconds": model_result.training_time_seconds,
+                "data_rank": model_result.data_rank,
+                **self._extract_timeframe_metadata(trainer),
+            },
+            model_name=model_name,
+        )
+
+    def build_ensemble_from_training_result(
+        self,
+        training_result: TrainingRunResult,
+        base_bundles: list[Path],
+    ) -> Path | None:
+        """
+        Build the stacking-ensemble bundle for a training run, if one was trained.
+
+        Args:
+            training_result: Result whose ``ensemble_result`` holds the fitted
+                meta-learner (as ``trainer``) and whose ``aligned_oof`` defines
+                the stacking layout.
+            base_bundles: Paths of the base-model bundles the ensemble combines.
+
+        Returns:
+            Path to the ensemble bundle, or None when no ensemble was trained.
+        """
+        from src.models.ensemble.orchestrator import EnsembleResult
+
+        trained = training_result.ensemble_result
+        aligned = training_result.aligned_oof
+        if trained is None or trained.trainer is None or aligned is None:
+            return None
+
+        # OOF keys carry the horizon ("xgboost_h5"); bundles are keyed by model name
+        suffix = f"_h{trained.horizon}"
+        base_model_names = [name.removesuffix(suffix) for name in aligned.model_names]
+        coverage = aligned.coverage
+        ensemble_result = EnsembleResult(
+            ensemble_name=f"{self.config.meta_learner}_ensemble",
+            meta_learner_name=self.config.meta_learner,
+            base_model_names=base_model_names,
+            metrics={k: float(v) for k, v in trained.metrics.items() if isinstance(v, int | float)},
+            stacking_dataset=training_result.stacking_dataset,
+            aligned_oof=aligned,
+            training_time_seconds=trained.training_time_seconds,
+            n_base_models=len(base_model_names),
+            coverage=min(coverage.values()) if isinstance(coverage, dict) else float(coverage),
+            meta_learner=trained.trainer,
+        )
+        by_name = {p.name.removesuffix(suffix): p for p in base_bundles}
+        missing = [n for n in base_model_names if n not in by_name]
+        if missing:
+            raise ValueError(f"Ensemble base models without bundles: {missing}")
+        return self.build_ensemble_bundle(
+            ensemble_result, base_bundles=[by_name[n] for n in base_model_names]
         )
 
     def build_ensemble_bundle(
@@ -522,22 +618,11 @@ class BundleBuilder:
             json.dump(alignment_data, f, indent=2)
         files.append(ENSEMBLE_ALIGNMENT_CONFIG_FILE)
 
-        # --- 5. meta_learner/ (serialized model) ---
-        meta_learner = None
-        if hasattr(ensemble_result, "_ensemble"):
-            meta_learner = ensemble_result._ensemble
-        elif hasattr(ensemble_result, "ensemble"):
-            meta_learner = ensemble_result.ensemble
-
-        if meta_learner is not None:
-            meta_dir = ensemble_dir / ENSEMBLE_META_LEARNER_DIR
-            if hasattr(meta_learner, "save"):
-                meta_learner.save(meta_dir)
-            else:
-                meta_dir.mkdir(parents=True, exist_ok=True)
-                with open(meta_dir / "model.pkl", "wb") as f:
-                    pickle.dump(meta_learner, f, protocol=pickle.HIGHEST_PROTOCOL)
-            files.append(ENSEMBLE_META_LEARNER_DIR)
+        # --- 5. meta_learner/ (serialized with the meta-learner's own save) ---
+        if ensemble_result.meta_learner is None:
+            raise ValueError("EnsembleResult has no fitted meta_learner to bundle")
+        ensemble_result.meta_learner.save(ensemble_dir / ENSEMBLE_META_LEARNER_DIR)
+        files.append(ENSEMBLE_META_LEARNER_DIR)
 
         # --- 6. manifest.json (file listing) ---
         manifest = {
@@ -628,48 +713,41 @@ class BundleBuilder:
 
     def _create_preprocessing_graph(self) -> Any:
         """
-        Create preprocessing graph from config.
+        Create the raw-OHLCV preprocessing graph from the recorded feature pipeline.
 
         Returns:
-            PreprocessingGraph instance configured for the pipeline
+            PreprocessingGraph, or None when training recorded no feature
+            pipeline (bundles then only accept pre-computed features).
         """
         from src.inference.preprocessing_graph import PreprocessingGraph
 
-        # Build pipeline config dict from PipelineConfig
-        pipeline_config = {
-            "horizons": self.config.horizons,
-            "mtf_timeframes": self.config.mtf_timeframes,
-            "clean": {
-                "source_timeframe": "1min",
-                "target_timeframe": "5min",
-            },
-            "features": {
-                "scale_periods": True,
-                "base_timeframe": "5min",
-            },
-            "mtf": {
-                "enable_mtf": True,
-                "base_timeframe": "5min",
-                "mtf_timeframes": self.config.mtf_timeframes,
-                "mode": "both",
-            },
-            "wavelets": {
-                "enable_wavelets": True,
-            },
-            "regime": {
-                "enabled": True,
-            },
-            "scaling": {
-                "scaler_type": "robust",
-                "clip_outliers": True,
-            },
-        }
+        if self.feature_pipeline is None:
+            logger.warning(
+                "No feature pipeline recorded; bundles will not support predict_from_raw()"
+            )
+            return None
 
-        return PreprocessingGraph.from_pipeline_config(
-            pipeline_config=pipeline_config,
+        return PreprocessingGraph.from_feature_pipeline(
+            self.feature_pipeline,
             symbol=self.config.symbol,
             horizon=self.config.horizons[0] if self.config.horizons else 20,
         )
+
+    @staticmethod
+    def _extract_timeframe_metadata(trainer: Any) -> dict[str, Any]:
+        """Timeframes a 4D multi-stream model was trained on (anchor first).
+
+        Inference must rebuild the exact same streams; the bundle cannot
+        re-derive them from config because the adapter resolves them from
+        the model contract and the data actually available.
+        """
+        timeframe_names = list(getattr(trainer, "timeframe_names", None) or [])
+        if not timeframe_names:
+            return {}
+        return {
+            "timeframe_names": timeframe_names,
+            "mtf_timeframes": timeframe_names[1:],
+        }
 
     def _extract_model(self, trainer: Any) -> Any | None:
         """

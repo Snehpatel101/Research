@@ -357,12 +357,7 @@ class EnsembleService:
         try:
             from sklearn.metrics import accuracy_score, f1_score
 
-            from src.models.ensemble import (
-                CalibratedMetaLearner,
-                MLPMetaLearner,
-                RidgeMetaLearner,
-                XGBoostMeta,
-            )
+            from src.models.ensemble import get_meta_learner
 
             start = time.time()
 
@@ -396,25 +391,10 @@ class EnsembleService:
             y_train = y_stack.iloc[:n_train].values
             y_val = y_stack.iloc[n_train:].values
 
-            # Create meta-learner directly
-            meta_learner_map: dict[str, type] = {
-                "ridge_meta": RidgeMetaLearner,
-                "mlp_meta": MLPMetaLearner,
-                "xgboost_meta": XGBoostMeta,
-                "calibrated_meta": CalibratedMetaLearner,
-            }
-
-            meta_learner_name = config.meta_learner
-            if meta_learner_name not in meta_learner_map:
-                raise ValueError(
-                    f"Unknown meta_learner: {meta_learner_name}. "
-                    f"Available: {list(meta_learner_map.keys())}"
-                )
-
             # n_classes is the problem definition — the meta-learner must
             # agree with the run's class count (binary mode uses 2).
-            meta_learner = meta_learner_map[meta_learner_name](
-                config={"n_classes": getattr(config, "n_classes", 3)}
+            meta_learner = get_meta_learner(
+                config.meta_learner, n_classes=getattr(config, "n_classes", 3)
             )
 
             # Train meta-learner directly
@@ -442,7 +422,7 @@ class EnsembleService:
                 "training_time": training_time,
             }
 
-            logger.info(f"Meta-learner ({meta_learner_name}) trained: val_f1={val_f1:.4f}")
+            logger.info(f"Meta-learner ({config.meta_learner}) trained: val_f1={val_f1:.4f}")
 
             return meta_learner, metrics
 
@@ -533,61 +513,8 @@ class EnsembleService:
             return None
 
 
-def to_ensemble_result(
-    service_result: EnsembleServiceResult,
-    config: PipelineConfig,
-) -> Any:
-    """Bridge EnsembleServiceResult to EnsembleResult for EnsembleBundle.
-
-    The EnsembleService produces an ``EnsembleServiceResult`` while
-    ``EnsembleBundle.from_ensemble_result()`` expects the orchestrator's
-    ``EnsembleResult``.  This function converts between the two so that
-    a bundle can be created directly after ensemble training.
-
-    Args:
-        service_result: Result from ``EnsembleService.build_ensemble()``.
-        config: PipelineConfig used for training.
-
-    Returns:
-        An ``EnsembleResult`` suitable for ``EnsembleBundle.from_ensemble_result()``.
-    """
-    from src.models.ensemble.orchestrator import EnsembleResult
-
-    aligned = service_result.aligned_oof
-    model_names: list[str] = []
-    if aligned is not None:
-        model_names = list(aligned.model_names)
-
-    metrics: dict[str, float] = {}
-    for key, value in service_result.ensemble_metrics.items():
-        if isinstance(value, (int, float)):
-            metrics[key] = float(value)
-
-    meta_learner_name = config.meta_learner or "unknown"
-
-    coverage = 1.0
-    alignment_offset = 0
-    if aligned is not None:
-        coverage = getattr(aligned, "coverage", 1.0)
-        alignment_offset = getattr(aligned, "alignment_offset", 0)
-
-    return EnsembleResult(
-        ensemble_name=f"{meta_learner_name}_ensemble",
-        meta_learner_name=meta_learner_name,
-        base_model_names=model_names,
-        metrics=metrics,
-        stacking_dataset=service_result.stacking_dataset,
-        aligned_oof=aligned,
-        training_time_seconds=service_result.training_time_seconds,
-        n_base_models=len(model_names),
-        coverage=coverage,
-        alignment_offset=alignment_offset,
-    )
-
-
 __all__ = [
     "EnsembleService",
     "EnsembleRequest",
     "EnsembleServiceResult",
-    "to_ensemble_result",
 ]

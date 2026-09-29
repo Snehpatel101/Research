@@ -13,10 +13,9 @@ import signal
 import sys
 from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
+from src.core.utils.json_utils import NumpyEncoder
 
 from .schemas import StageValidationError, validate_stage_transition
 from .stage_registry import PipelineStage, get_stage_definitions
@@ -100,21 +99,6 @@ if TYPE_CHECKING:
     import pandas as pd
 
     from src.data.pipeline.data_config import DataConfig
-
-
-class NumpyEncoder(json.JSONEncoder):
-    """Custom JSON encoder to handle numpy types."""
-
-    def default(self, obj):
-        if isinstance(obj, (np.integer,)):
-            return int(obj)
-        if isinstance(obj, (np.floating,)):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, Path):
-            return str(obj)
-        return super().default(obj)
 
 
 class PipelineRunner:

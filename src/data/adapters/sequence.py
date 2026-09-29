@@ -201,7 +201,7 @@ class SequenceAdapter(BaseAdapter):
                 - X: (n_sequences, seq_len, n_features) float32 array
                 - y: (n_sequences,) label array
                 - weights: (n_sequences,) weight array or None
-                - original_indices: (n_sequences,) array mapping to source indices
+                - original_indices: (n_sequences,) positional rows in df (label bar)
         """
         n_rows = len(df)
         n_features = len(feature_cols)
@@ -221,7 +221,6 @@ class SequenceAdapter(BaseAdapter):
         # Extract data arrays once (more efficient than repeated iloc)
         features = df[feature_cols].values.astype(np.float32)
         labels = df[self.label_column].values
-        df_indices = df.index.values
 
         # Build sequences using vectorized sliding window (no Python loop)
         # sliding_window_view creates a view: (n_windows, n_features, seq_len)
@@ -234,7 +233,7 @@ class SequenceAdapter(BaseAdapter):
         # Label position is at the LAST timestep of each window
         label_positions = np.arange(n_sequences) * self.stride + (seq_len - 1)
         y = labels[label_positions].astype(np.int64)
-        original_indices = df_indices[label_positions].astype(np.int64)
+        original_indices = label_positions.astype(np.int64)  # positional rows in df
 
         # Extract weights at label positions (vectorized)
         has_weights = self.weight_column and self.weight_column in df.columns
@@ -276,11 +275,14 @@ class SequenceAdapter(BaseAdapter):
         logger.debug(f"Building sequences for {len(symbols)} symbol(s)")
 
         for symbol in symbols:
-            symbol_df = df[df[self.symbol_column] == symbol]
+            symbol_mask = (df[self.symbol_column] == symbol).to_numpy()
+            symbol_df = df[symbol_mask]
 
             X_symbol, y_symbol, weights_symbol, indices_symbol = self._build_sequences(
                 symbol_df, feature_cols, seq_len
             )
+            # Positions within symbol_df -> positions within df
+            indices_symbol = np.flatnonzero(symbol_mask)[indices_symbol]
 
             if X_symbol.shape[0] > 0:
                 X_list.append(X_symbol)

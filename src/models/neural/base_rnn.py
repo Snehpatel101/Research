@@ -314,7 +314,7 @@ class BaseRNNModel(BaseModel):
             # DataLoader workers/pinning auto-tuned in _create_dataloader for CUDA
             # None = auto-detect (4 for CUDA, 0 for CPU)
             "num_workers": None,
-            "pin_memory": False,
+            "pin_memory": None,  # None = auto (pin only on CUDA)
         }
 
     def fit(
@@ -768,7 +768,8 @@ class BaseRNNModel(BaseModel):
         # Auto-detect: 4 workers for CUDA (overlaps data loading with GPU compute), 0 for CPU
         num_workers_cfg = config.get("num_workers")
         num_workers = (4 if use_cuda else 0) if num_workers_cfg is None else num_workers_cfg
-        pin_memory = config.get("pin_memory", use_cuda)
+        pin_memory_cfg = config.get("pin_memory")
+        pin_memory = use_cuda if pin_memory_cfg is None else bool(pin_memory_cfg)
         persistent_workers = num_workers > 0
 
         # Seed each DataLoader worker uniquely for reproducibility

@@ -302,6 +302,9 @@ class TrainerFeaturesMixin:
         resolve_feature_set = feature_sets_utils.resolve_feature_set
 
         feature_set_name = self.config.feature_set
+        if feature_set_name is None:
+            # Caller already chose the columns (e.g. orchestrator per-model selection)
+            return None
 
         # If not specified, try to get from model family alias
         if not feature_set_name:
@@ -546,8 +549,16 @@ class TrainerFeaturesMixin:
             y=y_train,
             sample_weights=w_train,
             n_splits=self.config.feature_selection_cv_splits,
-            purge_bars=self.config.horizon * 3,  # Purge based on horizon
-            embargo_bars=1440,  # ~5 days at 5-min resolution
+            purge_bars=(
+                self.config.feature_selection_purge_bars
+                if self.config.feature_selection_purge_bars is not None
+                else self.config.horizon * 3  # Purge based on horizon
+            ),
+            embargo_bars=(
+                self.config.feature_selection_embargo_bars
+                if self.config.feature_selection_embargo_bars is not None
+                else 1440  # ~5 days at 5-min resolution
+            ),
             label_end_times=label_end_times,
         )
 

@@ -18,9 +18,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.constants import OHLCV_COLUMNS
 from src.data.adapters import PreparedData
 from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
+from src.validation.cv.oof_core import merge_oof_predictions, reindex_oof_to_rows
 
 from .services import ModelTrainingRequest, OOFRequest
 
@@ -113,11 +115,12 @@ class TrainingOpsMixin:
                     n_splits=self.config.n_splits,
                     hyperparam_trials=self.config.hyperparam_trials,
                     scoring=self.config.optuna_metric,
-                    use_feature_selection=self.config.optimize_features,
+                    use_feature_selection=self._trainer_feature_selection(model_name),
                     max_epochs=self.config.max_epochs,
                     batch_size=getattr(self.config, "batch_size", None),
                     cv_method=self.config.cv_method,
                     embargo_bars=getattr(self.config, "embargo_bars", None),
+                    purge_bars=getattr(self.config, "purge_bars", None),
                     early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
                     optuna_timeout=getattr(self.config, "optuna_timeout", None),
                 )
@@ -232,6 +235,19 @@ class TrainingOpsMixin:
         # just collect Python garbage here for prepared data cache eviction.
         gc.collect()
 
+    def _trainer_feature_selection(self, model_name: str) -> bool:
+        """Whether Trainer should run its own feature selection for this model.
+
+        The orchestrator already selects each model's features on train-only
+        data (_run_feature_selection_on_train_data). Selecting again inside
+        Trainer would train the final model on a different feature set than
+        its OOF (stacking) models, so it only runs when the orchestrator
+        selected nothing (walk-forward mode, which selects per window). Models
+        without a per-model set (e.g. a meta-labeling primary outside
+        ``models``) then use every prepared column.
+        """
+        return self.config.optimize_features and not self._per_model_features
+
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:
         """Train a single model with OOM recovery for neural/transformer models."""
         from src.core.contracts import get_model_contract
@@ -248,11 +264,12 @@ class TrainingOpsMixin:
             n_splits=self.config.n_splits,
             hyperparam_trials=self.config.hyperparam_trials,
             scoring=self.config.optuna_metric,
-            use_feature_selection=self.config.optimize_features,
+            use_feature_selection=self._trainer_feature_selection(model_name),
             max_epochs=self.config.max_epochs,
             batch_size=getattr(self.config, "batch_size", None),
             cv_method=self.config.cv_method,
             embargo_bars=getattr(self.config, "embargo_bars", None),
+            purge_bars=getattr(self.config, "purge_bars", None),
             early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
             optuna_timeout=getattr(self.config, "optuna_timeout", None),
         )
@@ -285,11 +302,12 @@ class TrainingOpsMixin:
                 n_splits=self.config.n_splits,
                 hyperparam_trials=self.config.hyperparam_trials,
                 scoring=self.config.optuna_metric,
-                use_feature_selection=self.config.optimize_features,
+                use_feature_selection=self._trainer_feature_selection(model_name),
                 max_epochs=self.config.max_epochs,
                 cv_method=self.config.cv_method,
                 batch_size=reduced_batch,
                 embargo_bars=getattr(self.config, "embargo_bars", None),
+                purge_bars=getattr(self.config, "purge_bars", None),
                 early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
                 optuna_timeout=getattr(self.config, "optuna_timeout", None),
             )
@@ -337,7 +355,14 @@ class TrainingOpsMixin:
             from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
 
             logger.info(f"  Calibrating {model_name} probabilities...")
-            if not hasattr(result.trainer, "predict_proba"):
+            # Trainer.run_prepared already fits a calibrator on the validation
+            # split when use_calibration is on — reuse it instead of refitting.
+            trainer_calibrator = getattr(result.trainer, "calibrator", None)
+            if trainer_calibrator is not None:
+                result.calibrator = trainer_calibrator
+                return
+            predict_proba = self._resolve_predict_proba(result.trainer)
+            if predict_proba is None:
                 logger.warning(f"    {model_name} doesn't support predict_proba, skipping")
                 return
             if prepared.X_val is None or prepared.y_val is None:
@@ -354,7 +379,7 @@ class TrainingOpsMixin:
             # matrix. The old [:, 1] collapse handed it a 1D array, fit raised
             # ValueError, and the broad except below silently dropped
             # calibration for every multiclass model.
-            val_probas = np.asarray(result.trainer.predict_proba(prepared.X_val))
+            val_probas = np.asarray(predict_proba(prepared.X_val))
             if val_probas.ndim == 1:
                 # 1D output is the positive-class probability — reconstruct
                 # the (n, 2) matrix; an (n, 1) reshape would make the
@@ -386,6 +411,21 @@ class TrainingOpsMixin:
         except Exception as e:
             logger.warning(f"    Calibration failed: {e}")
 
+    @staticmethod
+    def _resolve_predict_proba(trainer: Any) -> Any | None:
+        """Return a callable X -> (n, n_classes) probabilities, or None.
+
+        Real Trainers expose probabilities through their BaseModel
+        (``trainer.model.predict(X).class_probabilities``); simple
+        estimator-like trainers expose ``predict_proba`` directly.
+        """
+        if hasattr(trainer, "predict_proba"):
+            return trainer.predict_proba
+        model = getattr(trainer, "model", None)
+        if model is not None and hasattr(model, "predict"):
+            return lambda X: model.predict(X).class_probabilities
+        return None
+
     def _generate_oof(
         self,
         model_name: str,
@@ -416,7 +456,6 @@ class TrainingOpsMixin:
     ) -> None:
         """Walk-forward training: expanding/rolling windows for realistic backtesting."""
         from src.core.container import TimeSeriesDataContainer
-        from src.models.registry import ModelRegistry
 
         from .config import _ModeConfig
         from .modes import WalkForwardTrainer, WalkForwardTrainerConfig
@@ -446,30 +485,37 @@ class TrainingOpsMixin:
         class_names = ["short", "neutral", "long"]
 
         for model_name in self.config.models:
-            # Filter DataFrame to per-model feature subset before preparation
-            # (matches _prepare_with_cache logic in unified_orchestrator.py)
-            df_model = df
-            if self._per_model_features and model_name in self._per_model_features:
-                model_features = set(self._per_model_features[model_name])
-                all_features = set(self._all_feature_names)
-                drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
-                if drop_cols:
-                    df_model = df.drop(columns=drop_cols)
-                    logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
-
-            # Downcast float64 → float32 to halve memory during preparation
-            float64_cols = df_model.select_dtypes(include=["float64"]).columns
-            if len(float64_cols) > 0:
-                df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
-
+            # Walk-forward windows select features on their own training data
+            # (B08 fix), so they see every feature column.
+            float64_cols = df.select_dtypes(include=["float64"]).columns
+            df_model = (
+                df.astype(dict.fromkeys(float64_cols, np.float32)) if len(float64_cols) else df
+            )
             prepared = self._data_preparer.prepare(
                 df=df_model,
                 model_name=model_name,
                 additional_dfs=additional_dfs,
-            )
+            ).filter_invalid_labels()
 
-            # Filter invalid labels (-99) before walk-forward training
-            prepared = prepared.filter_invalid_labels()
+            # Walk-forward is the evaluation protocol (honest OOS predictions for
+            # the backtest and stacking). Windows re-select features and re-fit
+            # scalers, so the deployable model is trained exactly like standard
+            # mode: train-split per-model features, same prepared-data path.
+            deploy_result = self._train_single_model(
+                model_name,
+                self._prepare_with_cache(df, model_name, additional_dfs),
+                horizon,
+            )
+            self._clear_prepared_cache()
+
+            # Row of the source DataFrame for every walk-forward sample
+            # (train, val, test concatenated in that order below)
+            index_parts = [prepared.train_indices, prepared.val_indices]
+            if prepared.X_test is not None:
+                index_parts.append(prepared.test_indices)
+            row_positions = (
+                np.concatenate(index_parts) if all(p is not None for p in index_parts) else None
+            )
 
             # Save metadata before freeing prepared data
             _n_features = prepared.n_features
@@ -628,13 +674,16 @@ class TrainingOpsMixin:
                                     }
                                 )
 
-                        oof = OOFPrediction(
-                            model_name=result_model_name,
-                            predictions=pd.DataFrame(oof_data),
-                            fold_info=fold_info,
-                            coverage=len(valid_indices) / n_all,
-                            original_indices=valid_indices,
-                            n_total_samples=n_all,
+                        oof = reindex_oof_to_rows(
+                            OOFPrediction(
+                                model_name=result_model_name,
+                                predictions=pd.DataFrame(oof_data),
+                                fold_info=fold_info,
+                                coverage=len(valid_indices) / n_all,
+                                original_indices=valid_indices,
+                                n_total_samples=n_all,
+                            ),
+                            row_positions,
                         )
                         self._oof_predictions[key] = oof
                         logger.info(
@@ -652,21 +701,6 @@ class TrainingOpsMixin:
                         f"not found in WF results"
                     )
 
-                last_model = None
-                if wf_result.model_paths:
-                    last_path = wf_result.model_paths[-1]
-                    if last_path.exists():
-                        last_model = ModelRegistry.create(result_model_name)
-                        last_model.load(last_path)
-                        logger.info(
-                            f"  {result_model_name}: loaded last-window model " f"from {last_path}"
-                        )
-
-                if last_model is not None:
-                    self._trained_models[key] = last_model
-                else:
-                    logger.warning(f"  {result_model_name}: no model available for bundling/deploy")
-
                 self._model_results[key] = ModelTrainingResult(
                     model_name=result_model_name,
                     horizon=horizon,
@@ -674,9 +708,11 @@ class TrainingOpsMixin:
                         "val_f1": wf_result.aggregated_metrics.get("mean_f1", 0),
                         "val_accuracy": wf_result.aggregated_metrics.get("mean_accuracy", 0),
                     },
-                    trainer=last_model,
+                    trainer=deploy_result.trainer,
+                    calibrator=getattr(deploy_result, "calibrator", None),
                     oof_prediction=oof,
-                    training_time_seconds=wf_result.total_time,
+                    training_time_seconds=wf_result.total_time
+                    + deploy_result.training_time_seconds,
                     n_features=_n_features,
                     data_rank=_data_rank,
                 )
@@ -688,7 +724,6 @@ class TrainingOpsMixin:
     ) -> None:
         """Regime-aware training: separate models for different market regimes."""
         from .regime_trainer import RegimeAwareTrainer
-        from .unified_orchestrator import ModelTrainingResult
 
         logger.info("Regime-aware training mode")
         logger.info(f"  Detection method: {self.config.regime_detection_method}")
@@ -731,48 +766,12 @@ class TrainingOpsMixin:
                     horizon=horizon,
                     model_name=model_name,
                     save_models=self.config.save_models,
+                    # Regime detection needs OHLCV, which per-model feature
+                    # selection may have dropped from df_model
+                    raw_ohlcv=df[[c for c in OHLCV_COLUMNS if c in df.columns]],
                 )
 
-                for (
-                    trained_model_name,
-                    regime,
-                ), regime_model_result in regime_result.regime_results.items():
-                    if trained_model_name != model_name:
-                        continue
-                    key = f"{model_name}_h{horizon}_{regime}"
-                    self._model_results[key] = ModelTrainingResult(
-                        model_name=f"{model_name}_{regime}",
-                        horizon=horizon,
-                        metrics={
-                            "val_f1": regime_model_result.val_f1,
-                            "val_accuracy": regime_model_result.val_accuracy,
-                            **regime_model_result.metrics,
-                        },
-                        trainer=regime_model_result.trainer,
-                        training_time_seconds=regime_model_result.training_time_seconds,
-                        n_features=prepared.n_features,
-                        data_rank=prepared.data_rank,
-                    )
-                    self._trained_models[key] = regime_model_result.trainer
-                    logger.info(
-                        f"    {model_name}/{regime}: val_f1={regime_model_result.val_f1:.4f}, "
-                        f"samples={regime_model_result.n_samples}"
-                    )
-
-                aggregated_key = f"{model_name}_h{horizon}_aggregated"
-                aggregated_metrics = {
-                    k.replace(f"{model_name}_", ""): v
-                    for k, v in regime_result.aggregated_metrics.items()
-                    if model_name in k or "overall" in k
-                }
-                self._model_results[aggregated_key] = ModelTrainingResult(
-                    model_name=f"{model_name}_regime_aware",
-                    horizon=horizon,
-                    metrics=aggregated_metrics,
-                    training_time_seconds=regime_result.total_time_seconds,
-                    n_features=prepared.n_features,
-                    data_rank=prepared.data_rank,
-                )
+                self._record_regime_model(model_name, horizon, prepared, regime_result)
                 del prepared
                 # Move neural models to CPU and reset torch state
                 for (_rname, _regime), rr in regime_result.regime_results.items():
@@ -780,6 +779,86 @@ class TrainingOpsMixin:
                 release_gpu_memory()
 
         logger.info("\nRegime-aware training complete")
+
+    def _record_regime_model(
+        self,
+        model_name: str,
+        horizon: int,
+        prepared: PreparedData,
+        regime_result: Any,
+    ) -> None:
+        """Record one regime-routed model: per-regime trainers + regime-routed OOF.
+
+        The OOF for regime r comes from CV on regime r's training samples
+        (mapped to source rows), so each bar's OOF prediction is made by a
+        model of its own regime that never saw it — the same routing the
+        deployed RegimeBundle applies. Stacking and the backtest consume it
+        like any other model's OOF.
+        """
+        from dataclasses import asdict, replace
+
+        from .unified_orchestrator import ModelTrainingResult
+
+        members = {
+            regime: rr
+            for (name, regime), rr in regime_result.regime_results.items()
+            if name == model_name and rr.trainer is not None
+        }
+        if not members:
+            logger.warning(f"  {model_name}: no regime had enough samples; nothing trained")
+            return
+
+        train_regimes = regime_result.train_regimes.to_numpy()
+        regime_oofs = []
+        for regime in members:
+            mask = train_regimes == regime
+            subset = replace(
+                prepared,
+                X_train=prepared.X_train[mask],
+                y_train=prepared.y_train[mask],
+                train_weights=(
+                    prepared.train_weights[mask] if prepared.train_weights is not None else None
+                ),
+                train_indices=(
+                    prepared.train_indices[mask] if prepared.train_indices is not None else None
+                ),
+            )
+            oof = self._generate_oof(model_name, subset, horizon)
+            if oof is not None:
+                regime_oofs.append(oof)
+        oof = merge_oof_predictions(regime_oofs) if regime_oofs else None
+
+        n_total = sum(rr.n_samples for rr in members.values())
+        metrics = {
+            "val_f1": sum(rr.val_f1 * rr.n_samples for rr in members.values()) / n_total,
+            "val_accuracy": sum(rr.val_accuracy * rr.n_samples for rr in members.values())
+            / n_total,
+            **{f"{regime}_val_f1": rr.val_f1 for regime, rr in members.items()},
+        }
+        key = f"{model_name}_h{horizon}"
+        if oof is not None:
+            self._oof_predictions[key] = oof
+        for regime, rr in members.items():
+            self._trained_models[f"{key}_{regime}"] = rr.trainer
+            logger.info(
+                f"    {model_name}/{regime}: val_f1={rr.val_f1:.4f}, samples={rr.n_samples}"
+            )
+        self._model_results[key] = ModelTrainingResult(
+            model_name=model_name,
+            horizon=horizon,
+            metrics=metrics,
+            oof_prediction=oof,
+            training_time_seconds=regime_result.total_time_seconds,
+            n_features=prepared.n_features,
+            data_rank=prepared.data_rank,
+            mode_artifacts={
+                "kind": "regime",
+                "regime_trainers": {regime: rr.trainer for regime, rr in members.items()},
+                "detector_config": asdict(regime_result.detector.config),
+                # Fallback for bars whose regime has no model: the best-covered regime
+                "default_regime": max(members, key=lambda r: members[r].n_samples),
+            },
+        )
 
     def _train_meta_labeling(
         self,
@@ -802,7 +881,7 @@ class TrainingOpsMixin:
             self._model_results[key] = result
             logger.info(
                 f"  Meta-labeling complete: "
-                f"primary_acc={result.metrics.get('primary_accuracy', 0):.4f}, "
+                f"primary_acc={result.metrics.get('primary_val_accuracy', 0):.4f}, "
                 f"combined_acc={result.metrics.get('combined_accuracy', 0):.4f}, "
                 f"trade_fraction={result.metrics.get('trade_fraction', 0)*100:.1f}%"
             )
@@ -816,255 +895,169 @@ class TrainingOpsMixin:
         horizon: int,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> Any:
-        """Train meta-labeling system for a single horizon."""
+        """Train a meta-labeling system (primary direction + meta bet filter).
+
+        1. Primary model trains on its prepared data (any input rank).
+        2. Primary OOF predictions come from the standard OOF path, so the
+           meta-labels "primary was right" are never in-sample.
+        3. The meta-model learns P(primary correct) from the primary's own
+           model input; its cross-validated probabilities filter the primary
+           OOF into the system OOF used by the backtest.
+        """
+        from src.validation.cv import PurgedKFold, PurgedKFoldConfig
+
         from .unified_orchestrator import ModelTrainingResult
 
         start_time = time.time()
         primary_model_name = self.config.meta_labeling_primary_model
         meta_model_name = self.config.meta_labeling_meta_model
+        threshold = self.config.meta_labeling_threshold
 
-        # Stage 1: Prepare data
+        # Stage 1: Prepare primary data (per-model feature subset when selected)
         logger.info("\n  STAGE 1: Preparing data...")
-        # Filter DataFrame to per-model feature subset before preparation
         df_model = df
         if self._per_model_features and primary_model_name in self._per_model_features:
             model_features = set(self._per_model_features[primary_model_name])
             all_features = set(self._all_feature_names)
             drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
-            if drop_cols:
-                df_model = df.drop(columns=drop_cols)
-                logger.debug(
-                    f"Filtered to {len(model_features)} features for " f"{primary_model_name}"
-                )
-
-        # Downcast float64 → float32 to halve memory during preparation
+            df_model = df.drop(columns=drop_cols)
         float64_cols = df_model.select_dtypes(include=["float64"]).columns
         if len(float64_cols) > 0:
             df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
-
         prepared = self._data_preparer.prepare(
-            df=df_model,
-            model_name=primary_model_name,
-            additional_dfs=additional_dfs,
-        )
+            df=df_model, model_name=primary_model_name, additional_dfs=additional_dfs
+        ).filter_invalid_labels()
         logger.info(f"    Data: {prepared.n_train} train, {prepared.n_val} val samples")
 
-        X_train = self._flatten_to_2d(prepared.X_train)
-        X_val = self._flatten_to_2d(prepared.X_val)
-        y_train, y_val = prepared.y_train, prepared.y_val
-        feature_names = (
-            prepared.feature_names
-            if prepared.data_rank == 2
-            else [f"f{i}" for i in range(X_train.shape[1])]
-        )
-
-        # Save metadata before training (prepared will be freed after)
-        prepared_data_rank = prepared.data_rank
-        prepared_n_features = prepared.n_features
-
-        # Stage 2: Train primary model (direction)
+        # Stage 2: Primary model + its OOF predictions (at source rows)
         logger.info("\n  STAGE 2: Training primary model (direction)...")
         primary_result = self._train_single_model(primary_model_name, prepared, horizon)
-
-        # Free PreparedData — all needed values already extracted to local vars
-        # (X_train, X_val, y_train, y_val, feature_names, data_rank, n_features)
-        del prepared
-        # Move neural model to CPU and free GPU for meta-model training
-        offload_model_to_cpu(primary_result.trainer)
-
         primary_trainer = primary_result.trainer
-        if primary_trainer is None:
-            raise RuntimeError("Primary model training failed")
+        primary_oof = self._generate_oof(primary_model_name, prepared, horizon)
+        if primary_oof is None:
+            raise RuntimeError(f"Could not generate OOF predictions for {primary_model_name}")
 
-        # Generate OOF predictions for training set to prevent memorization bias.
-        # In-sample predictions would leak: the model has already seen these samples.
-        # OOF predictions use cross-validation so each sample is predicted by a model
-        # that never saw it during training.
-        logger.info("    Generating OOF predictions for meta-labels (anti-leakage)...")
-        primary_train_classes = self._generate_meta_label_oof(primary_model_name, X_train, y_train)
-        # Val predictions from the full primary model are correct (unseen data)
-        primary_val_classes = primary_trainer.model.predict(X_val).class_predictions
-        primary_train_acc = (primary_train_classes == y_train).mean()
-        primary_val_acc = (primary_val_classes == y_val).mean()
-        logger.info(
-            f"    Primary OOF-train/val accuracy: {primary_train_acc:.4f}/{primary_val_acc:.4f}"
-        )
+        rows = prepared.train_indices
+        oof_classes = primary_oof.get_class_predictions()[rows]
+        covered = ~np.isnan(oof_classes)
+        primary_train_classes = oof_classes[covered].astype(np.int64)
+        y_train = prepared.y_train[covered]
 
-        # Stage 3: Create meta-labels (1=correct, 0=wrong)
-        logger.info("\n  STAGE 3: Creating meta-labels (from OOF predictions)...")
+        # Meta-model input = exactly what the primary model consumes
+        X_meta_train = self._primary_model_input(primary_trainer, prepared, prepared.X_train)
+        X_meta_train = X_meta_train[covered]
+        X_meta_val = self._primary_model_input(primary_trainer, prepared, prepared.X_val)
+        primary_val_classes = primary_trainer.model.predict(X_meta_val).class_predictions
+        y_val = prepared.y_val
+        X_meta_train = X_meta_train.reshape(len(X_meta_train), -1)
+        X_meta_val = X_meta_val.reshape(len(X_meta_val), -1)
+
+        # Stage 3: Meta-labels (1 = primary correct), all out-of-sample
         meta_labels_train = (primary_train_classes == y_train).astype(int)
         meta_labels_val = (primary_val_classes == y_val).astype(int)
         logger.info(
-            f"    Train: {meta_labels_train.mean()*100:.1f}% correct, "
-            f"Val: {meta_labels_val.mean()*100:.1f}% correct"
+            f"\n  STAGE 3: Meta-labels: train {meta_labels_train.mean():.1%} correct, "
+            f"val {meta_labels_val.mean():.1%} correct"
         )
 
-        # Stage 4: Train meta-model (bet sizing)
-        logger.info("\n  STAGE 4: Training meta-model (bet sizing)...")
+        # Stage 4: Meta-model, plus cross-validated P(correct) on train rows
+        logger.info("\n  STAGE 4: Training meta-model (bet filter)...")
+        cv = PurgedKFold(
+            PurgedKFoldConfig(
+                n_splits=self.config.n_splits,
+                purge_bars=self.config.purge_bars,
+                embargo_bars=min(self.config.embargo_bars, int(len(y_train) * 0.1)),
+            )
+        )
+        meta_proba_oof = np.full(len(y_train), np.nan)
+        index_frame = pd.DataFrame(index=range(len(y_train)))
+        for tr_idx, va_idx in cv.split(index_frame, pd.Series(meta_labels_train)):
+            if len(np.unique(meta_labels_train[tr_idx])) < 2:
+                continue  # a fold with one class cannot fit a classifier
+            fold_meta = self._create_meta_model(meta_model_name)
+            fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx])
+            meta_proba_oof[va_idx] = fold_meta.predict_proba(X_meta_train[va_idx])[:, 1]
+
         meta_model = self._create_meta_model(meta_model_name)
-        meta_model.fit(X_train, meta_labels_train)
+        meta_model.fit(X_meta_train, meta_labels_train)
+        meta_proba_val = meta_model.predict_proba(X_meta_val)[:, 1]
+        meta_val_acc = float(((meta_proba_val >= 0.5) == meta_labels_val).mean())
 
-        if hasattr(meta_model, "predict_proba"):
-            meta_proba_train = meta_model.predict_proba(X_train)[:, 1]
-            meta_proba_val = meta_model.predict_proba(X_val)[:, 1]
-        else:
-            meta_proba_train = meta_model.predict(X_train).astype(float)
-            meta_proba_val = meta_model.predict(X_val).astype(float)
-
-        meta_train_acc = ((meta_proba_train >= 0.5) == meta_labels_train).mean()
-        meta_val_acc = ((meta_proba_val >= 0.5) == meta_labels_val).mean()
-        logger.info(f"    Meta train/val accuracy: {meta_train_acc:.4f}/{meta_val_acc:.4f}")
-
-        # Stage 5: Evaluate combined system
-        logger.info("\n  STAGE 5: Evaluating combined system...")
-        threshold = self.config.meta_labeling_threshold
-        trades_taken_val = meta_proba_val >= threshold
-
-        if trades_taken_val.sum() > 0:
-            combined_val_acc = (
-                primary_val_classes[trades_taken_val] == y_val[trades_taken_val]
-            ).mean()
-            trade_fraction = trades_taken_val.mean()
-        else:
-            combined_val_acc, trade_fraction = 0.0, 0.0
-
-        improvement = combined_val_acc - primary_val_acc if trade_fraction > 0 else 0.0
+        # Stage 5: Evaluate the combined system on validation
+        trades_val = meta_proba_val >= threshold
+        trade_fraction = float(trades_val.mean())
+        primary_val_acc = float((primary_val_classes == y_val).mean())
+        combined_val_acc = (
+            float((primary_val_classes[trades_val] == y_val[trades_val]).mean())
+            if trades_val.any()
+            else 0.0
+        )
         logger.info(
-            f"    Threshold={threshold}, trades={trade_fraction*100:.1f}%, "
-            f"primary={primary_val_acc:.4f}, combined={combined_val_acc:.4f}, "
-            f"improvement={improvement:+.4f}"
+            f"\n  STAGE 5: threshold={threshold}, trades={trade_fraction:.1%}, "
+            f"primary={primary_val_acc:.4f}, combined={combined_val_acc:.4f}"
         )
 
-        # Stage 6: Store models
-        logger.info("\n  STAGE 6: Storing models...")
+        # System OOF: primary OOF, neutral where the meta filter rejects
+        system_frame = primary_oof.predictions.copy()
+        pred_col = f"{primary_model_name}_pred"
+        rejected = np.zeros(len(system_frame), dtype=bool)
+        filter_rows = rows[covered]
+        rejected[filter_rows] = ~(meta_proba_oof >= threshold)
+        system_frame.loc[rejected, pred_col] = 0.0
+        system_oof = OOFPrediction(
+            model_name=primary_model_name,
+            predictions=system_frame,
+            fold_info=primary_oof.fold_info,
+            coverage=primary_oof.coverage,
+            original_indices=primary_oof.original_indices,
+            sequence_length=primary_oof.sequence_length,
+            n_total_samples=primary_oof.n_total_samples,
+        )
+
+        metrics = {
+            "primary_val_accuracy": primary_val_acc,
+            "primary_val_f1": primary_result.metrics.get("val_f1", 0),
+            "meta_val_accuracy": meta_val_acc,
+            "combined_accuracy": combined_val_acc,
+            "trade_fraction": trade_fraction,
+            "trades_taken": int(trades_val.sum()),
+            "total_samples": len(y_val),
+            "threshold": threshold,
+            "improvement": combined_val_acc - primary_val_acc if trades_val.any() else 0.0,
+            "val_f1": combined_val_acc,
+            "val_accuracy": combined_val_acc,
+        }
         model_key = f"meta_labeling_h{horizon}"
         self._trained_models[f"{model_key}_primary"] = primary_trainer
         self._trained_models[f"{model_key}_meta"] = meta_model
-
-        if self.config.save_models:
-            import pickle
-
-            models_dir = self.output_dir / "models"
-            models_dir.mkdir(exist_ok=True)
-            meta_path = models_dir / f"{model_key}_meta.pkl"
-            with open(meta_path, "wb") as f:
-                pickle.dump(
-                    {
-                        "meta_model": meta_model,
-                        "primary_model_name": primary_model_name,
-                        "meta_model_name": meta_model_name,
-                        "threshold": threshold,
-                        "feature_names": feature_names,
-                    },
-                    f,
-                    protocol=pickle.HIGHEST_PROTOCOL,
-                )
-            logger.info(f"    Saved meta-model to: {meta_path}")
-
-        metrics = {
-            "primary_train_accuracy": float(primary_train_acc),
-            "primary_val_accuracy": float(primary_val_acc),
-            "primary_val_f1": primary_result.metrics.get("val_f1", 0),
-            "meta_train_accuracy": float(meta_train_acc),
-            "meta_val_accuracy": float(meta_val_acc),
-            "combined_accuracy": float(combined_val_acc),
-            "primary_accuracy": float(primary_val_acc),
-            "trade_fraction": float(trade_fraction),
-            "trades_taken": int(trades_taken_val.sum()),
-            "total_samples": len(y_val),
-            "threshold": threshold,
-            "improvement": float(improvement),
-            "val_f1": float(combined_val_acc),
-            "val_accuracy": float(combined_val_acc),
-        }
 
         return ModelTrainingResult(
             model_name=f"meta_labeling_{primary_model_name}_{meta_model_name}",
             horizon=horizon,
             metrics=metrics,
             trainer=primary_trainer,
+            oof_prediction=system_oof,
             training_time_seconds=time.time() - start_time,
-            n_features=prepared_n_features,
-            data_rank=prepared_data_rank,
+            n_features=prepared.n_features,
+            data_rank=prepared.data_rank,
+            calibrator=primary_result.calibrator,
+            mode_artifacts={
+                "kind": "meta_labeling",
+                "primary_model": primary_model_name,
+                "meta_model": meta_model,
+                "meta_model_name": meta_model_name,
+                "threshold": threshold,
+            },
         )
 
-    def _flatten_to_2d(self, X: np.ndarray) -> np.ndarray:
-        """Flatten array to 2D if needed."""
-        if X.ndim == 2:
+    @staticmethod
+    def _primary_model_input(trainer: Any, prepared: PreparedData, X: np.ndarray) -> np.ndarray:
+        """Restrict prepared features to the columns the trained model consumes."""
+        columns = list(getattr(trainer, "feature_columns", None) or [])
+        if prepared.data_rank != 2 or not columns or columns == list(prepared.feature_names):
             return X
-        return X.reshape(X.shape[0], -1)
-
-    def _generate_meta_label_oof(
-        self,
-        primary_model_name: str,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        n_splits: int = 3,
-    ) -> np.ndarray:
-        """Generate OOF predictions for meta-label training set.
-
-        Instead of using in-sample predictions (memorization bias), this uses
-        cross-validation so each training sample is predicted by a model that
-        never saw it during training.
-
-        Args:
-            primary_model_name: Name of the primary direction model.
-            X_train: Training features (2D flattened).
-            y_train: Training labels.
-            n_splits: Number of CV folds for OOF generation.
-
-        Returns:
-            OOF class predictions array, same length as X_train.
-        """
-        from src.models.registry import ModelRegistry
-        from src.validation.cv import PurgedKFold, PurgedKFoldConfig
-
-        n_samples = len(X_train)
-        oof_preds = np.full(n_samples, -99, dtype=np.int64)
-
-        # Use PurgedKFold with the pipeline's embargo to respect temporal structure
-        embargo = min(self.config.embargo_bars, int(n_samples * 0.10))
-        cv_config = PurgedKFoldConfig(
-            n_splits=n_splits,
-            purge_bars=self.config.purge_bars,
-            embargo_bars=embargo,
-        )
-        cv = PurgedKFold(cv_config)
-
-        # Create a lightweight index DataFrame for splitting
-        X_for_cv = pd.DataFrame(index=range(n_samples))
-        y_for_cv = pd.Series(y_train)
-
-        for _fold_idx, (tr_idx, val_idx) in enumerate(cv.split(X_for_cv, y_for_cv)):
-            fold_model = ModelRegistry.create(primary_model_name)
-            fold_model.fit(
-                X_train=X_train[tr_idx],
-                y_train=y_train[tr_idx],
-                X_val=X_train[val_idx],
-                y_val=y_train[val_idx],
-            )
-            fold_preds = fold_model.predict(X_train[val_idx]).class_predictions
-            oof_preds[val_idx] = fold_preds
-            del fold_model
-            gc.collect()
-
-        # Any samples not covered by CV (due to embargo) get the primary model prediction
-        uncovered = oof_preds == -99
-        n_uncovered = uncovered.sum()
-        if n_uncovered > 0:
-            logger.debug(
-                f"    Meta-label OOF: {n_uncovered} samples uncovered by CV, "
-                f"using temporal fallback"
-            )
-            # Fallback: assign the mode class (neutral=0) for uncovered samples
-            # to avoid leaking in-sample info
-            oof_preds[uncovered] = 0
-
-        logger.info(
-            f"    Meta-label OOF: {n_samples} samples, {n_splits} folds, "
-            f"{n_uncovered} uncovered"
-        )
-        return oof_preds
+        positions = [prepared.feature_names.index(c) for c in columns]
+        return X[:, positions]
 
     def _create_meta_model(self, model_name: str) -> Any:
         """Create meta-model for bet sizing (logistic, random_forest, xgboost, lightgbm, catboost)."""

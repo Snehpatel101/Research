@@ -87,7 +87,10 @@ class AdapterResult:
 
     # For sequences
     sequence_length: int | None = None
-    original_indices: np.ndarray | None = None  # Maps back to source DataFrame
+    # Positional row (0-based, into the source DataFrame) that each sample's
+    # label comes from — the common coordinate that lets 2D/3D/4D predictions
+    # be aligned on the same bars (e.g. for stacking ensembles).
+    original_indices: np.ndarray | None = None
 
     # For multi-stream
     n_timeframes: int | None = None

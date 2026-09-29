@@ -563,25 +563,14 @@ class EnsembleBundle:
             with open(alignment_path) as f:
                 alignment_config = AlignmentConfig.from_dict(json.load(f))
 
-        # Load meta-learner
-        meta_learner = None
+        # Load meta-learner through its own class (save/load are symmetric)
         meta_dir = path / ENSEMBLE_META_LEARNER_DIR
+        if not meta_dir.is_dir():
+            raise ValueError(f"Invalid bundle: missing {ENSEMBLE_META_LEARNER_DIR}/")
+        from src.models.ensemble import get_meta_learner
 
-        if (meta_dir / "model.pkl").exists():
-            # Load from pickle
-            from src.core.utils.safe_pickle import safe_pickle_load
-
-            meta_learner = safe_pickle_load(meta_dir / "model.pkl")
-        elif meta_dir.exists():
-            # Try loading via model interface
-            try:
-                from src.models.ensemble import get_meta_learner
-
-                meta_learner = get_meta_learner(metadata.meta_learner_name)
-                if hasattr(meta_learner, "load"):
-                    meta_learner.load(meta_dir)
-            except ImportError:
-                logger.warning("Could not load meta-learner: get_meta_learner not available")
+        meta_learner = get_meta_learner(metadata.meta_learner_name)
+        meta_learner.load(meta_dir)
 
         # Load scaler
         scaler = None
@@ -740,25 +729,36 @@ class EnsembleBundle:
                 "and each bundle has a preprocessing graph."
             )
 
-        base_predictions: dict[str, np.ndarray] = {}
-
-        for model_name, bundle in self._base_bundles.items():
-            if bundle.preprocessing_graph is None:
-                logger.warning(
-                    f"Base bundle '{model_name}' has no preprocessing graph, "
-                    f"skipping predict_from_raw."
+        outputs: dict[str, PredictionResult] = {}
+        for model_name in self.metadata.base_model_names:
+            bundle = self._base_bundles.get(model_name)
+            if bundle is None:
+                raise ValueError(
+                    f"Base bundle '{model_name}' is missing; "
+                    "the meta-learner needs every base model it was trained on."
                 )
-                continue
-            output = bundle.predict_from_raw(raw_df, calibrate=False, skip_cleaning=skip_cleaning)
-            base_predictions[model_name] = output.class_probabilities
-
-        if not base_predictions:
-            raise ValueError(
-                "No base bundles produced predictions. "
-                "Ensure at least one base bundle has a preprocessing graph."
+            outputs[model_name] = bundle.predict_from_raw(
+                raw_df, calibrate=False, skip_cleaning=skip_cleaning
             )
 
-        return self.predict(base_predictions, calibrate=calibrate)
+        # Base models emit different row counts (2D rows vs 3D/4D windows need
+        # warmup), so align on bar timestamps: keep bars every model predicted.
+        stamps = [pd.DatetimeIndex(o.metadata["timestamps"]) for o in outputs.values()]
+        common = stamps[0]
+        for ts in stamps[1:]:
+            common = common.intersection(ts)
+        if len(common) == 0:
+            raise ValueError("Base models share no prediction timestamps; provide more history.")
+
+        base_predictions = {
+            name: output.class_probabilities[
+                pd.DatetimeIndex(output.metadata["timestamps"]).get_indexer(common)
+            ]
+            for name, output in outputs.items()
+        }
+        result = self.predict(base_predictions, calibrate=calibrate)
+        result.metadata["timestamps"] = common
+        return result
 
     def _stack_predictions(
         self,
@@ -877,21 +877,15 @@ class EnsembleBundle:
         if self._base_bundles:
             return
 
-        from src.inference.bundle import ModelBundle
+        from src.inference.deploy import describe_bundle, load_bundle
 
-        for _i, bundle_path in enumerate(self.base_bundle_paths):
-            if bundle_path.exists():
-                try:
-                    bundle = ModelBundle.load(bundle_path)
-                    model_name = bundle.metadata.model_name
-
-                    # Use model name from bundle metadata
-                    self._base_bundles[model_name] = bundle
-                    logger.debug(f"Loaded base bundle: {model_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to load base bundle {bundle_path}: {e}")
-            else:
-                logger.warning(f"Base bundle not found: {bundle_path}")
+        for bundle_path in self.base_bundle_paths:
+            info = describe_bundle(bundle_path)
+            if info is None:
+                raise FileNotFoundError(f"Base bundle not found: {bundle_path}")
+            # Any bundle kind can be a base model (e.g. a regime-routed model)
+            self._base_bundles[info.model_name] = load_bundle(bundle_path)
+            logger.debug(f"Loaded base bundle: {info.model_name} ({info.kind})")
 
     def validate(self) -> dict[str, Any]:
         """

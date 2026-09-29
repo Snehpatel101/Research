@@ -1,7 +1,7 @@
 """
 Hyperparameter Optimization - PHASE_1B Complete Search Spaces.
 
-This module provides Optuna-based hyperparameter optimization for ALL 23 models
+This module provides Optuna-based hyperparameter optimization for ALL 24 models
 in the ML Factory pipeline. Each model has carefully tuned search spaces based
 on best practices and empirical results from financial ML applications.
 
@@ -337,6 +337,9 @@ HYPERPARAMETER_SPACES: dict[str, SearchSpaceType] = {
         # Base estimator params (ridge)
         "base_alpha": ("log_float", 1e-4, 100.0),
     },
+    "voting_meta": {
+        # Soft voting averages base-model probabilities — nothing to tune
+    },
     # =========================================================================
     # ENSEMBLE MODELS (3) - Minimal search spaces
     # =========================================================================
@@ -354,10 +357,10 @@ HYPERPARAMETER_SPACES: dict[str, SearchSpaceType] = {
     },
 }
 
-# Verify all 23 models have search spaces
-assert (
-    len(HYPERPARAMETER_SPACES) == 23
-), f"Expected 23 model search spaces, got {len(HYPERPARAMETER_SPACES)}"
+# Verify every model has a search space
+assert len(HYPERPARAMETER_SPACES) == len(
+    ALL_MODELS
+), f"Expected {len(ALL_MODELS)} model search spaces, got {len(HYPERPARAMETER_SPACES)}"
 
 # Verify all models in ALL_MODELS have search spaces
 missing_models = set(ALL_MODELS) - set(HYPERPARAMETER_SPACES.keys())

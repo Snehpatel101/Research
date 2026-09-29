@@ -39,6 +39,7 @@ from .device_utils import (
     get_device_string,
     get_torch_device,
 )
+from .json_utils import NumpyEncoder
 
 # Math utilities (Phase 8A)
 from .math_utils import (
@@ -75,7 +76,7 @@ from .notebook import (
     plot_training_history,
     setup_notebook,
 )
-from .safe_pickle import safe_pickle_load
+from .safe_pickle import safe_pickle_dump, safe_pickle_load
 
 __all__ = [
     # Colab & Environment setup
@@ -139,5 +140,7 @@ __all__ = [
     "get_device_string",
     "get_torch_device",
     # Safe pickle loading
+    "NumpyEncoder",
+    "safe_pickle_dump",
     "safe_pickle_load",
 ]

@@ -97,6 +97,10 @@ class ModelTrainingResult:
     data_rank: int = 2
     calibrator: Any | None = None
     training_degraded: bool = False
+    # Deployment pieces for non-standard training modes, keyed by "kind":
+    #   regime: regime_trainers, detector_config, default_regime
+    #   meta_labeling: primary_model, meta_model, meta_model_name, threshold
+    mode_artifacts: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -401,31 +405,15 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         # Route to appropriate training mode
         mode = TrainingMode(self.config.training_mode)
 
-        # Run feature selection on TRAIN-ONLY data to prevent leakage.
-        # SKIP for walk-forward: each WF window selects features on its own
-        # training data to prevent future-pattern leakage (B08 fix).
-        if mode != TrainingMode.WALK_FORWARD:
-            self._run_feature_selection_on_train_data(df)
-        else:
-            # For walk-forward, populate _all_feature_names so the WF code
-            # can run per-window selection using the same pipeline.
-            exclude_patterns = ["label", "sample_weight", "datetime", "date", "time"]
-            ohlcv_cols = ["open", "high", "low", "close", "volume"]
-            self._all_feature_names = [
-                col
-                for col in df.columns
-                if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
-            ]
-            logger.info(
-                "  Feature selection deferred to per-window (walk-forward mode, "
-                f"{len(self._all_feature_names)} features available)"
-            )
+        # Run feature selection on TRAIN-ONLY data to prevent leakage. In
+        # walk-forward mode these per-model sets only shape the deployable
+        # model (trained on the train split); the evaluation windows still
+        # select features on their own training data (B08 fix).
+        self._run_feature_selection_on_train_data(df)
 
         # Contract validation runs AFTER feature selection so it can check
         # the per-model feature counts against contract min/max bounds.
-        # For walk-forward mode, skip since features are selected per-window.
-        if mode != TrainingMode.WALK_FORWARD:
-            self._post_selection_contract_validation(df)
+        self._post_selection_contract_validation(df)
 
         if mode == TrainingMode.STANDARD:
             self._train_standard(df, additional_dfs)

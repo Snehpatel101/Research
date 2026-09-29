@@ -21,6 +21,16 @@ from ._helpers import np_shift1 as _np_shift1
 logger = logging.getLogger(__name__)
 
 
+def _writable_signal(series: pd.Series) -> np.ndarray:
+    """Float64 copy of *series* that pywt can consume.
+
+    pywt's Cython layer rejects read-only buffers, and pandas>=3 copy-on-write
+    hands out read-only arrays from ``.values`` — without this copy every DWT
+    window raises and all wavelet features silently come out NaN.
+    """
+    return series.to_numpy(dtype=np.float64, copy=True)
+
+
 try:
     import pywt
 
@@ -228,7 +238,7 @@ def add_wavelet_coefficients(
         wavelet = DEFAULT_WAVELET
 
     logger.info(f"Adding wavelet coefficients ({wavelet}, level={level})...")
-    signal = df[price_col].values
+    signal = _writable_signal(df[price_col])
     approx, details = _compute_dwt_rolling(signal, wavelet, level, window, precomputed)
 
     # ANTI-LOOKAHEAD: shift(1) ensures features at bar[t] use data up to bar[t-1]
@@ -275,7 +285,7 @@ def add_wavelet_energy(
         return df
 
     logger.info(f"Adding wavelet energy features ({wavelet}, level={level})...")
-    signal = df[price_col].values
+    signal = _writable_signal(df[price_col])
     approx_energy, detail_energies = _compute_energy_rolling(
         signal, wavelet, level, window, precomputed
     )
@@ -322,7 +332,7 @@ def add_wavelet_volatility(
     if precomputed is not None:
         wavelet_vol = precomputed["wavelet_vol"]
     else:
-        signal = df[price_col].values
+        signal = _writable_signal(df[price_col])
         n = len(signal)
         wavelet_vol = np.full(n, np.nan)
         actual_window = max(window, 8)
@@ -368,7 +378,7 @@ def add_wavelet_trend_strength(
         trend_strength = precomputed["trend_strength"]
         trend_direction = precomputed["trend_direction"]
     else:
-        signal = df[price_col].values
+        signal = _writable_signal(df[price_col])
         n = len(signal)
         trend_strength = np.full(n, np.nan)
         trend_direction = np.full(n, np.nan)
@@ -440,7 +450,7 @@ def add_wavelet_features(
     initial_cols = len(df.columns)
 
     # Precompute DWT once for price signal (consolidates 4 redundant DWT calls)
-    price_precomputed = _compute_dwt_all(df[price_col].values, wavelet, level, window)
+    price_precomputed = _compute_dwt_all(_writable_signal(df[price_col]), wavelet, level, window)
 
     # Price coefficients (uses precomputed)
     df = add_wavelet_coefficients(

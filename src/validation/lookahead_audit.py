@@ -364,6 +364,10 @@ class LookaheadAuditor:
         for col in columns:
             if col not in df.columns:
                 continue
+            # NaN/random corruption values are floats; integer columns (e.g. volume)
+            # must be upcast first — pandas>=3 refuses silent int->float upcasts.
+            if not pd.api.types.is_float_dtype(df[col]):
+                df[col] = df[col].astype("float64")
 
             if self.corruption_method == "nan":
                 df.loc[df.index[start_idx:], col] = np.nan

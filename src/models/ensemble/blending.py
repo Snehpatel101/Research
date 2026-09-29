@@ -12,11 +12,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import joblib
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-from src.core.utils.safe_pickle import safe_pickle_load
+from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..registry import ModelRegistry, register
@@ -435,14 +434,14 @@ class BlendingEnsemble(BaseModel):
             "feature_names": self._feature_names,
             "n_base_models": len(self._base_models),
         }
-        joblib.dump(metadata, path / "ensemble_metadata.joblib")
+        safe_pickle_dump(metadata, path / "ensemble_metadata.pkl")
 
         logger.info(f"Saved BlendingEnsemble to {path}")
 
     def load(self, path: Path) -> None:
         """Load blending ensemble and all component models."""
         path = Path(path)
-        metadata_path = path / "ensemble_metadata.joblib"
+        metadata_path = path / "ensemble_metadata.pkl"
         if not metadata_path.exists():
             raise FileNotFoundError(f"Ensemble metadata not found: {metadata_path}")
 

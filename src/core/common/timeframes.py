@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import warnings
 
+import pandas as pd
+
 # =============================================================================
 # CANONICAL TIMEFRAME DEFINITIONS
 # =============================================================================
@@ -485,3 +487,31 @@ def get_canonical_from_suffix(suffix: str) -> str:
         return f"{minutes}min"
     else:
         raise ValueError(f"Unrecognized suffix format: '{suffix}'")
+
+
+def detect_timeframe(df: pd.DataFrame) -> str | None:
+    """
+    Detect the bar timeframe of an OHLCV frame from its datetime column or index.
+
+    Uses the median bar spacing (robust to overnight/weekend gaps).
+
+    Returns:
+        Canonical timeframe string (e.g. "1min", "5min", "60min"), or None if
+        the spacing is not a supported timeframe or there are < 2 bars.
+    """
+    if "datetime" in df.columns:
+        dt = pd.to_datetime(df["datetime"])
+    elif isinstance(df.index, pd.DatetimeIndex):
+        dt = pd.Series(df.index)
+    else:
+        return None
+    diffs = dt.diff().dropna()
+    if diffs.empty:
+        return None
+
+    minutes = diffs.median().total_seconds() / 60
+    rounded = round(minutes)
+    if rounded <= 0 or abs(rounded - minutes) >= 0.5:
+        return None
+    timeframe = f"{rounded}min"
+    return timeframe if is_valid_timeframe(timeframe) else None

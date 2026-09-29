@@ -625,15 +625,12 @@ class OHLCVFeatureSelector:
         corr = corr.fillna(0)
 
         # Distance = 1 - |correlation|
-        dist = 1 - corr.abs()
-        np.fill_diagonal(dist.values, 0)
-
-        # Handle edge cases (all same values, etc.)
-        dist = dist.clip(lower=0)
+        dist_arr = (1 - corr.abs()).clip(lower=0).to_numpy(copy=True)
+        np.fill_diagonal(dist_arr, 0)
 
         try:
             # Hierarchical clustering
-            dist_condensed = squareform(dist.values, checks=False)
+            dist_condensed = squareform(dist_arr, checks=False)
             linkage_matrix = linkage(dist_condensed, method="ward")
 
             # Cluster at correlation threshold

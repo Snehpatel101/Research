@@ -50,3 +50,17 @@ def safe_pickle_load(
         )
 
     return obj
+
+
+def safe_pickle_dump(obj: Any, path: str | Path) -> None:
+    """
+    Serialize *obj* to *path* in the format :func:`safe_pickle_load` reads.
+
+    This is the single write-side counterpart for every artifact loaded via
+    ``safe_pickle_load``. Writing with ``joblib.dump`` instead produces files
+    that plain ``pickle.load`` cannot read whenever they contain numpy arrays.
+    """
+    path = Path(path)
+    logger.debug("Saving pickle: %s", path)
+    with open(path, "wb") as f:
+        pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)

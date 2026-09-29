@@ -94,7 +94,7 @@ class TripleBarrierConfig:
     lower_mult: float = 2.0
     horizon: int = 20
     atr_period: int = 14
-    atr_column: str = "atr_14"
+    atr_column: str | None = "atr_14"  # None = compute Wilder ATR inline from OHLCV
     use_adaptive_barriers: bool = False
     vol_lookback: int = 60
     apply_transaction_costs: bool = True

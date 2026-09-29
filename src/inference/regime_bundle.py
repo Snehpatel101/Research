@@ -1,28 +1,21 @@
 """
-RegimeBundle - Per-regime model routing for inference.
+RegimeBundle - per-bar regime routing for regime-aware models.
 
-Routes predictions through regime-specific ModelBundles based on the
-current market regime detected by a RegimeDetector.
+Regime-aware training fits one model per market regime (same model family,
+same features, different training subsets). At inference every bar is routed
+to the model of *its* regime, using the exact RegimeDetector configuration the
+training run used — the same routing that produced the model's regime-routed
+OOF predictions.
 
-Implements the InferenceBundle protocol from src.core.protocols.
+Layout on disk:
+    path/
+        regime_bundle_metadata.json
+        regimes/<regime>/        (one ModelBundle per regime)
 
 Usage:
-    from src.inference import ModelBundle
-    from src.inference.regime_detector import RegimeDetector
-    from src.inference.regime_bundle import RegimeBundle
-
-    detector = RegimeDetector()
-    bundles = {
-        "high_vol_trending": ModelBundle.load("./bundles/xgb_hvt"),
-        "low_vol_ranging": ModelBundle.load("./bundles/lgbm_lvr"),
-    }
-    bundle = RegimeBundle(
-        regime_detector=detector,
-        regime_bundles=bundles,
-        default_regime="low_vol_ranging",
-    )
-    result = bundle.predict_from_raw(raw_df)
-    bundle.save("./bundles/regime_h20")
+    bundle = RegimeBundle.load("./bundles/xgboost_h5")
+    result = bundle.predict_from_raw(raw_ohlcv_df)
+    result.metadata["regimes"]  # regime label used for each prediction row
 """
 
 from __future__ import annotations
@@ -36,98 +29,79 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.constants import OHLCV_COLUMNS
+from src.core.utils.json_utils import NumpyEncoder
 from src.inference.bundle import ModelBundle
-from src.inference.regime_detector import RegimeDetector
+from src.inference.preprocessing_graph import PreprocessingGraph
 from src.models.base import PredictionResult
 
 logger = logging.getLogger(__name__)
 
-REGIME_BUNDLE_VERSION = "1.0.0"
+REGIME_BUNDLE_VERSION = "2.0.0"
 REGIME_BUNDLE_METADATA_FILE = "regime_bundle_metadata.json"
-REGIME_DETECTOR_DIR = "regime_detector"
-REGIME_BUNDLES_DIR = "regime_bundles"
-
-
-# =============================================================================
-# REGIME BUNDLE
-# =============================================================================
+REGIME_BUNDLES_DIR = "regimes"
 
 
 class RegimeBundle:
-    """Per-regime model routing bundle.
-
-    Detects the current market regime from raw OHLCV data, then routes
-    prediction to the corresponding regime-specific ModelBundle.
-
-    Falls back to default_regime when detection fails or the detected
-    regime has no dedicated bundle.
+    """Routes each bar to the ModelBundle trained on that bar's regime.
 
     Satisfies the InferenceBundle protocol.
     """
 
     def __init__(
         self,
-        regime_detector: RegimeDetector,
         regime_bundles: dict[str, ModelBundle],
-        default_regime: str = "low_vol_ranging",
+        detector_config: dict[str, Any],
+        default_regime: str,
+        model_name: str,
+        horizon: int,
+        metrics: dict[str, Any] | None = None,
     ) -> None:
         """
         Args:
-            regime_detector: Detector that classifies market regime.
-            regime_bundles: Mapping of regime_name -> ModelBundle.
-            default_regime: Fallback regime if detection fails or regime
-                is missing from regime_bundles.
+            regime_bundles: regime label -> ModelBundle trained on that regime.
+            detector_config: ``asdict(RegimeDetectorConfig)`` used in training.
+            default_regime: Regime whose model serves bars of a regime that had
+                too few training samples to get its own model.
+            model_name: Base model name (e.g. "xgboost").
+            horizon: Prediction horizon in bars.
+            metrics: Training metrics recorded for the deploy manifest.
         """
-        self.regime_detector = regime_detector
+        if default_regime not in regime_bundles:
+            raise ValueError(f"default_regime '{default_regime}' has no bundle")
         self.regime_bundles = regime_bundles
+        self.detector_config = dict(detector_config)
         self.default_regime = default_regime
+        self.model_name = model_name
+        self.horizon = horizon
+        self.metrics = metrics or {}
 
-    def _resolve_bundle(self, regime: str) -> ModelBundle:
-        """Resolve regime to its ModelBundle, falling back if needed."""
-        if regime in self.regime_bundles:
-            return self.regime_bundles[regime]
+    # -----------------------------------------------------------------
+    # Regime detection
+    # -----------------------------------------------------------------
 
-        logger.warning(
-            "No bundle for regime '%s', falling back to default '%s'",
-            regime,
-            self.default_regime,
-        )
-        if self.default_regime in self.regime_bundles:
-            return self.regime_bundles[self.default_regime]
+    def detect_regimes(self, raw_df: pd.DataFrame, skip_cleaning: bool = False) -> pd.Series:
+        """Regime label of every bar (at the training bar timeframe)."""
+        from src.models.training.regime_detector import RegimeDetector
 
-        # Last resort: use the first available bundle
-        first_key = next(iter(self.regime_bundles))
-        logger.warning(
-            "Default regime '%s' also missing, using first available bundle '%s'",
-            self.default_regime,
-            first_key,
-        )
-        return self.regime_bundles[first_key]
+        graph = next(iter(self.regime_bundles.values())).preprocessing_graph
+        bars = PreprocessingGraph._to_datetime_column(raw_df)
+        if graph is not None and not skip_cleaning:
+            bars = graph._resample_to_bar_timeframe(bars)
+        bars = bars.set_index("datetime")[list(OHLCV_COLUMNS)]
+        return RegimeDetector(**self.detector_config).detect(bars).regimes
 
     # -----------------------------------------------------------------
     # InferenceBundle protocol
     # -----------------------------------------------------------------
 
-    def predict(
-        self,
-        X: pd.DataFrame | np.ndarray,
-        calibrate: bool = True,
-    ) -> PredictionResult:
-        """Predict using the default regime bundle.
+    def predict(self, X: pd.DataFrame | np.ndarray, calibrate: bool = True) -> PredictionResult:
+        """Predict pre-computed features with the default regime's model.
 
-        When calling predict() with pre-processed features there is no
-        raw OHLCV data to detect a regime from, so the default regime
-        bundle is used.
-
-        Args:
-            X: Input features (DataFrame or array).
-            calibrate: Whether to apply calibration.
-
-        Returns:
-            PredictionResult from the default regime bundle.
+        Pre-computed features carry no OHLCV to detect regimes from; use
+        :meth:`predict_from_raw` for regime routing.
         """
-        bundle = self._resolve_bundle(self.default_regime)
-        return bundle.predict(X, calibrate=calibrate)
+        return self.regime_bundles[self.default_regime].predict(X, calibrate=calibrate)
 
     def predict_from_raw(
         self,
@@ -135,145 +109,100 @@ class RegimeBundle:
         calibrate: bool = True,
         skip_cleaning: bool = False,
     ) -> PredictionResult:
-        """Detect regime then route prediction to the correct bundle.
+        """Predict every bar with the model of that bar's regime."""
+        regimes = self.detect_regimes(raw_df, skip_cleaning=skip_cleaning)
+        outputs = {
+            regime: bundle.predict_from_raw(
+                raw_df, calibrate=calibrate, skip_cleaning=skip_cleaning
+            )
+            for regime, bundle in self.regime_bundles.items()
+        }
 
-        Args:
-            raw_df: DataFrame with raw OHLCV data.
-            calibrate: Whether to apply calibration.
-            skip_cleaning: If True, skip resampling step.
+        # All regime models share one architecture, so their timestamps match;
+        # intersect anyway to be robust to warmup differences.
+        stamps = [pd.DatetimeIndex(o.metadata["timestamps"]) for o in outputs.values()]
+        common = stamps[0]
+        for ts in stamps[1:]:
+            common = common.intersection(ts)
 
-        Returns:
-            PredictionResult from the regime-specific bundle.
-        """
-        regime = self.regime_detector.detect(raw_df)
-        logger.info("Regime detected: %s", regime)
+        bar_regimes = regimes.reindex(common).fillna(self.default_regime).to_numpy()
+        routed = np.where(
+            np.isin(bar_regimes, list(self.regime_bundles)), bar_regimes, self.default_regime
+        )
 
-        bundle = self._resolve_bundle(regime)
-        return bundle.predict_from_raw(raw_df, calibrate=calibrate, skip_cleaning=skip_cleaning)
+        n_classes = next(iter(outputs.values())).class_probabilities.shape[1]
+        probabilities = np.empty((len(common), n_classes))
+        predictions = np.empty(len(common), dtype=np.int64)
+        for regime, output in outputs.items():
+            rows = routed == regime
+            if not rows.any():
+                continue
+            src = pd.DatetimeIndex(output.metadata["timestamps"]).get_indexer(common[rows])
+            probabilities[rows] = output.class_probabilities[src]
+            predictions[rows] = output.class_predictions[src]
+
+        return PredictionResult(
+            class_predictions=predictions,
+            class_probabilities=probabilities,
+            confidence=probabilities.max(axis=1),
+            metadata={"timestamps": common, "regimes": routed},
+        )
 
     # -----------------------------------------------------------------
     # Serialization
     # -----------------------------------------------------------------
 
     def save(self, path: str | Path, overwrite: bool = False) -> Path:
-        """Save regime bundle to disk.
-
-        Structure:
-            path/
-                regime_bundle_metadata.json
-                regime_detector/
-                regime_bundles/
-                    <regime_name>/   (each a ModelBundle)
-
-        Args:
-            path: Directory path.
-            overwrite: If True, overwrite existing.
-
-        Returns:
-            Path to saved bundle.
-        """
+        """Save the regime bundle (metadata + one ModelBundle per regime)."""
         path = Path(path)
-
         if path.exists():
-            if overwrite:
-                shutil.rmtree(path)
-            else:
-                raise FileExistsError(
-                    f"Bundle already exists at {path}. Use overwrite=True to replace."
-                )
+            if not overwrite:
+                raise FileExistsError(f"Bundle already exists at {path}. Use overwrite=True.")
+            shutil.rmtree(path)
+        path.mkdir(parents=True)
 
-        path.mkdir(parents=True, exist_ok=True)
-
-        # Save metadata
-        meta: dict[str, Any] = {
+        metadata = {
             "version": REGIME_BUNDLE_VERSION,
+            "model_name": self.model_name,
+            "horizon": self.horizon,
             "default_regime": self.default_regime,
-            "regime_names": list(self.regime_bundles.keys()),
+            "detector_config": self.detector_config,
+            "regimes": sorted(self.regime_bundles),
+            "metrics": self.metrics,
         }
         with open(path / REGIME_BUNDLE_METADATA_FILE, "w") as f:
-            json.dump(meta, f, indent=2)
-
-        # Save detector
-        self.regime_detector.save(path / REGIME_DETECTOR_DIR)
-
-        # Save per-regime bundles
-        bundles_dir = path / REGIME_BUNDLES_DIR
-        bundles_dir.mkdir(parents=True, exist_ok=True)
-        for regime_name, bundle in self.regime_bundles.items():
-            bundle.save(bundles_dir / regime_name, overwrite=overwrite)
-
-        logger.info(
-            "Saved RegimeBundle (%d regimes, default=%s) to %s",
-            len(self.regime_bundles),
-            self.default_regime,
-            path,
-        )
+            json.dump(metadata, f, indent=2, cls=NumpyEncoder)
+        for regime, bundle in self.regime_bundles.items():
+            bundle.save(path / REGIME_BUNDLES_DIR / regime)
+        logger.info(f"Saved RegimeBundle ({self.model_name}, regimes={metadata['regimes']})")
         return path
 
     @classmethod
     def load(cls, path: str | Path) -> RegimeBundle:
-        """Load regime bundle from disk.
-
-        Args:
-            path: Path to bundle directory.
-
-        Returns:
-            Loaded RegimeBundle.
-
-        Raises:
-            FileNotFoundError: If bundle or components are missing.
-        """
+        """Load a regime bundle saved with :meth:`save`."""
         path = Path(path)
-
-        if not path.is_dir():
-            raise FileNotFoundError(f"RegimeBundle not found at {path}")
-
-        # Load metadata
-        meta_path = path / REGIME_BUNDLE_METADATA_FILE
-        if not meta_path.exists():
+        metadata_path = path / REGIME_BUNDLE_METADATA_FILE
+        if not metadata_path.exists():
             raise FileNotFoundError(f"Missing {REGIME_BUNDLE_METADATA_FILE} in {path}")
-
-        with open(meta_path) as f:
-            meta = json.load(f)
-
-        default_regime = meta.get("default_regime", "low_vol_ranging")
-        regime_names: list[str] = meta.get("regime_names", [])
-
-        # Load detector
-        detector = RegimeDetector.load(path / REGIME_DETECTOR_DIR)
-
-        # Load per-regime bundles
-        regime_bundles: dict[str, ModelBundle] = {}
-        bundles_dir = path / REGIME_BUNDLES_DIR
-        for regime_name in regime_names:
-            regime_path = bundles_dir / regime_name
-            if regime_path.is_dir():
-                regime_bundles[regime_name] = ModelBundle.load(regime_path)
-                logger.debug("Loaded bundle for regime '%s'", regime_name)
-            else:
-                logger.warning("Bundle for regime '%s' not found at %s", regime_name, regime_path)
-
-        logger.info(
-            "Loaded RegimeBundle (%d regimes, default=%s) from %s",
-            len(regime_bundles),
-            default_regime,
-            path,
-        )
-
+        with open(metadata_path) as f:
+            metadata = json.load(f)
         return cls(
-            regime_detector=detector,
-            regime_bundles=regime_bundles,
-            default_regime=default_regime,
+            regime_bundles={
+                regime: ModelBundle.load(path / REGIME_BUNDLES_DIR / regime)
+                for regime in metadata["regimes"]
+            },
+            detector_config=metadata["detector_config"],
+            default_regime=metadata["default_regime"],
+            model_name=metadata["model_name"],
+            horizon=metadata["horizon"],
+            metrics=metadata.get("metrics", {}),
         )
 
     def __repr__(self) -> str:
         return (
-            f"RegimeBundle(regimes={list(self.regime_bundles.keys())}, "
-            f"default={self.default_regime!r})"
+            f"RegimeBundle(model={self.model_name!r}, horizon={self.horizon}, "
+            f"regimes={sorted(self.regime_bundles)}, default={self.default_regime!r})"
         )
 
 
-__all__ = [
-    "RegimeBundle",
-    "REGIME_BUNDLE_VERSION",
-]
+__all__ = ["RegimeBundle", "REGIME_BUNDLE_VERSION", "REGIME_BUNDLE_METADATA_FILE"]

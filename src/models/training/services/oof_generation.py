@@ -13,7 +13,7 @@ from src.data.adapters import PreparedData
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
-from src.validation.cv.oof_core import _get_prob_column_names
+from src.validation.cv.oof_core import _get_prob_column_names, reindex_oof_to_rows
 from src.validation.cv.oof_validation import OOFValidator
 
 logger = logging.getLogger(__name__)
@@ -86,21 +86,6 @@ class OOFGenerationService:
             embargo_bars=request.embargo_bars,
         )
         return PurgedKFold(cv_config)
-
-    def _flatten_to_2d(self, X: np.ndarray, data_rank: int) -> np.ndarray:
-        """
-        Flatten multi-dimensional data to 2D for OOF generation.
-
-        Args:
-            X: Input array of any dimensionality
-            data_rank: Rank of the data (2, 3, or 4)
-
-        Returns:
-            2D array of shape (n_samples, n_features)
-        """
-        if data_rank > 2:
-            return X.reshape(X.shape[0], -1)
-        return X
 
     def generate_oof(self, request: OOFRequest) -> OOFPrediction | None:
         """
@@ -178,15 +163,16 @@ class OOFGenerationService:
     def _generate_oof_inner(self, request: OOFRequest) -> OOFPrediction | None:
         """Core OOF generation logic (no error handling — called by generate_oof)."""
         prepared = request.prepared_data
+        row_positions = prepared.train_indices
 
-        # Route 4D models to dedicated 4D OOF path
-        if prepared.data_rank == 4:
-            return self._generate_4d_oof(request)
+        # Sequence (3D) and multi-stream (4D) samples are already windows:
+        # split them by sample index. Flattening them and re-windowing would
+        # train OOF models on windows-of-windows (seq_len x the features).
+        if prepared.data_rank in (3, 4):
+            return reindex_oof_to_rows(self._generate_windowed_oof(request), row_positions)
 
         model_name = request.model_name
-
-        # Flatten to 2D for OOF generation (handles 3D→2D)
-        X_train_2d = self._flatten_to_2d(prepared.X_train, prepared.data_rank)
+        X_train_2d = prepared.X_train
 
         X_train_df = pd.DataFrame(
             X_train_2d,
@@ -222,16 +208,16 @@ class OOFGenerationService:
                 leakage_result["n_violations"],
             )
 
-        return oof_predictions.get(model_name)
+        return reindex_oof_to_rows(oof_predictions.get(model_name), row_positions)
 
-    def _generate_4d_oof(self, request: OOFRequest) -> OOFPrediction | None:
+    def _generate_windowed_oof(self, request: OOFRequest) -> OOFPrediction | None:
         """
-        Generate OOF predictions for 4D (multi-stream) models.
+        Generate OOF predictions for windowed (3D sequence / 4D multi-stream) models.
 
-        4D models (PatchTST, iTransformer, TFT) have PreparedData with
-        X_train of shape (n_samples, n_timeframes, seq_len, n_features).
-        Each sample is already a windowed multi-timeframe tensor, so we
-        split by sample index for CV (no re-windowing needed).
+        PreparedData X_train has shape (n_samples, seq_len, n_features) or
+        (n_samples, n_timeframes, seq_len, n_features). Each sample is
+        already a window ending at its label bar, so CV splits by sample
+        index (no re-windowing needed).
 
         Args:
             request: OOF generation request
@@ -241,14 +227,14 @@ class OOFGenerationService:
         """
         prepared = request.prepared_data
         model_name = request.model_name
-        X_4d = prepared.X_train  # (n_samples, n_timeframes, seq_len, n_features)
+        X_4d = prepared.X_train  # (n_samples, [n_timeframes,] seq_len, n_features)
         y = prepared.y_train
 
         n_samples = X_4d.shape[0]
         n_classes = request.n_classes
 
         logger.info(
-            f"Generating 4D OOF predictions for {model_name} "
+            f"Generating windowed OOF predictions for {model_name} "
             f"(shape={X_4d.shape}, n_splits={request.n_splits})"
         )
 
@@ -280,7 +266,7 @@ class OOFGenerationService:
             y_train_fold = y[train_idx]
             y_val_fold = y[val_idx]
 
-            # Per-fold scaling: reshape 4D→2D, scale in-place, reshape back
+            # Per-fold scaling: reshape to 2D, scale in-place, reshape back
             orig_train_shape = X_train_fold.shape
             orig_val_shape = X_val_fold.shape
             X_train_2d = X_train_fold.reshape(-1, orig_train_shape[-1])
@@ -354,7 +340,7 @@ class OOFGenerationService:
         )
         if not leakage_result["passed"]:
             logger.error(
-                "4D OOF fold leakage detected for %s: %d violations",
+                "Windowed OOF fold leakage detected for %s: %d violations",
                 model_name,
                 leakage_result["n_violations"],
             )
@@ -363,7 +349,7 @@ class OOFGenerationService:
         coverage = float((~np.isnan(oof_preds)).mean())
         if coverage < 1.0:
             logger.warning(
-                f"{model_name}: 4D OOF coverage {coverage:.2%}. "
+                f"{model_name}: windowed OOF coverage {coverage:.2%}. "
                 f"{int(np.isnan(oof_preds).sum())} samples missing predictions."
             )
 

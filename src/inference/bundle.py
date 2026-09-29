@@ -320,7 +320,9 @@ class ModelBundle:
 
                 contract = get_model_contract(model_name)
                 if contract.input_rank.value == 4:
-                    n_timeframes = 1 + len(contract.mtf_timeframes)
+                    # Prefer the streams training actually built over the contract
+                    trained_tfs = (extra_metadata or {}).get("timeframe_names") or []
+                    n_timeframes = len(trained_tfs) or 1 + len(contract.mtf_timeframes)
                     if contract.feature_mode == FeatureMode.RAW:
                         # RAW multi-stream models use OHLCV per timeframe
                         n_features = 5
@@ -733,52 +735,39 @@ class ModelBundle:
         Returns:
             PredictionResult with predictions and probabilities
         """
-        # Convert to array and validate features
-        X_array = self._prepare_input(X)
-
-        # Apply scaling
-        if self.scaler is not None:
-            if self.metadata.requires_4d:
-                # For 4D sequences, reshape, scale, reshape back
-                orig_shape = X_array.shape
-                X_flat = X_array.reshape(-1, orig_shape[-1])
-                scaler_features = getattr(self.scaler, "n_features_in_", None)
-                if scaler_features and scaler_features != orig_shape[-1]:
-                    raise ValueError(
-                        f"Scaler expects {scaler_features} features but 4D input has "
-                        f"{orig_shape[-1]} features per timeframe."
-                    )
-                X_scaled = self.scaler.transform(X_flat)
-                X_array = X_scaled.reshape(orig_shape)
-            elif self.metadata.requires_sequences:
-                # For 3D sequences, reshape, scale, reshape back
-                orig_shape = X_array.shape
-                X_flat = X_array.reshape(-1, orig_shape[-1])
-                scaler_features = getattr(self.scaler, "n_features_in_", None)
-                if scaler_features and scaler_features != orig_shape[-1]:
-                    raise ValueError(
-                        f"Scaler expects {scaler_features} features but sequence input has "
-                        f"{orig_shape[-1]} features."
-                    )
-                X_scaled = self.scaler.transform(X_flat)
-                X_array = X_scaled.reshape(orig_shape)
-            else:
-                scaler_features = getattr(self.scaler, "n_features_in_", None)
-                if scaler_features and scaler_features != X_array.shape[1]:
-                    raise ValueError(
-                        f"Scaler expects {scaler_features} features but tabular input has "
-                        f"{X_array.shape[1]} features."
-                    )
-                X_array = self.scaler.transform(X_array)
-
-        # Make predictions
-        output = self.model.predict(X_array)
+        output = self.model.predict(self.model_input(X))
 
         # Apply calibration
         if calibrate and self.calibrator is not None:
             output = self._apply_calibration(output)
 
         return output
+
+    def model_input(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
+        """
+        Validate X and apply the bundle scaler: exactly what ``model.predict`` sees.
+
+        Args:
+            X: Features — DataFrame/2D array for tabular models, 3D windows for
+                sequence models, 4D multi-stream tensors for 4D models.
+
+        Returns:
+            float32 array in the model's input rank.
+        """
+        X_array = self._prepare_input(X)
+        if self.scaler is None:
+            return X_array
+
+        # Scaler is fit per feature (last axis) for every input rank
+        n_feat = X_array.shape[-1]
+        scaler_features = getattr(self.scaler, "n_features_in_", None)
+        if scaler_features and scaler_features != n_feat:
+            raise ValueError(
+                f"Scaler expects {scaler_features} features but "
+                f"{X_array.ndim}D input has {n_feat} features."
+            )
+        scaled = self.scaler.transform(X_array.reshape(-1, n_feat))
+        return np.asarray(scaled, dtype=np.float32).reshape(X_array.shape)
 
     def _prepare_input(
         self,
@@ -973,17 +962,14 @@ class ModelBundle:
             skip_scaling=True,
         )
 
-        # Ensure feature columns match
-        available_cols = [c for c in self.feature_columns if c in features.columns]
-        if len(available_cols) != len(self.feature_columns):
-            missing = set(self.feature_columns) - set(available_cols)
-            logger.warning(
-                f"Preprocessing generated {len(features.columns)} columns, "
-                f"but model expects {len(self.feature_columns)}. "
-                f"Missing {len(missing)} columns: {list(missing)[:5]}..."
+        missing = [c for c in self.feature_columns if c not in features.columns]
+        if missing:
+            raise ValueError(
+                f"Preprocessing did not produce {len(missing)} of the "
+                f"{len(self.feature_columns)} trained feature columns "
+                f"(e.g. {missing[:5]})."
             )
-
-        return features[available_cols]
+        return features[self.feature_columns]
 
     def predict_from_raw(
         self,
@@ -1015,21 +1001,39 @@ class ModelBundle:
         Returns:
             PredictionResult with predictions and probabilities
         """
+        X, timestamps = self.raw_to_input(
+            raw_df, skip_cleaning=skip_cleaning, additional_dfs=additional_dfs
+        )
+        result = self.predict(X, calibrate=calibrate)
+        # Bar timestamp of every prediction row — lets ensembles align base
+        # models whose warmup (sequence windows, 4D streams) differs.
+        result.metadata["timestamps"] = timestamps
+        return result
+
+    def raw_to_input(
+        self,
+        raw_df: pd.DataFrame,
+        skip_cleaning: bool = False,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> tuple[np.ndarray | pd.DataFrame, pd.DatetimeIndex]:
+        """
+        Raw OHLCV -> unscaled model input in the model's rank, plus bar timestamps.
+
+        Pass the result to :meth:`predict` (or :meth:`model_input` for the
+        scaled array the model sees).
+        """
         if self.metadata.requires_4d:
             # Auto-generate MTF DataFrames when not provided
             if additional_dfs is None:
                 additional_dfs = self._generate_mtf_dataframes(raw_df)
-            X = self._apply_adapter(
+            return self._apply_adapter(
                 features_2d=pd.DataFrame(),
                 raw_df=raw_df,
                 additional_dfs=additional_dfs,
                 skip_cleaning=skip_cleaning,
             )
-        else:
-            features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
-            X = self._apply_adapter(features_2d=features)
-
-        return self.predict(X, calibrate=calibrate)
+        features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
+        return self._apply_adapter(features_2d=features)
 
     # -----------------------------------------------------------------
     # Adapter routing helpers
@@ -1041,7 +1045,7 @@ class ModelBundle:
         raw_df: pd.DataFrame | None = None,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
         skip_cleaning: bool = False,
-    ) -> np.ndarray | pd.DataFrame:
+    ) -> tuple[np.ndarray | pd.DataFrame, pd.DatetimeIndex]:
         """Route features through the correct adapter based on model input rank.
 
         Centralises the 2D → 3D → 4D routing that ``predict_from_raw``
@@ -1055,10 +1059,9 @@ class ModelBundle:
             skip_cleaning: Whether to skip resampling in 4D path.
 
         Returns:
-            Adapted input ready for predict():
-            - np.ndarray of shape (N, TF, T, F) for 4D models
-            - np.ndarray of shape (N, T, F) for 3D sequence models
-            - pd.DataFrame for 2D tabular models
+            (X, timestamps): adapted input ready for predict() —
+            np.ndarray (N, TF, T, F) for 4D, np.ndarray (N, T, F) for 3D,
+            pd.DataFrame for 2D — and the bar timestamp of each of the N rows.
         """
         if self.metadata.requires_4d:
             if raw_df is None:
@@ -1072,10 +1075,12 @@ class ModelBundle:
             return self._build_4d_input(raw_df, additional_dfs, skip_cleaning)
 
         if self.metadata.requires_sequences:
-            return self._build_3d_input(features_2d)
+            X_3d = self._build_3d_input(features_2d)
+            # Window i ends at row i + seq_len - 1
+            return X_3d, pd.DatetimeIndex(features_2d.index[len(features_2d) - len(X_3d) :])
 
         # Tabular 2D — pass through unchanged
-        return features_2d
+        return features_2d, pd.DatetimeIndex(features_2d.index)
 
     def _generate_mtf_dataframes(
         self,
@@ -1193,7 +1198,7 @@ class ModelBundle:
         raw_df: pd.DataFrame,
         additional_dfs: dict[str, pd.DataFrame] | None,
         skip_cleaning: bool,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, pd.DatetimeIndex]:
         """Build 4D multi-stream input for multi-timeframe models.
 
         Uses the MultiStreamAdapter to convert raw OHLCV DataFrames
@@ -1205,7 +1210,7 @@ class ModelBundle:
             skip_cleaning: Whether to skip resampling.
 
         Returns:
-            4D numpy array ready for predict().
+            (4D array ready for predict(), anchor bar timestamp of each window).
 
         Raises:
             AdapterRoutingError: If multi-timeframe data is missing.
@@ -1227,23 +1232,27 @@ class ModelBundle:
         seq_len = self.metadata.sequence_length or 60
         n_timeframes = self.metadata.n_timeframes or (1 + len(additional_dfs))
 
-        # Determine timeframes from additional_dfs keys
-        # Anchor is inferred as the smallest timeframe (not in additional_dfs)
-        timeframes = list(additional_dfs.keys())
-        # Prepend an anchor placeholder — the adapter expects the anchor first
-        # We assume anchor = first timeframe the user omitted (i.e. "1min")
-        anchor_tf = "1min"
-        if timeframes and anchor_tf not in timeframes:
-            timeframes = [anchor_tf] + timeframes
+        # Rebuild exactly the streams used in training (anchor first). Legacy
+        # bundles without recorded timeframes fall back to the old guess:
+        # anchor "1min" followed by the provided additional_dfs keys.
+        timeframes = list(self.metadata.extra.get("timeframe_names") or [])
+        if not timeframes:
+            timeframes = ["1min"] + [tf for tf in additional_dfs if tf != "1min"]
 
+        label_column = f"label_h{self.metadata.horizon}"
         adapter = MultiStreamAdapter(
             sequence_length=seq_len,
             timeframes=timeframes,
-            label_column="label_h" + str(self.metadata.horizon),
+            label_column=label_column,
         )
 
+        # The adapter emits (X, y); labels are unknown at inference, so the
+        # anchor carries a placeholder label column whose values are ignored.
+        anchor_df = self._anchor_bars(raw_df, skip_cleaning)
+        anchor_df[label_column] = 0
+
         try:
-            result = adapter.transform(raw_df, additional_dfs=additional_dfs)
+            result = adapter.transform(anchor_df, additional_dfs=additional_dfs)
         except Exception as e:
             raise AdapterRoutingError(
                 model_name=self.metadata.model_name,
@@ -1254,7 +1263,18 @@ class ModelBundle:
         logger.debug(
             f"_build_4d_input: {result.X.shape} " f"({n_timeframes} timeframes, seq_len={seq_len})"
         )
-        return result.X
+        return result.X, pd.DatetimeIndex(anchor_df.index[result.original_indices])
+
+    def _anchor_bars(self, raw_df: pd.DataFrame, skip_cleaning: bool) -> pd.DataFrame:
+        """Raw OHLCV at the training bar timeframe, DatetimeIndex, OHLCV columns only."""
+        from src.core.constants import OHLCV_COLUMNS
+        from src.inference.preprocessing_graph import PreprocessingGraph
+
+        graph = self.preprocessing_graph
+        df = PreprocessingGraph._to_datetime_column(raw_df)
+        if graph is not None and not skip_cleaning:
+            df = graph._resample_to_bar_timeframe(df)
+        return df.set_index("datetime")[list(OHLCV_COLUMNS)]
 
     @staticmethod
     def _file_checksum(path: Path) -> str:

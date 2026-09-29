@@ -45,12 +45,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import joblib
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import f1_score
 
-from src.core.utils.safe_pickle import safe_pickle_load
+from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 logger = logging.getLogger(__name__)
 
@@ -575,7 +574,7 @@ class SecondLevelStacker:
             "n_features_per_model": self._n_features_per_model,
             "model_names": self._model_names,
         }
-        joblib.dump(metadata, path / "second_level_metadata.joblib")
+        safe_pickle_dump(metadata, path / "second_level_metadata.pkl")
 
         logger.info(f"Saved SecondLevelStacker to {path}")
 
@@ -588,11 +587,11 @@ class SecondLevelStacker:
         """
         path = Path(path)
 
-        if not (path / "second_level_metadata.joblib").exists():
+        if not (path / "second_level_metadata.pkl").exists():
             raise FileNotFoundError(f"Metadata not found at {path}")
 
         # Load metadata
-        metadata = safe_pickle_load(path / "second_level_metadata.joblib")
+        metadata = safe_pickle_load(path / "second_level_metadata.pkl")
 
         # Restore config
         config_dict = metadata["config"]

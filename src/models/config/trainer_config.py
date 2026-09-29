@@ -26,7 +26,8 @@ class TrainerConfig:
 
     model_name: str
     horizon: int = 20
-    feature_set: str = "boosting_optimal"
+    # Named feature set filter; "" = pick by model alias, None = use every input column
+    feature_set: str | None = "boosting_optimal"
     pipeline_run_id: str | None = None
     sequence_length: int = field(
         default_factory=lambda: _get_global_or_default("training.sequence_length", 60)
@@ -48,11 +49,13 @@ class TrainerConfig:
     mixed_precision: bool = field(
         default_factory=lambda: _get_global_or_default("training.mixed_precision", True)
     )
-    num_workers: int = field(
-        default_factory=lambda: _get_global_or_default("training.num_workers", 4)
+    # None = auto-detect per device in the DataLoader (4 workers + pinned memory
+    # on CUDA, 0 workers on CPU where forked workers duplicate the parent)
+    num_workers: int | None = field(
+        default_factory=lambda: _get_global_or_default("training.num_workers", None)
     )
-    pin_memory: bool = field(
-        default_factory=lambda: _get_global_or_default("training.pin_memory", True)
+    pin_memory: bool | None = field(
+        default_factory=lambda: _get_global_or_default("training.pin_memory", None)
     )
     use_calibration: bool = field(
         default_factory=lambda: _get_global_or_default("calibration.enabled", True)
@@ -72,6 +75,10 @@ class TrainerConfig:
         default_factory=lambda: _get_global_or_default("features.selection.cv_splits", 5)
     )
     feature_selection_min_frequency: float = 0.6
+    # Purge/embargo (bars) for feature-selection CV. None = legacy defaults
+    # (purge 3 x horizon, embargo 1440); pipelines pass their own values.
+    feature_selection_purge_bars: int | None = None
+    feature_selection_embargo_bars: int | None = None
     deterministic_mode: bool = False
     nan_check_raise_error: bool = True
     checkpoint_interval: int = 50

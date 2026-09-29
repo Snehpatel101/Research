@@ -5,12 +5,17 @@ This module provides the FeatureEngineer class that orchestrates
 all feature engineering operations and manages the complete pipeline.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+
+from src.core.constants import OHLCV_COLUMNS
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
@@ -47,6 +52,10 @@ from .wavelets import PYWT_AVAILABLE, add_wavelet_features
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Part of the feature-cache key: bump when feature values change so stale
+# caches are never reused (2: pywt read-only fix, SampEn caps, causal ffill).
+FEATURE_ENGINE_VERSION = 2
 logger.addHandler(logging.NullHandler())
 
 
@@ -174,8 +183,8 @@ class FeatureEngineer:
 
     def __init__(
         self,
-        input_dir: str | Path,
-        output_dir: str | Path,
+        input_dir: str | Path | None = None,
+        output_dir: str | Path | None = None,
         timeframe: str = "5min",
         enable_mtf: bool = True,
         mtf_timeframes: list | None = None,
@@ -239,11 +248,14 @@ class FeatureEngineer:
             row-wise NaN removal. Range: 0.0 to 1.0. Set to 1.0 to disable
             column dropping (original behavior).
         """
-        self.input_dir = Path(input_dir)
-        self.output_dir = Path(output_dir)
+        # Directories are only needed for the file-based stage API (caching,
+        # save_features, process_all). Pure feature computation — used at
+        # inference via from_spec() — runs without touching the filesystem.
+        self.input_dir = Path(input_dir) if input_dir is not None else None
+        self.output_dir = Path(output_dir) if output_dir is not None else None
 
         # Validate input directory exists
-        if not self.input_dir.exists():
+        if self.input_dir is not None and not self.input_dir.exists():
             raise FileNotFoundError(
                 f"Input directory does not exist: {self.input_dir}. "
                 f"Expected cleaned data from DataCleaner stage."
@@ -287,7 +299,8 @@ class FeatureEngineer:
         self.nan_threshold = nan_threshold
 
         # Create output directory
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Feature metadata
         self.feature_metadata: dict[str, str] = {}
@@ -307,72 +320,62 @@ class FeatureEngineer:
             f"NaN threshold: {self.nan_threshold} (columns with >{self.nan_threshold*100:.0f}% NaN dropped)"
         )
 
-    def engineer_features(self, df: pd.DataFrame, symbol: str) -> tuple[pd.DataFrame, dict]:
-        """
-        Complete feature engineering pipeline.
+    # -- Spec (train/serve parity) -------------------------------------------
 
-        Each symbol is processed independently - no cross-symbol correlation.
-        This ensures symbol isolation as required by the ML Factory design.
+    _SPEC_FIELDS = (
+        "timeframe",
+        "enable_mtf",
+        "mtf_timeframes",
+        "mtf_include_ohlcv",
+        "mtf_include_indicators",
+        "mtf_min_rows",
+        "scale_periods",
+        "base_timeframe",
+        "enable_wavelets",
+        "enable_microstructure",
+        "enable_volume_features",
+        "enable_volatility_features",
+        "wavelet_type",
+        "wavelet_level",
+        "wavelet_window",
+        "nan_threshold",
+    )
+
+    def to_spec(self) -> dict[str, Any]:
+        """Serializable settings that fully determine compute_features().
+
+        Stored in deployment bundles so inference recomputes exactly the
+        features the model was trained on.
+        """
+        spec = {name: getattr(self, name) for name in self._SPEC_FIELDS}
+        spec["mtf_timeframes"] = list(spec["mtf_timeframes"])
+        return spec
+
+    @classmethod
+    def from_spec(cls, spec: dict[str, Any]) -> FeatureEngineer:
+        """Rebuild a compute-only FeatureEngineer from :meth:`to_spec` output."""
+        known = {k: v for k, v in spec.items() if k in cls._SPEC_FIELDS}
+        return cls(**known)
+
+    def compute_features(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+        """
+        Compute every feature column for an OHLCV frame (no caching, no NaN cleaning).
+
+        This is the single feature definition shared by training
+        (engineer_features) and inference (PreprocessingGraph). It never
+        drops rows or columns, so callers decide how to handle warmup NaNs.
 
         Parameters
         ----------
         df : pd.DataFrame
-            Input DataFrame with cleaned OHLCV data
-        symbol : str
-            Symbol name
+            OHLCV frame with a ``datetime`` column.
 
         Returns
         -------
         Tuple[pd.DataFrame, Dict]
-            (DataFrame with features, feature report)
+            (frame with features, stats dict with wavelet/MTF bookkeeping)
         """
-        logger.info(f"\n{'='*60}")
-        logger.info(f"Starting feature engineering for: {symbol}")
-        logger.info(f"{'='*60}\n")
-
-        initial_rows = len(df)
-        initial_cols = len(df.columns)
-
         df = df.copy()
-
-        # Feature caching: skip recomputation if same input data + config
-        import hashlib
-
-        cache_dir = self.output_dir / ".feature_cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        # Hash input data + config for cache key
-        data_hash = hashlib.sha256(pd.util.hash_pandas_object(df).values.tobytes()).hexdigest()[:16]
-        config_hash = hashlib.sha256(
-            json.dumps(
-                {
-                    "timeframe": self.timeframe,
-                    "scale_periods": self.scale_periods,
-                    "enable_mtf": self.enable_mtf,
-                    "mtf_timeframes": self.mtf_timeframes,
-                    "enable_wavelets": self.enable_wavelets,
-                    "wavelet_type": self.wavelet_type,
-                    "wavelet_level": self.wavelet_level,
-                    "nan_threshold": self.nan_threshold,
-                    "enable_microstructure": self.enable_microstructure,
-                    "enable_volume_features": self.enable_volume_features,
-                    "enable_volatility_features": self.enable_volatility_features,
-                },
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()[:16]
-        cache_key = f"{symbol}_{data_hash}_{config_hash}"
-        cache_file = cache_dir / f"{cache_key}.parquet"
-        cache_meta_file = cache_dir / f"{cache_key}_meta.json"
-
-        if cache_file.exists() and cache_meta_file.exists():
-            logger.info(f"Feature cache HIT: {cache_key}")
-            cached_df = pd.read_parquet(cache_file)
-            with open(cache_meta_file) as f:
-                cached_report = json.load(f)
-            return cached_df, cached_report
-
-        logger.info(f"Feature cache MISS: {cache_key} — computing features")
 
         # Reset feature metadata for this run
         self.feature_metadata = {}
@@ -547,6 +550,102 @@ class FeatureEngineer:
                 f"({len(df)} rows < {self.mtf_min_rows} required). "
                 f"Set mtf_min_rows to adjust threshold."
             )
+
+        # Carry the last known value over intermittent NaNs after warmup
+        # (e.g. an undefined indicator on one bar, a missing higher-TF bar).
+        # Forward fill is causal, and doing it here keeps training and
+        # inference identical; without it row-wise NaN dropping punches holes
+        # in the bar series and sequence windows silently skip time.
+        feature_cols = [c for c in df.columns if c not in ("datetime", *OHLCV_COLUMNS)]
+        df[feature_cols] = df[feature_cols].ffill()
+
+        stats = {
+            "wavelet_cols_added": wavelet_cols_added,
+            "mtf_cols_added": mtf_cols_added,
+            "mtf_skipped": mtf_skipped,
+            "mtf_skip_reason": mtf_skip_reason,
+        }
+        return df, stats
+
+    def engineer_features(self, df: pd.DataFrame, symbol: str) -> tuple[pd.DataFrame, dict]:
+        """
+        Complete feature engineering pipeline.
+
+        Each symbol is processed independently - no cross-symbol correlation.
+        This ensures symbol isolation as required by the ML Factory design.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Input DataFrame with cleaned OHLCV data
+        symbol : str
+            Symbol name
+
+        Returns
+        -------
+        Tuple[pd.DataFrame, Dict]
+            (DataFrame with features, feature report)
+        """
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Starting feature engineering for: {symbol}")
+        logger.info(f"{'='*60}\n")
+
+        initial_rows = len(df)
+        initial_cols = len(df.columns)
+
+        df = df.copy()
+
+        # Feature caching: skip recomputation if same input data + config
+        import hashlib
+
+        if self.output_dir is None:
+            raise ValueError(
+                "engineer_features() needs output_dir (feature cache + manifest). "
+                "Use compute_features() for pure in-memory feature computation."
+            )
+        cache_dir = self.output_dir / ".feature_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Hash input data + config for cache key
+        data_hash = hashlib.sha256(pd.util.hash_pandas_object(df).values.tobytes()).hexdigest()[:16]
+        config_hash = hashlib.sha256(
+            json.dumps(
+                {
+                    # Bump FEATURE_ENGINE_VERSION whenever computed values change
+                    "engine_version": FEATURE_ENGINE_VERSION,
+                    "timeframe": self.timeframe,
+                    "scale_periods": self.scale_periods,
+                    "enable_mtf": self.enable_mtf,
+                    "mtf_timeframes": self.mtf_timeframes,
+                    "enable_wavelets": self.enable_wavelets,
+                    "wavelet_type": self.wavelet_type,
+                    "wavelet_level": self.wavelet_level,
+                    "nan_threshold": self.nan_threshold,
+                    "enable_microstructure": self.enable_microstructure,
+                    "enable_volume_features": self.enable_volume_features,
+                    "enable_volatility_features": self.enable_volatility_features,
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()[:16]
+        cache_key = f"{symbol}_{data_hash}_{config_hash}"
+        cache_file = cache_dir / f"{cache_key}.parquet"
+        cache_meta_file = cache_dir / f"{cache_key}_meta.json"
+
+        if cache_file.exists() and cache_meta_file.exists():
+            logger.info(f"Feature cache HIT: {cache_key}")
+            cached_df = pd.read_parquet(cache_file)
+            with open(cache_meta_file) as f:
+                cached_report = json.load(f)
+            return cached_df, cached_report
+
+        logger.info(f"Feature cache MISS: {cache_key} — computing features")
+
+        df, stats = self.compute_features(df)
+        wavelet_cols_added = stats["wavelet_cols_added"]
+        mtf_cols_added = stats["mtf_cols_added"]
+        mtf_skipped = stats["mtf_skipped"]
+        mtf_skip_reason = stats["mtf_skip_reason"]
 
         # Audit NaN values and clean problematic columns before row-wise dropna
         # This prevents all-NaN columns from wiping the entire dataset

@@ -6,7 +6,7 @@ All other modules should import from here.
 
 Defines:
 - CANONICAL_TIMEFRAMES: 9 intraday timeframes
-- MODEL_FAMILIES: 23 models across 5 families
+- MODEL_FAMILIES: 24 models across 6 families
 - MODEL_DATA_RANKS: Model -> tensor rank mapping
 - MODEL_ADAPTER_MAP: Model -> adapter type mapping
 - DEFAULT_* values for pipeline configuration
@@ -35,6 +35,9 @@ BASE_TIMEFRAME: str = "1min"
 # Canonical default: covers short, medium, and long-term patterns
 # All other modules should import from here
 DEFAULT_MTF_TIMEFRAMES: list[str] = ["1min", "5min", "15min", "60min"]
+
+# Raw bar columns every data source must provide
+OHLCV_COLUMNS: tuple[str, ...] = ("open", "high", "low", "close", "volume")
 
 
 # =============================================================================
@@ -75,7 +78,7 @@ DEFAULT_BOOTSTRAP_SAMPLES: int = 1000  # Bootstrap resampling iterations
 
 
 # =============================================================================
-# MODEL FAMILIES - 23 models across 5 families
+# MODEL FAMILIES - 24 models across 6 families
 # =============================================================================
 
 MODEL_FAMILIES: dict[str, list[str]] = {
@@ -92,12 +95,12 @@ MODEL_FAMILIES: dict[str, list[str]] = {
     ],
     "transformer": ["transformer", "patchtst", "itransformer"],
     "ensemble": ["voting", "stacking", "blending"],
-    "meta_learner": ["ridge_meta", "mlp_meta", "xgboost_meta", "calibrated_meta"],
+    "meta_learner": ["ridge_meta", "mlp_meta", "xgboost_meta", "calibrated_meta", "voting_meta"],
 }
 
 # Total model count verification
 ALL_MODELS: list[str] = [model for models in MODEL_FAMILIES.values() for model in models]
-assert len(ALL_MODELS) == 23, f"Expected 23 models, got {len(ALL_MODELS)}"
+assert len(ALL_MODELS) == 24, f"Expected 24 models, got {len(ALL_MODELS)}"
 
 
 # =============================================================================

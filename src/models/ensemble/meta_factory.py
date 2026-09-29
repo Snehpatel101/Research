@@ -170,6 +170,7 @@ def _load_meta_learners() -> None:
         from src.models.ensemble.calibrated_meta import CalibratedMetaLearner
         from src.models.ensemble.mlp_meta import MLPMetaLearner
         from src.models.ensemble.ridge_meta import RidgeMetaLearner
+        from src.models.ensemble.voting_meta import VotingMetaLearner
         from src.models.ensemble.xgboost_meta import XGBoostMeta
 
         META_LEARNER_REGISTRY.update(
@@ -178,6 +179,7 @@ def _load_meta_learners() -> None:
                 "mlp_meta": MLPMetaLearner,
                 "xgboost_meta": XGBoostMeta,
                 "calibrated_meta": CalibratedMetaLearner,
+                "voting_meta": VotingMetaLearner,
             }
         )
         _REGISTRY_INITIALIZED = True
@@ -440,6 +442,11 @@ class MetaLearnerFactory:
                 "Ensures predicted probabilities reflect true class frequencies. "
                 "Essential for threshold-based trading decisions. "
                 "Best for probability calibration in ensemble outputs."
+            ),
+            "voting_meta": (
+                "Soft-voting meta-learner: mean of base-model probabilities. "
+                "No parameters to fit, so it cannot overfit the OOF predictions. "
+                "Best as a robust baseline for any mix of base models."
             ),
         }
 

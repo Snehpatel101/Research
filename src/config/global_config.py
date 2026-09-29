@@ -75,8 +75,8 @@ class TrainingConfig:
     early_stopping_patience: int
     device: str
     mixed_precision: bool
-    num_workers: int
-    pin_memory: bool
+    num_workers: int | None  # None = auto (4 on CUDA, 0 on CPU)
+    pin_memory: bool | None  # None = auto (pin only on CUDA)
 
 
 @dataclass

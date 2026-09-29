@@ -69,8 +69,8 @@ training:
   early_stopping_patience: 15
   device: "auto"
   mixed_precision: true
-  num_workers: 4
-  pin_memory: true
+  num_workers: null  # null = auto: 4 on CUDA, 0 on CPU (forked workers OOM on CPU)
+  pin_memory: null  # null = auto: pin only on CUDA
 
 # Model calibration settings
 calibration:
