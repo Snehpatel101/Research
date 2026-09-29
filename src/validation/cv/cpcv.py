@@ -19,8 +19,9 @@ Purging (AFML Sec. 7.4): a training observation i whose label spans
 [i, i + purge_bars] overlaps a test group [s, e) when
 i in [s - purge_bars, e + purge_bars). Those rows are dropped, and an embargo
 of ``embargo_bars`` further rows after each test group is applied on top.
-When ``label_end_times`` is given (DatetimeIndex data) any training row whose
-actual label interval overlaps a test group's label interval is also dropped.
+When label spans are given (``label_spans`` in bar positions, or
+``label_end_times`` on DatetimeIndex data) any training row whose actual label
+interval overlaps a test group's label interval is also dropped.
 
 Example:
     >>> config = CPCVConfig(n_groups=6, n_test_groups=2, purge_bars=20, embargo_bars=10)
@@ -43,6 +44,10 @@ from typing import Any
 
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
+
+from src.core.label_spans import LabelSpans
+
+from .purged_kfold import resolve_label_spans
 
 logger = logging.getLogger(__name__)
 
@@ -301,8 +306,7 @@ class CombinatorialPurgedCV:
         n_samples: int,
         test_groups: tuple[int, ...],
         boundaries: list[tuple[int, int]],
-        label_ends_ns: np.ndarray | None,
-        index_ns: np.ndarray | None,
+        spans: LabelSpans | None,
     ) -> np.ndarray:
         """Boolean training mask for one split (test groups, purge and embargo removed)."""
         purge = self.config.purge_bars
@@ -311,12 +315,9 @@ class CombinatorialPurgedCV:
         for g in test_groups:
             start, end = boundaries[g]
             mask[max(0, start - purge) : min(n_samples, end + after)] = False
-            if label_ends_ns is not None and index_ns is not None:
-                # Train label interval [t_i, end_i] overlaps the test span
-                # [t_start, max test label end]
-                test_label_end = np.nanmax(label_ends_ns[start:end])
-                overlap = (label_ends_ns >= index_ns[start]) & (index_ns <= test_label_end)
-                mask &= ~overlap
+            if spans is not None:
+                # Train label span [start_i, end_i] overlaps the test group's span
+                mask &= ~spans.overlap_mask(start, end)
         return mask
 
     def split(
@@ -325,44 +326,33 @@ class CombinatorialPurgedCV:
         y: pd.Series | np.ndarray | None = None,
         groups: pd.Series | np.ndarray | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray, int]]:
         """
         Generate train/test indices for every CPCV split.
 
         Args:
-            X: Features (only its length and, for label-aware purging, its
+            X: Features (only its length and, with ``label_end_times``, its
                 DatetimeIndex are used)
             y: Unused (sklearn API compatibility)
             groups: Unused (sklearn API compatibility)
-            label_end_times: Optional per-row label resolution time. Used for
-                additional label-overlap purging when X has a DatetimeIndex.
+            label_end_times: Per-row label resolution timestamps (requires a
+                DatetimeIndex on X). Converted to bar-position spans.
+            label_spans: Per-sample label spans in bar positions (any index type).
 
         Yields:
             (train_indices, test_indices, split_id). Every split in
             ``test_combinations`` is yielded, so ``assemble_paths`` can build
             all phi paths. Raises instead of skipping if a split has no
-            training rows left.
+            training rows left, or if label ends are given but unusable.
         """
         n_samples = len(X)
         boundaries = self.group_boundaries(n_samples)
         indices = np.arange(n_samples)
-
-        label_ends_ns: np.ndarray | None = None
-        index_ns: np.ndarray | None = None
-        if (
-            label_end_times is not None
-            and isinstance(X, pd.DataFrame)
-            and isinstance(X.index, pd.DatetimeIndex)
-        ):
-            ends = pd.to_datetime(pd.Series(label_end_times).reset_index(drop=True))
-            label_ends_ns = ends.to_numpy(dtype="datetime64[ns]").astype(np.float64)
-            label_ends_ns[ends.isna().to_numpy()] = np.nan
-            index_ns = X.index.to_numpy(dtype="datetime64[ns]").astype(np.float64)
+        spans = resolve_label_spans(X, n_samples, label_end_times, label_spans)
 
         for split_id, test_groups in enumerate(self._test_combinations):
-            train_mask = self._train_mask(
-                n_samples, test_groups, boundaries, label_ends_ns, index_ns
-            )
+            train_mask = self._train_mask(n_samples, test_groups, boundaries, spans)
             test_indices = np.concatenate([indices[slice(*boundaries[g])] for g in test_groups])
             train_indices = indices[train_mask]
             if len(train_indices) == 0:

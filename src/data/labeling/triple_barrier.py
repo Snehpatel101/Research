@@ -728,6 +728,28 @@ class TripleBarrierLabeler(LabelingStrategy):
         result = self.compute_labels(df, horizon=self.config.horizon)
         return pd.Series(result.labels, index=df.index, name="label")
 
+    def create_labels_with_ends(self, df: pd.DataFrame) -> tuple[pd.Series, np.ndarray]:
+        """
+        Labels plus the bar position at which each label resolves.
+
+        A label decided at row ``i`` is known once a barrier is touched,
+        ``bars_to_hit`` bars later, so its span is ``[i, i + bars_to_hit]``
+        (row positions of ``df``). CV purging and sample-uniqueness weights
+        need that span; invalid labels (-99) get end position -1.
+
+        Args:
+            df: OHLCV DataFrame.
+
+        Returns:
+            (labels indexed like ``df``, int64 label-end row positions)
+        """
+        from src.core.label_spans import label_end_positions
+
+        result = self.compute_labels(df, horizon=self.config.horizon)
+        labels = pd.Series(result.labels, index=df.index, name="label")
+        ends = label_end_positions(result.labels, result.metadata["bars_to_hit"])
+        return labels, ends
+
     def _log_label_statistics(self, result: LabelingResult, horizon: int) -> None:
         """Log label distribution statistics."""
         labels = result.labels

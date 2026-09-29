@@ -22,6 +22,10 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
+
+from .purged_kfold import resolve_label_spans
+
 logger = logging.getLogger(__name__)
 
 
@@ -224,6 +228,7 @@ class WalkForwardEvaluator:
         y: pd.Series | None = None,
         groups: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Generate train/test indices for each walk-forward window.
@@ -232,8 +237,11 @@ class WalkForwardEvaluator:
             X: Features DataFrame with DatetimeIndex or integer index
             y: Labels (optional, unused but kept for sklearn API compatibility)
             groups: Groups (optional, unused)
-            label_end_times: When each label's outcome is known (optional)
-                If provided, enables proper purging for overlapping labels
+            label_end_times: Per-row label resolution timestamps (requires a
+                DatetimeIndex on X). Converted to bar-position spans.
+            label_spans: Per-sample label spans in bar positions (any index
+                type). Training samples whose label resolves at or after the
+                test window's first bar are dropped (``gap_bars`` is a floor).
 
         Yields:
             Tuple of (train_indices, test_indices) for each window
@@ -243,6 +251,8 @@ class WalkForwardEvaluator:
         """
         n_samples = len(X)
         indices = np.arange(n_samples)
+        spans = resolve_label_spans(X, n_samples, label_end_times, label_spans)
+        resolved_ends = spans.resolved_ends() if spans is not None else None
 
         # Calculate window sizes
         test_size = max(1, int(n_samples * self.config.test_pct))
@@ -255,9 +265,6 @@ class WalkForwardEvaluator:
                 f"Insufficient data: need {min_train_size + total_test} samples "
                 f"but only have {n_samples}. Reduce n_windows or test_pct."
             )
-
-        # Get timestamps if available (for label-aware purging)
-        has_datetime_index = isinstance(X.index, pd.DatetimeIndex)
 
         # Generate windows
         for window_idx in range(self.config.n_windows):
@@ -304,12 +311,9 @@ class WalkForwardEvaluator:
                         f"in embargo zones after {window_idx} previous test periods"
                     )
 
-            # Apply label-aware purging if label_end_times provided
-            if label_end_times is not None and has_datetime_index:
-                test_start_time = X.index[test_start]
-                for i in range(train_start, train_end):
-                    if train_mask[i] and label_end_times.iloc[i] >= test_start_time:
-                        train_mask[i] = False
+            # Label-overlap purge: drop training samples resolving inside the test window
+            if spans is not None and resolved_ends is not None:
+                train_mask &= resolved_ends < spans.starts[test_start]
 
             train_indices = indices[train_mask]
             test_indices = indices[test_start:test_end]

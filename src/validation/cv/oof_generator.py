@@ -23,6 +23,7 @@ from typing import Any
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
 from src.models.registry import ModelRegistry
 
 # Import from specialized modules
@@ -118,6 +119,7 @@ class OOFGenerator:
         calibration_method: str = "auto",
         label_end_times: pd.Series | None = None,
         use_cache: bool = False,
+        label_spans: LabelSpans | None = None,
     ) -> dict[str, OOFPrediction]:
         """
         Generate OOF predictions for all models.
@@ -134,6 +136,8 @@ class OOFGenerator:
                 If provided, enables proper purging of overlapping labels in CV.
             use_cache: Whether to use cached OOF predictions if available.
                 Requires cache_dir to be set in __init__.
+            label_spans: Optional per-sample label spans in bar positions
+                (any index type); purges overlapping labels in CV.
 
         Returns:
             Dict mapping model_name to OOFPrediction
@@ -156,11 +160,18 @@ class OOFGenerator:
             data_hash = compute_data_hash(X, y)
             logger.debug(f"Data hash for caching: {data_hash}")
 
-        # Get CV config for cache key
+        # Get CV config for cache key (label spans and weights change the folds'
+        # training rows / fit, so they are part of the key)
         cv_config = {
             "n_splits": self.cv.config.n_splits,
             "purge_bars": self.cv.config.purge_bars,
             "embargo_bars": self.cv.config.embargo_bars,
+            "label_spans": label_spans.fingerprint() if label_spans is not None else None,
+            "sample_weights": (
+                compute_data_hash(sample_weights.to_frame(), sample_weights)
+                if sample_weights is not None
+                else None
+            ),
         }
 
         for model_name, config in model_configs.items():
@@ -199,6 +210,7 @@ class OOFGenerator:
                 config=config,
                 sample_weights=sample_weights,
                 label_end_times=label_end_times,
+                label_spans=label_spans,
             )
             oof_results[model_name] = oof_pred
 
@@ -242,6 +254,7 @@ class OOFGenerator:
         config: dict[str, Any],
         sample_weights: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> OOFPrediction:
         """Generate OOF predictions for a single model."""
         # Check if model requires sequences
@@ -262,6 +275,7 @@ class OOFGenerator:
                 seq_len=seq_len,
                 sample_weights=sample_weights,
                 label_end_times=label_end_times,
+                label_spans=label_spans,
                 n_classes=self.n_classes,
             )
         else:
@@ -272,6 +286,7 @@ class OOFGenerator:
                 config=config,
                 sample_weights=sample_weights,
                 label_end_times=label_end_times,
+                label_spans=label_spans,
                 n_classes=self.n_classes,
             )
 

@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
 from src.models.base import PredictionResult
 from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
 from src.models.registry import ModelRegistry
@@ -307,6 +308,7 @@ class CoreOOFGenerator:
         config: dict[str, Any],
         sample_weights: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
         n_classes: int = 3,
     ) -> OOFPrediction:
         """
@@ -341,7 +343,7 @@ class CoreOOFGenerator:
 
         # Generate predictions fold by fold (with label_end_times for overlapping label purge)
         for fold_idx, (train_idx, val_idx) in enumerate(
-            self.cv.split(X, y, label_end_times=label_end_times)
+            self.cv.split(X, y, label_end_times=label_end_times, label_spans=label_spans)
         ):
             # Early stopping selects on a purged tail of the TRAIN rows —
             # never on the held-out fold these predictions are made for.

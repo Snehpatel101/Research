@@ -593,102 +593,6 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         """
         return self._oof_predictions.get(model_key)
 
-    def get_meta_labeling_models(
-        self,
-        horizon: int,
-    ) -> tuple[Any, Any, float] | None:
-        """
-        Get meta-labeling models for a given horizon.
-
-        Returns both the primary model (for direction) and meta-model (for bet sizing),
-        along with the configured threshold.
-
-        Args:
-            horizon: Prediction horizon
-
-        Returns:
-            Tuple of (primary_trainer, meta_model, threshold) or None if not found
-
-        Example:
-            primary, meta, threshold = orchestrator.get_meta_labeling_models(20)
-            if primary and meta:
-                # Get direction from primary
-                direction = primary.model.predict(X).class_predictions
-                # Get bet probability from meta
-                bet_prob = meta.predict_proba(X)[:, 1]
-                # Final position = direction * bet_prob (where bet_prob >= threshold)
-        """
-        primary_key = f"meta_labeling_h{horizon}_primary"
-        meta_key = f"meta_labeling_h{horizon}_meta"
-
-        primary = self._trained_models.get(primary_key)
-        meta = self._trained_models.get(meta_key)
-
-        if primary is None or meta is None:
-            return None
-
-        return primary, meta, self.config.meta_labeling_threshold
-
-    def predict_meta_labeling(
-        self,
-        X: np.ndarray | pd.DataFrame,
-        horizon: int,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-        """
-        Generate predictions using trained meta-labeling system.
-
-        Implements Lopez de Prado's meta-labeling:
-        1. Primary model predicts direction
-        2. Meta-model predicts probability of primary being correct
-        3. Only trade where probability >= threshold
-        4. Position size = direction * probability
-
-        Args:
-            X: Feature array/DataFrame
-            horizon: Prediction horizon to use
-
-        Returns:
-            Tuple of (directions, probabilities, positions) or None if models not trained
-            - directions: Primary model predictions (-1, 0, +1 or class labels)
-            - probabilities: Meta-model confidence [0, 1]
-            - positions: Final position sizes (direction * probability, 0 if below threshold)
-
-        Example:
-            directions, probs, positions = orchestrator.predict_meta_labeling(X, 20)
-            # positions contains the bet-sized positions ready for trading
-        """
-        models = self.get_meta_labeling_models(horizon)
-        if models is None:
-            logger.warning(f"Meta-labeling models not found for horizon {horizon}")
-            return None
-
-        primary_trainer, meta_model, threshold = models
-
-        # Convert to numpy if needed
-        X_arr = np.asarray(X)
-        if X_arr.ndim > 2:
-            X_arr = X_arr.reshape(X_arr.shape[0], -1)
-
-        # Get primary predictions (direction)
-        primary_preds = primary_trainer.model.predict(X_arr)
-        directions = primary_preds.class_predictions
-
-        # Get meta-model probabilities
-        if hasattr(meta_model, "predict_proba"):
-            probabilities = meta_model.predict_proba(X_arr)[:, 1]
-        else:
-            probabilities = meta_model.predict(X_arr).astype(float)
-
-        # Calculate positions: direction * probability (0 if below threshold)
-        # Map class predictions to direction (-1, 0, +1)
-        # Assuming 3-class: {0: short, 1: neutral, 2: long} -> {-1, 0, +1}
-        direction_mapped = directions.astype(float) - 1.0
-
-        # Position = direction * probability, but 0 if probability < threshold
-        positions = np.where(probabilities >= threshold, direction_mapped * probabilities, 0.0)
-
-        return directions, probabilities, positions
-
 
 # =============================================================================
 # CONVENIENCE FUNCTIONS
@@ -754,9 +658,9 @@ def train_meta_labeling(
 
         result = train_meta_labeling(config, df)
 
-        # Access results
-        print(f"Trade fraction: {result.model_results['meta_labeling_h20'].metrics['trade_fraction']}")
-        print(f"Combined accuracy: {result.model_results['meta_labeling_h20'].metrics['combined_accuracy']}")
+        # Access results: precision / net outcome of the trades the filter takes
+        metrics = result.model_results['meta_labeling_h20'].metrics
+        print(metrics['primary_precision'], metrics['meta_precision'], metrics['meta_net_per_trade'])
 
     Args:
         config: PipelineConfig from src/core (training_mode will be overridden)

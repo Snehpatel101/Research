@@ -97,7 +97,7 @@ class _FakeTuner:
     def __init__(self, **kwargs):
         _FakeTuner.captured = dict(kwargs)
 
-    def tune(self, X, y, sample_weights=None, param_space=None, data_rank=2):
+    def tune(self, X, y, sample_weights=None, param_space=None, data_rank=2, label_spans=None):
         return {"best_params": {"n_estimators": 10}, "best_value": 0.5}
 
 

@@ -200,6 +200,7 @@ def run_one(spec: dict, data_path: Path, out_dir: Path) -> dict:
             problems.append("no ensemble metrics")
         problems.extend(_check_ensemble_alignment(result))
         problems.extend(_check_prediction_parity(result, data_path))
+        problems.extend(_check_meta_labeling_parity(result, data_path))
         problems.extend(_check_universal_pipeline(result, data_path))
         if not record["backtest_keys"] and not spec.get("binary"):
             problems.append("empty backtest metrics")
@@ -297,6 +298,77 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
             problems.append(
                 f"prediction parity {mr.model_name}: covered {covered.mean():.0%}, "
                 f"match {close.mean():.0%}"
+            )
+    return problems
+
+
+def _check_meta_labeling_parity(result, data_path: Path) -> list[str]:
+    """Deployed MetaLabelingBundle == trained system on the validation bars.
+
+    Rebuilds the meta features exactly as training does (primary model input +
+    uncalibrated primary probabilities, ``build_meta_features``) from the
+    in-memory primary and meta models, and compares P(bet pays off) and the
+    trade decisions with the bundle's predict_from_raw at the same timestamps.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from src.core.constants import OHLCV_COLUMNS
+    from src.data.adapters.preparation import UnifiedDataPreparation
+    from src.inference.meta_labeling_bundle import (
+        MetaLabelingBundle,
+        build_meta_features,
+        primary_sides,
+    )
+
+    tr = result.training_result
+    out = Path(result.output_dir)
+    cache = out / "cache" / "data_pipeline.parquet"
+    if tr is None or not cache.exists():
+        return []
+    df = pd.read_parquet(cache)
+    raw = pd.read_parquet(data_path)
+    problems: list[str] = []
+    for mr in tr.model_results.values():
+        art = mr.mode_artifacts
+        if art.get("kind") != "meta_labeling":
+            continue
+        bundle = MetaLabelingBundle.load(out / "bundles" / f"{mr.model_name}_h{mr.horizon}")
+        trainer = mr.trainer
+        features = set(trainer.feature_columns or [])
+        keep = [
+            c
+            for c in df.columns
+            if c in features or c in OHLCV_COLUMNS or c.startswith(("label", "sample_weight"))
+        ]
+        prep = (
+            UnifiedDataPreparation(tr.config)
+            .prepare(df=df[keep], model_name=art["primary_model"])
+            .filter_invalid_labels()
+        )
+        model_input = prep.X_val
+        if prep.data_rank == 2 and features and list(trainer.feature_columns) != prep.feature_names:
+            model_input = model_input[
+                :, [prep.feature_names.index(c) for c in trainer.feature_columns]
+            ]
+        primary = trainer.model.predict(model_input)
+        expected_p = art["meta_model"].predict_proba(
+            build_meta_features(model_input, primary.class_probabilities)
+        )[:, 1]
+        expected_trade = primary_sides(primary.class_predictions) & (expected_p >= art["threshold"])
+
+        served = bundle.predict_from_raw(raw, calibrate=False)
+        index = pd.DatetimeIndex(served.metadata["timestamps"])
+        rows = df.index[prep.val_indices]
+        got_p = pd.Series(served.metadata["meta_probability"], index=index).reindex(rows)
+        got_trade = pd.Series(served.metadata["trade_mask"], index=index).reindex(rows)
+        covered = got_p.notna().to_numpy()
+        close = np.isclose(got_p.to_numpy()[covered], expected_p[covered], atol=1e-3)
+        same_trades = got_trade.to_numpy()[covered].astype(bool) == expected_trade[covered]
+        if covered.mean() < 0.95 or close.mean() < 0.99 or same_trades.mean() < 0.99:
+            problems.append(
+                f"meta-labeling parity {mr.model_name}: covered {covered.mean():.0%}, "
+                f"P(win) match {close.mean():.0%}, trade match {same_trades.mean():.0%}"
             )
     return problems
 

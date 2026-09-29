@@ -54,12 +54,6 @@ def _build_ml_config(
         return ExperimentConfig.from_yaml(config_path)
 
     n_trials = 100 if optimize_features else 0
-    # CV gaps are in bars; only override the TrainingSection defaults when given
-    cv_gaps = {
-        k: v
-        for k, v in {"purge_bars": purge_bars, "embargo_bars": embargo_bars}.items()
-        if v is not None
-    }
 
     return ExperimentConfig(
         name=f"{symbol}_pipeline",
@@ -76,7 +70,9 @@ def _build_ml_config(
             build_ensemble=build_ensemble,
             meta_learner=meta_learner,
             optuna=OptunaConfig(n_trials=n_trials),
-            **cv_gaps,
+            # None = derived from the label span / bar timeframe (resolve_cv_gaps)
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
         ),
     )
 
@@ -128,10 +124,16 @@ def run_pipeline(
         None, "--bar-timeframe", help="Resample input bars before training, e.g. 5min"
     ),
     purge_bars: int | None = typer.Option(
-        None, "--purge-bars", help="CV purge gap in bars (default 60)"
+        None,
+        "--purge-bars",
+        help="CV purge gap in bars (default: longest label span, max_bars over horizons; "
+        "smaller values are raised to it)",
     ),
     embargo_bars: int | None = typer.Option(
-        None, "--embargo-bars", help="CV embargo gap in bars (default 1440 = 1 day of 1-min bars)"
+        None,
+        "--embargo-bars",
+        help="CV embargo gap in bars (default: one trading day at the bar timeframe, "
+        "capped at 25% of a CV fold)",
     ),
     optimize_features: bool = typer.Option(
         False, "--optimize-features", help="Run feature optimization"
@@ -159,7 +161,7 @@ def run_pipeline(
         pipeline run --symbol MES --data-path ./data/mes.parquet --output-dir ./exp
 
         # Mix and match: tabular + sequence + multi-stream models, soft-vote ensemble
-        pipeline run -d ./data/mes_1m.parquet --bar-timeframe 5min --embargo-bars 288 \\
+        pipeline run -d ./data/mes_1m.parquet --bar-timeframe 5min \\
             -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta
     """
     from src.factory import MLFactory

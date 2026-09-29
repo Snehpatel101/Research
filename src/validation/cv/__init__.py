@@ -20,6 +20,13 @@ Main components:
 """
 
 # WalkForwardFeatureSelector is in optimization.feature_selection
+from src.core.label_spans import (
+    LabelSpans,
+    average_uniqueness,
+    label_end_column,
+    label_end_positions,
+    uniqueness_sample_weights,
+)
 from src.optimization.feature_selection import WalkForwardFeatureSelector
 
 from .cpcv import (
@@ -95,6 +102,12 @@ from .walk_forward import (
 )
 
 __all__ = [
+    # Label spans (purging + uniqueness weights)
+    "LabelSpans",
+    "average_uniqueness",
+    "label_end_column",
+    "label_end_positions",
+    "uniqueness_sample_weights",
     "PurgedKFold",
     "PurgedKFoldConfig",
     "ModelAwareCV",

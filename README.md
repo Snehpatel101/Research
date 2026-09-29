@@ -47,8 +47,10 @@ cfg.training.models = ["xgboost", "lstm", "patchtst"]
 cfg.training.meta_learner = "voting_meta"
 cfg.training.training_mode = "standard"    # or walk_forward / regime_aware / meta_labeling
 cfg.training.horizons = [5]
-cfg.training.purge_bars = 60               # bars; >= label lookahead
-cfg.training.embargo_bars = 288            # bars; one day of 5-minute bars
+# purge/embargo are derived: purge = longest label span (triple-barrier max_bars),
+# embargo = one trading day of bars at the bar timeframe (set training.purge_bars /
+# training.embargo_bars to override). CV also purges on every label's actual end bar,
+# and training samples are weighted by label uniqueness (training.sample_weighting).
 cfg.training.optuna.n_trials = 0           # first run: skip Optuna (default 100 trials per model)
 cfg.evaluation.run_backtest = True
 
@@ -60,7 +62,7 @@ print(result.summary())
 
 ```bash
 python -m src.cli run -d data/raw/MES_1m_1month.parquet --bar-timeframe 5min \
-    --embargo-bars 288 -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta -h 5
+    -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta -h 5
 ```
 
 ## Serve

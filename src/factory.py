@@ -233,6 +233,8 @@ class MLFactory:
         # Raw-OHLCV -> features recipe (bar timeframe + FeatureEngineer spec),
         # recorded by the data pipeline and baked into bundles for inference.
         self._feature_pipeline: dict[str, Any] | None = None
+        # (purge_bars, embargo_bars) resolved once the labeled frame is known
+        self._cv_gaps: tuple[int, int] | None = None
 
         # Backtest artifacts (populated by _run_evaluation)
         self._last_equity_curve: Any = None
@@ -295,7 +297,8 @@ class MLFactory:
                     with open(pipeline_path) as f:
                         self._feature_pipeline = json.load(f)
 
-            # Validate data sufficiency for CV configuration
+            # Resolve purge/embargo for this data, then validate sufficiency
+            self._pipeline_config(n_rows=len(df))
             self._validate_data_sufficiency(df)
 
             # Phase 2: Training
@@ -636,10 +639,10 @@ class MLFactory:
         Raises:
             ValueError: If data is insufficient for the CV configuration.
         """
-        training_cfg = self.config.training
-        n_splits = getattr(training_cfg, "n_splits", 5)
-        embargo_bars = getattr(training_cfg, "embargo_bars", 0)
-        purge_bars = getattr(training_cfg, "purge_bars", 0)
+        n_splits = self.config.training.n_splits
+        purge_bars, embargo_bars = self._cv_gaps or self.config.resolve_cv_gaps(
+            self._bar_timeframe(), len(df)
+        )
 
         n_samples = len(df)
         # Each fold removes (purge + embargo) bars from the usable training set.
@@ -661,40 +664,35 @@ class MLFactory:
         )
 
     def _resolve_barrier_params(self, horizon: int) -> tuple[float, float, int, str]:
+        """Triple-barrier (k_up, k_down, max_bars, source) for one horizon.
+
+        Delegates to ``ExperimentConfig.resolve_barrier_params`` — the single
+        source of truth shared by labeling, the backtester and the derived CV
+        purge (``resolve_cv_gaps``).
         """
-        Resolve triple-barrier parameters for one horizon.
+        return self.config.resolve_barrier_params(horizon)
 
-        Single source of truth shared by labeling (_run_data_pipeline) and the
-        backtester (_run_evaluation) so both always play the same game.
+    def _pipeline_config(self, n_rows: int | None = None) -> Any:
+        """PipelineConfig with the CV gaps resolved for this run's data.
 
-        Priority per field:
-          1. Explicit LabelingConfig override (upper_mult / lower_mult /
-             max_holding_bars set to a non-None value)
-          2. Per-symbol, per-horizon BARRIER_PARAMS table
-
-        Returns:
-            (k_up, k_down, max_bars, source) where source describes which
-            fields came from config overrides vs the barriers table.
+        Pass ``n_rows`` (rows of the labeled frame) to resolve and log
+        purge/embargo from the label span and the training bar timeframe;
+        later calls reuse the resolved gaps.
         """
-        from src.data.pipeline.config.barriers_config import get_barrier_params
+        if self._cv_gaps is None or n_rows is not None:
+            self._cv_gaps = self.config.resolve_cv_gaps(self._bar_timeframe(), n_rows)
+            self._log(
+                f"  CV gaps: purge_bars={self._cv_gaps[0]} (longest label span "
+                f"{self.config.label_span_bars()} bars), embargo_bars={self._cv_gaps[1]} "
+                f"(bar timeframe {self._bar_timeframe()})"
+            )
+        return self.config.to_pipeline_config(cv_gaps=self._cv_gaps)
 
-        labeling = self.config.data.labeling
-        table = get_barrier_params(self.config.data.symbol.upper(), horizon)
-
-        k_up = labeling.upper_mult if labeling.upper_mult is not None else float(table["k_up"])
-        k_down = labeling.lower_mult if labeling.lower_mult is not None else float(table["k_down"])
-        max_bars = (
-            labeling.max_holding_bars
-            if labeling.max_holding_bars is not None
-            else int(table["max_bars"])
-        )
-
-        overridden = any(
-            v is not None
-            for v in (labeling.upper_mult, labeling.lower_mult, labeling.max_holding_bars)
-        )
-        source = "labeling-config override" if overridden else "barriers table"
-        return k_up, k_down, max_bars, source
+    def _bar_timeframe(self) -> str | None:
+        """Training bar timeframe recorded by the data pipeline (None before it ran)."""
+        if self._feature_pipeline is not None:
+            return self._feature_pipeline.get("bar_timeframe")
+        return self.config.data.bar_timeframe
 
     def _load_raw_bars(self) -> tuple[pd.DataFrame, str]:
         """
@@ -821,6 +819,7 @@ class MLFactory:
         # STEP 2: Triple Barrier Labeling
         # =====================================================================
         self._log("  Generating labels...")
+        from src.core.label_spans import label_end_column, remap_label_ends
         from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 
         # Create labels for each horizon. Barrier params come from a single
@@ -841,8 +840,11 @@ class MLFactory:
                 symbol=symbol,
             )
             labeler = TripleBarrierLabeler(label_config)
-            labels = labeler.create_labels(df_features)
+            labels, label_ends = labeler.create_labels_with_ends(df_features)
             df_features[f"label_h{horizon}"] = labels
+            # Row at which the label resolves (-1 = invalid): drives CV purging
+            # and sample-uniqueness weights downstream
+            df_features[label_end_column(f"label_h{horizon}")] = label_ends
             self._log(
                 f"    label_h{horizon}: k_up={k_up} k_down={k_down} "
                 f"max_bars={max_bars} [{barrier_source}] "
@@ -852,6 +854,9 @@ class MLFactory:
         # Also create a default 'label' column using first horizon
         first_horizon = self.config.training.horizons[0]
         df_features["label"] = df_features[f"label_h{first_horizon}"]
+        df_features[label_end_column("label")] = df_features[
+            label_end_column(f"label_h{first_horizon}")
+        ]
 
         # Binary mode: remap {-1, 0, 1} -> {0, 1} (significant move vs no move)
         if self.config.data.labeling.binary_mode:
@@ -864,12 +869,17 @@ class MLFactory:
                     df_features[col] = df_features[col].map(label_remap)
             self._log("  Binary mode: remapped labels {-1,0,1} -> {0,1}")
 
-        # Drop rows with NaN labels
+        # Drop rows with NaN labels (label-end positions are re-mapped to the
+        # surviving rows so every span still covers exactly the same bars)
         initial_len = len(df_features)
-        df_features = df_features.dropna(subset=["label"])
-        dropped = initial_len - len(df_features)
-        if dropped > 0:
-            self._log(f"  Dropped {dropped} rows with NaN labels")
+        kept = df_features["label"].notna().to_numpy()
+        if not kept.all():
+            df_features = df_features.loc[kept]
+            kept_rows = np.flatnonzero(kept)
+            label_cols = [f"label_h{h}" for h in self.config.training.horizons] + ["label"]
+            for col in map(label_end_column, label_cols):
+                df_features[col] = remap_label_ends(df_features[col].to_numpy(), kept_rows)
+            self._log(f"  Dropped {initial_len - len(df_features)} rows with NaN labels")
 
         self._log(
             f"  Pipeline complete: {len(df_features)} rows, {len(df_features.columns)} columns"
@@ -881,7 +891,10 @@ class MLFactory:
         if "datetime" in df_features.columns and not isinstance(
             df_features.index, pd.DatetimeIndex
         ):
-            df_features = df_features.set_index("datetime").sort_index()
+            df_features = df_features.set_index("datetime")
+            if not df_features.index.is_monotonic_increasing:
+                # Label-end columns are row positions: reordering would break them
+                raise ValueError("Feature frame is not in chronological order after labeling")
 
         # Downcast float64 → float32 at the source to halve the DataFrame memory
         # that stays alive for the entire training + evaluation run.
@@ -923,7 +936,7 @@ class MLFactory:
         if additional_dfs:
             self._log(f"  Multi-stream timeframes: {list(additional_dfs.keys())}")
 
-        pipeline_config = self.config.to_pipeline_config()
+        pipeline_config = self._pipeline_config()
         orchestrator = UnifiedTrainingOrchestrator(pipeline_config)
         result = orchestrator.train(df, additional_dfs=additional_dfs)
 
@@ -1062,7 +1075,7 @@ class MLFactory:
         try:
             from src.inference.builder import BundleBuilder
 
-            pipeline_config = self.config.to_pipeline_config()
+            pipeline_config = self._pipeline_config()
             builder = BundleBuilder(pipeline_config, feature_pipeline=self._feature_pipeline)
 
             bundle_result = builder.build_from_training_result(training_result)

@@ -62,6 +62,9 @@ from src.core.constants import (
 from src.core.types import CVMethod, LabelingMethod, TrainingMode
 from src.core.validation import ValidationError, validate_model_list, validate_path_exists
 
+# Training sample-weighting schemes (see PipelineConfig.sample_weighting)
+SAMPLE_WEIGHTING_MODES = ("uniqueness", "none")
+
 
 @dataclass
 class PipelineConfig:
@@ -117,6 +120,13 @@ class PipelineConfig:
     n_splits: int = DEFAULT_N_SPLITS  # CV folds (default: 5)
     purge_bars: int = DEFAULT_PURGE_BARS  # Gap before test (default: 60)
     embargo_bars: int = DEFAULT_EMBARGO_BARS  # Embargo after test (default: 1440)
+    # ExperimentConfig.resolve_cv_gaps derives both from the label span and bar
+    # timeframe for factory runs; label-end columns in the training frame make
+    # every CV purge follow each label's actual resolution bar on top.
+
+    sample_weighting: str = "uniqueness"
+    # Default training sample weights when the frame carries label-end columns:
+    # "uniqueness" = AFML average uniqueness of overlapping labels, "none" = 1.0
 
     # Walk-forward validation settings
     wf_n_windows: int = 5  # Number of walk-forward windows
@@ -392,6 +402,14 @@ class PipelineConfig:
                 field="split_ratios",
                 expected=1.0,
                 actual=total,
+            )
+
+        if self.sample_weighting not in SAMPLE_WEIGHTING_MODES:
+            raise ValidationError(
+                f"Invalid sample_weighting: {self.sample_weighting}",
+                field="sample_weighting",
+                expected=list(SAMPLE_WEIGHTING_MODES),
+                actual=self.sample_weighting,
             )
 
         # Validate horizons
