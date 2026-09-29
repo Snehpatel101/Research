@@ -141,7 +141,7 @@ class TestResult:
 def run_single_test(tc: TestCase) -> TestResult:
     """Run a single compatibility test case through the full MLFactory pipeline."""
 
-    from src.config.data import FeatureConfig, LabelingConfig, SequenceConfig
+    from src.config.data import SequenceConfig
     from src.config.experiment import (
         BundlingSection,
         DataSection,
@@ -162,8 +162,6 @@ def run_single_test(tc: TestCase) -> TestResult:
                 data=DataSection(
                     symbol=SYMBOL,
                     data_path=str(DATA_PATH),
-                    features=FeatureConfig(families=["price", "volume", "volatility"]),
-                    labeling=LabelingConfig(method="triple_barrier"),
                     sequence=SequenceConfig(seq_len=30),
                 ),
                 training=TrainingSection(
@@ -182,7 +180,6 @@ def run_single_test(tc: TestCase) -> TestResult:
                 ),
                 evaluation=EvaluationSection(
                     run_backtest=False,
-                    compute_shap=False,
                 ),
                 bundling=BundlingSection(
                     create_bundle=True,

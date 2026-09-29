@@ -138,14 +138,7 @@ class TrainerArtifactsMixin:
         with open(env_info_path, "w") as f:
             json.dump(env_info, f, indent=2, cls=_NumpySafeEncoder)
 
-        # Log environment overrides at training start
-        if applied_overrides.get("environment_overrides"):
-            logger.info(
-                f"Environment '{env.value}' overrides applied: "
-                f"{list(applied_overrides['environment_overrides'].keys())}"
-            )
-        else:
-            logger.debug(f"Running in '{env.value}' environment (no specific overrides)")
+        logger.debug(f"Running in '{env.value}' environment")
 
     def _save_model_requirements(self) -> None:
         """

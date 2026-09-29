@@ -186,6 +186,17 @@ contracts layer for everything.
 
 ## 8. `ExperimentConfig.to_trainer_config / to_backtest_config / to_bundle_config` — adopt or delete
 
+> **RESOLVED in Phase 116 (2026-09-29):** the three methods are deleted, and
+> every ExperimentConfig field now either reaches the pipeline or is gone.
+> Wired: `data.splits` ratios → PipelineConfig split ratios,
+> `training.calibration.enabled/method` → orchestrator *and* TrainerConfig
+> (the Trainer self-calibrated from global.yaml before), `verbose` → MLFactory
+> default (start/end dates were already wired in Phase 115). Pruned: scaler,
+> checkpoint, device, feature-period/selection knobs, labeling method/extras,
+> Optuna sampler/startup/penalty knobs, WF gap/embargo (come from
+> `training.purge_bars/embargo_bars`), SHAP/report/bundle-format flags.
+> `from_dict` warns on and ignores unknown keys, so older YAML still loads.
+
 > **Partly addressed in Phase 115:** `data.start_date` / `data.end_date` are now
 > honored by `MLFactory` (raw bars filtered before features), and the new
 > `data.bar_timeframe`, `training.regime` and `training.meta_labeling` settings
@@ -210,6 +221,17 @@ decide you'll never wire.
 ---
 
 ## 9. Dead canonical-config layer + dead global.yaml sections
+
+> **RESOLVED in Phase 116 (2026-09-29):** shrunk to what runs.
+> `src/config/model_configs.py`, `ensemble.py`, `inference.py` deleted, along
+> with the dead canonical twins in `training.py`/`cv.py`/`data.py`/`base.py`
+> (Checkpoint/OOM/ParallelTraining/Conformal/GA/ExperimentTracking, CV/CPCV/
+> PurgedKFold/PBO/DSR/PurgeEmbargo, Scaler/MultiResolution/Session(s)/Bar,
+> config mixins). `global.yaml` lost `optimization.optuna`, `cross_validation`,
+> `purge_embargo`, `mtf`, `features.sma_periods` (GlobalConfig + validators
+> updated; `validate_config_file` passes). `load_training_config` /
+> `load_cv_config`, the environment-override layer that read them, and the
+> `config/pipeline/` path constants are gone.
 
 **What:** In `src/config/`: `model_configs.py`, `ensemble.py`, and the
 canonical `BacktestConfig`/`OOMConfig`/`CheckpointConfig`/
@@ -299,8 +321,8 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 | 5 | 5-D Optuna island | Dead code pinned by tests | Delete + replacement test | ~0.5 day |
 | 6 | Dual AdapterResult | ✅ Resolved (Phase 116) | — | — |
 | 7 | Core TrainingResult | ✅ Resolved (Phase 116) | — | — |
-| 8 | to_*_config methods | Dead config fields stay | Adopt splits/dates/calibration | 2–3 days |
-| 9 | Dead config layer/yaml | Aspirational surface stays | Shrink to what runs | ~1 day |
+| 8 | to_*_config methods | ✅ Resolved (Phase 116) | — | — |
+| 9 | Dead config layer/yaml | ✅ Resolved (Phase 116) | — | — |
 | 10 | Import SCC | 4–5s imports, GPU-stack coupling | Staged lazy break | 3–5 days |
 | 11 | Source-grep tests | Documentation-grade tests stay | Replace opportunistically | rolling |
 | 12 | uv adoption | Stale lockfile | Adopt uv venv | ~2 h |

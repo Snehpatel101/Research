@@ -30,7 +30,7 @@ from src.config.experiment import (
     TrainingSection,
 )
 from src.config.cv import WalkForwardConfig
-from src.config.data import FeatureConfig, SequenceConfig
+from src.config.data import SequenceConfig
 from src.config.training import OptunaConfig
 from src.factory import MLFactory
 
@@ -52,14 +52,6 @@ def main() -> None:
         data=DataSection(
             symbol="MES",
             data_path="data/raw/MES_1m_1week.parquet",
-            features=FeatureConfig(
-                mode="minimal",
-                families=["price", "momentum"],
-                sma_periods=[10, 20],
-                ema_periods=[9, 21],
-                atr_periods=[14],
-                selection_n_features=30,
-            ),
             sequence=SequenceConfig(
                 seq_len=20,  # Reduced from 60
             ),
@@ -79,15 +71,12 @@ def main() -> None:
                 window_type="expanding",
                 min_train_pct=0.5,
                 test_pct=0.15,
-                gap_bars=5,
-                embargo_bars=2,
             ),
             optuna=OptunaConfig(n_trials=0),
             build_ensemble=False,
         ),
         evaluation=EvaluationSection(
             run_backtest=False,
-            generate_report=False,
         ),
         bundling=BundlingSection(
             create_bundle=False,

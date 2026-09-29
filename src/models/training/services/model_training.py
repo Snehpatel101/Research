@@ -42,6 +42,11 @@ class ModelTrainingRequest:
     n_classes: int = 3  # 2 = binary labels, 3 = short/neutral/long
     early_stopping_patience: int | None = None  # None = TrainerConfig default
     optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
+    # Probability calibration on the validation split (PipelineConfig.auto_calibrate
+    # / calibration_method). Explicit here so TrainerConfig never falls back to
+    # the global.yaml defaults and silently disagrees with the experiment.
+    use_calibration: bool = True
+    calibration_method: str = "auto"
 
 
 @dataclass
@@ -146,6 +151,8 @@ class ModelTrainingService:
             feature_selection_purge_bars=request.purge_bars,
             feature_selection_embargo_bars=request.embargo_bars,
             max_epochs=request.max_epochs if request.max_epochs is not None else 100,
+            use_calibration=request.use_calibration,
+            calibration_method=request.calibration_method,
             model_config=_model_config,
             **_trainer_kwargs,
         )

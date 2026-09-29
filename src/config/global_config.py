@@ -1,3 +1,12 @@
+"""
+GlobalConfig - typed view of config/global.yaml.
+
+Holds only sections that code actually reads: via ``get_config_value()``
+(TrainerConfig / DataConfig field defaults) or ``get_global_config()``
+(horizon lists). Keep the YAML and these dataclasses in lock-step: a section
+here that nothing reads is a "settable but ignored" knob.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,13 +31,6 @@ class SplitConfig:
 
 
 @dataclass
-class PurgeEmbargoConfig:
-    purge_multiplier: float
-    embargo_time_minutes: int
-    min_embargo_bars: int
-
-
-@dataclass
 class HorizonsConfig:
     supported: list[int]
     active: list[int]
@@ -50,7 +52,6 @@ class FeatureGenerationConfig:
 
 @dataclass
 class FeaturesConfig:
-    sma_periods: list[int]
     ema_periods: list[int]
     atr_periods: list[int]
     rsi_period: int
@@ -58,13 +59,6 @@ class FeaturesConfig:
     bollinger: dict[str, float | int]
     selection: FeatureSelectionConfig
     generation: FeatureGenerationConfig
-
-
-@dataclass
-class MTFConfig:
-    default_mode: str
-    default_timeframes: list[str]
-    enabled: bool
 
 
 @dataclass
@@ -96,23 +90,8 @@ class GAConfig:
 
 
 @dataclass
-class OptunaConfig:
-    n_trials: int
-    timeout: int
-    n_jobs: int
-
-
-@dataclass
 class OptimizationConfig:
     ga: GAConfig
-    optuna: OptunaConfig
-
-
-@dataclass
-class CrossValidationConfig:
-    n_splits: int
-    purge_multiplier: float
-    embargo_time_minutes: int
 
 
 @dataclass
@@ -145,14 +124,11 @@ class GlobalConfig:
     random_seed: int
     timeframes: TimeframeConfig
     splits: SplitConfig
-    purge_embargo: PurgeEmbargoConfig
     horizons: HorizonsConfig
     features: FeaturesConfig
-    mtf: MTFConfig
     training: TrainingConfig
     calibration: CalibrationConfig
     optimization: OptimizationConfig
-    cross_validation: CrossValidationConfig
     processing: ProcessingConfig
     scaler: ScalerConfig
     tracking: TrackingConfig
@@ -164,10 +140,8 @@ class GlobalConfig:
             random_seed=data["random_seed"],
             timeframes=TimeframeConfig(**data["timeframes"]),
             splits=SplitConfig(**data["splits"]),
-            purge_embargo=PurgeEmbargoConfig(**data["purge_embargo"]),
             horizons=HorizonsConfig(**data["horizons"]),
             features=FeaturesConfig(
-                sma_periods=data["features"]["sma_periods"],
                 ema_periods=data["features"]["ema_periods"],
                 atr_periods=data["features"]["atr_periods"],
                 rsi_period=data["features"]["rsi_period"],
@@ -176,14 +150,11 @@ class GlobalConfig:
                 selection=FeatureSelectionConfig(**data["features"]["selection"]),
                 generation=FeatureGenerationConfig(**data["features"]["generation"]),
             ),
-            mtf=MTFConfig(**data["mtf"]),
             training=TrainingConfig(**data["training"]),
             calibration=CalibrationConfig(**data["calibration"]),
             optimization=OptimizationConfig(
                 ga=GAConfig(**data["optimization"]["ga"]),
-                optuna=OptunaConfig(**data["optimization"]["optuna"]),
             ),
-            cross_validation=CrossValidationConfig(**data["cross_validation"]),
             processing=ProcessingConfig(**data["processing"]),
             scaler=ScalerConfig(**data["scaler"]),
             tracking=TrackingConfig(**data["tracking"]),
@@ -210,18 +181,12 @@ class GlobalConfig:
                 "val": self.splits.val,
                 "test": self.splits.test,
             },
-            "purge_embargo": {
-                "purge_multiplier": self.purge_embargo.purge_multiplier,
-                "embargo_time_minutes": self.purge_embargo.embargo_time_minutes,
-                "min_embargo_bars": self.purge_embargo.min_embargo_bars,
-            },
             "horizons": {
                 "supported": self.horizons.supported,
                 "active": self.horizons.active,
                 "default": self.horizons.default,
             },
             "features": {
-                "sma_periods": self.features.sma_periods,
                 "ema_periods": self.features.ema_periods,
                 "atr_periods": self.features.atr_periods,
                 "rsi_period": self.features.rsi_period,
@@ -236,11 +201,6 @@ class GlobalConfig:
                     "default": self.features.generation.default,
                     "modes": self.features.generation.modes,
                 },
-            },
-            "mtf": {
-                "default_mode": self.mtf.default_mode,
-                "default_timeframes": self.mtf.default_timeframes,
-                "enabled": self.mtf.enabled,
             },
             "training": {
                 "sequence_length": self.training.sequence_length,
@@ -265,16 +225,6 @@ class GlobalConfig:
                     "elite_size": self.optimization.ga.elite_size,
                     "safe_mode": self.optimization.ga.safe_mode,
                 },
-                "optuna": {
-                    "n_trials": self.optimization.optuna.n_trials,
-                    "timeout": self.optimization.optuna.timeout,
-                    "n_jobs": self.optimization.optuna.n_jobs,
-                },
-            },
-            "cross_validation": {
-                "n_splits": self.cross_validation.n_splits,
-                "purge_multiplier": self.cross_validation.purge_multiplier,
-                "embargo_time_minutes": self.cross_validation.embargo_time_minutes,
             },
             "processing": {
                 "n_jobs": self.processing.n_jobs,

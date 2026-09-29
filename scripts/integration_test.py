@@ -56,7 +56,6 @@ PURGE_BARS = 10
 EMBARGO_BARS = 5
 
 # Feature engineering families (minimal set for speed)
-FEATURE_FAMILIES = ["price", "volume", "volatility"]
 
 # Sequence settings
 SEQUENCE_LENGTH = 30  # Keep short for small dataset
@@ -85,7 +84,7 @@ def main() -> int:
             ExperimentConfig,
             TrainingSection,
         )
-        from src.config.data import FeatureConfig, LabelingConfig, SequenceConfig
+        from src.config.data import SequenceConfig
         from src.config.training import CalibrationConfig, OptunaConfig
         from src.factory import MLFactory
 
@@ -104,8 +103,6 @@ def main() -> int:
                 data=DataSection(
                     symbol=SYMBOL,
                     data_path=str(DATA_PATH),
-                    features=FeatureConfig(families=FEATURE_FAMILIES),
-                    labeling=LabelingConfig(method="triple_barrier"),
                     sequence=SequenceConfig(seq_len=SEQUENCE_LENGTH),
                 ),
                 training=TrainingSection(
@@ -124,7 +121,6 @@ def main() -> int:
                 ),
                 evaluation=EvaluationSection(
                     run_backtest=False,
-                    compute_shap=False,
                 ),
                 bundling=BundlingSection(
                     create_bundle=True,

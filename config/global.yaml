@@ -1,8 +1,8 @@
 # ML Factory Global Configuration
-# This file provides default configuration values for the ML Factory pipeline.
-# Override these values for your specific use case.
-#
-# See src/config/global_config.py for all available options.
+# Process-wide defaults read through src/config/global_config.py
+# (get_config_value) — e.g. TrainerConfig / DataConfig field defaults.
+# Every key here is read somewhere; per-experiment settings (models, horizons,
+# CV gaps, Optuna budget, MTF timeframes, ...) belong in ExperimentConfig.
 
 # Random seed for reproducibility
 random_seed: 42
@@ -19,12 +19,6 @@ splits:
   val: 0.15
   test: 0.15
 
-# Purge/embargo configuration for cross-validation
-purge_embargo:
-  purge_multiplier: 3.0
-  embargo_time_minutes: 7200  # 5 days in minutes
-  min_embargo_bars: 1440
-
 # Horizon configuration
 horizons:
   supported: [1, 5, 10, 15, 20, 30, 60, 120]
@@ -33,7 +27,6 @@ horizons:
 
 # Feature configuration
 features:
-  sma_periods: [5, 10, 20, 50, 100, 200]
   ema_periods: [5, 10, 20, 50, 100, 200]
   atr_periods: [7, 14, 21]
   rsi_period: 14
@@ -54,12 +47,6 @@ features:
       minimal: "price,volume"
       standard: "price,volume,momentum,volatility"
       full: "price,volume,momentum,volatility,microstructure,wavelet"
-
-# Multi-timeframe configuration
-mtf:
-  default_mode: "indicators"
-  default_timeframes: ["1min", "5min", "15min", "60min"]
-  enabled: true
 
 # Training configuration
 training:
@@ -86,16 +73,6 @@ optimization:
     mutation_rate: 0.1
     elite_size: 5
     safe_mode: true
-  optuna:
-    n_trials: 100
-    timeout: 43200
-    n_jobs: 1
-
-# Cross-validation configuration
-cross_validation:
-  n_splits: 5
-  purge_multiplier: 3.0
-  embargo_time_minutes: 7200
 
 # Processing configuration
 processing:

@@ -5,7 +5,6 @@ CONFIG-002: This module consolidates defaults from:
 - src/models/config/trainer_config.py
 - src/phase1/config/runtime.py
 - src/phase1/pipeline_config.py
-- config/pipeline/training.yaml
 
 All default values should reference this module.
 """

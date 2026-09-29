@@ -12,9 +12,8 @@ sources overriding lower ones:
 ```
 1. CLI Arguments        (Highest)  --batch-size 128
 2. Explicit Config File            --config my_experiment.yaml
-3. Environment Overrides           config/training.yaml environments: section
-4. Model-Specific YAML             config/models/{model_name}.yaml
-5. Provided Defaults    (Lowest)   Built-in Python defaults
+3. Model-Specific YAML             config/models/{model_name}.yaml
+4. Provided Defaults    (Lowest)   Built-in Python defaults
 ```
 
 ### Precedence Rules in Detail
@@ -23,9 +22,8 @@ sources overriding lower ones:
 |----------|--------|-------------------|---------|
 | 1 (Highest) | CLI Arguments | N/A (validated by typer) | `--batch-size 128` |
 | 2 | Explicit Config (`--config`) | **FAIL HARD** - User requested this file | `--config my_exp.yaml` |
-| 3 | Environment Overrides | Warn and continue | Auto-detected from environment |
-| 4 | Model YAML (auto-discovered) | Warn and continue | `config/models/xgboost.yaml` |
-| 5 (Lowest) | Built-in Defaults | N/A | Python dataclass defaults |
+| 3 | Model YAML (auto-discovered) | Warn and continue | `config/models/xgboost.yaml` |
+| 4 (Lowest) | Built-in Defaults | N/A | Python dataclass defaults |
 
 ### Example Override Flow
 
@@ -36,10 +34,6 @@ defaults = {"batch_size": 64, "max_epochs": 100}
 # Model YAML overrides defaults
 config/models/xgboost.yaml = {"batch_size": 256}
 # Result: batch_size = 256
-
-# Environment (GPU) overrides model YAML
-config/training.yaml environments.local_gpu = {"batch_size": 512}
-# Result: batch_size = 512
 
 # CLI overrides everything
 --batch-size 128
@@ -70,36 +64,7 @@ with a clear error message.
 python scripts/train_model.py --model xgboost --config experiments/my_config.yaml
 ```
 
-### 3. Environment Overrides
-
-Located in `config/training.yaml` under the `environments:` section. Auto-detected
-based on execution environment:
-
-```yaml
-# config/training.yaml
-environments:
-  colab:
-    batch_size: 64
-    num_workers: 2
-    mixed_precision: false
-
-  local_gpu:
-    batch_size: 512
-    num_workers: 8
-    mixed_precision: true
-
-  local_cpu:
-    batch_size: 64
-    num_workers: 4
-    mixed_precision: false
-```
-
-**Environment Detection:**
-- `colab`: Google Colab environment (detected via `google.colab` import)
-- `local_gpu`: Local machine with CUDA available
-- `local_cpu`: Local machine without GPU
-
-### 4. Model-Specific YAML
+### 3. Model-Specific YAML
 
 Located at `config/models/{model_name}.yaml`. Auto-discovered based on model name.
 
@@ -190,10 +155,6 @@ Every training run saves `environment_info.json` in the `config/` subdirectory:
   "device_resolved": "cuda",
   "applied_overrides": {
     "environment": "local_gpu",
-    "environment_overrides": {
-      "batch_size": 512,
-      "mixed_precision": true
-    },
     "model_yaml_path": "/path/to/config/models/xgboost.yaml",
     "model_yaml_keys": ["n_estimators", "max_depth", "learning_rate"],
     "explicit_config_path": null,
@@ -216,7 +177,6 @@ config = build_config(model_name="xgboost", cli_args={"batch_size": 256})
 # Get override information
 overrides = get_applied_overrides()
 print(f"Environment: {overrides['environment']}")
-print(f"Env overrides: {overrides['environment_overrides']}")
 print(f"CLI overrides: {overrides['cli_overrides']}")
 ```
 
@@ -225,14 +185,14 @@ print(f"CLI overrides: {overrides['cli_overrides']}")
 ### Scenario 1: Local Development (CPU)
 
 ```bash
-# Uses local_cpu environment overrides automatically
+# Model YAML + built-in defaults
 python scripts/train_model.py --model xgboost --horizon 20
 ```
 
 ### Scenario 2: GPU Training with Custom Batch Size
 
 ```bash
-# CLI override takes precedence over environment
+# CLI override takes precedence over model YAML
 python scripts/train_model.py --model lstm --horizon 20 --batch-size 128
 ```
 
@@ -250,7 +210,7 @@ python scripts/train_model.py --model xgboost --config experiments/ablation_stud
 from src.models.config import create_trainer_config
 
 config = create_trainer_config(model_name="xgboost", horizon=20)
-# batch_size will be 64 (from colab environment override)
+# environment is recorded in environment_info.json (no per-environment overrides)
 ```
 
 ## Troubleshooting
@@ -259,13 +219,6 @@ config = create_trainer_config(model_name="xgboost", horizon=20)
 
 1. Check `environment_info.json` for which overrides were actually applied
 2. Verify YAML syntax in config files
-3. Check environment detection is correct
-
-### Environment Overrides Not Working
-
-1. Verify `config/training.yaml` exists and has valid `environments:` section
-2. Check that environment key matches: `colab`, `local_gpu`, or `local_cpu`
-3. Review logs for "Applied environment overrides" message
 
 ### CLI Override Not Taking Effect
 
@@ -279,5 +232,5 @@ config = create_trainer_config(model_name="xgboost", horizon=20)
 - `src/models/config/trainer_config.py` - TrainerConfig dataclass
 - `src/models/config/loaders.py` - YAML loading utilities
 - `src/models/config/environment.py` - Environment detection
-- `config/training.yaml` - Global training config with environment overrides
+- `config/global.yaml` - Process-wide defaults (TrainerConfig field defaults)
 - `config/models/*.yaml` - Model-specific configurations

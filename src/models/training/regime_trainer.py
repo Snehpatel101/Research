@@ -421,6 +421,8 @@ class RegimeAwareTrainer:
                         early_stopping_patience=getattr(
                             self.config, "early_stopping_patience", None
                         ),
+                        use_calibration=self.config.auto_calibrate,
+                        calibration_method=self.config.calibration_method,
                     )
                 )
                 trainer = trained.trainer
@@ -551,6 +553,8 @@ class RegimeAwareTrainer:
                     model_name=model_name,
                     horizon=horizon,
                     output_dir=model_dir,
+                    use_calibration=self.config.auto_calibrate,
+                    calibration_method=self.config.calibration_method,
                 )
 
                 # Train

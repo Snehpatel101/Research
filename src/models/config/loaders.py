@@ -8,9 +8,8 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
-from .environment import Environment, detect_environment
 from .exceptions import ConfigError
-from .paths import CONFIG_DIR, CV_CONFIG_PATH, TRAINING_CONFIG_PATH
+from .paths import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -173,46 +172,6 @@ def find_model_config(
 
     config_path = config_dir / f"{model_name}.yaml"
     return config_path if config_path.exists() else None
-
-
-def load_training_config() -> dict[str, Any]:
-    """Load global training configuration."""
-    if TRAINING_CONFIG_PATH.exists():
-        return load_yaml_config(TRAINING_CONFIG_PATH)
-    logger.info(
-        f"Training config not found at {TRAINING_CONFIG_PATH}. "
-        f"Using built-in defaults. To customize, create this file."
-    )
-    return {}
-
-
-def load_cv_config() -> dict[str, Any]:
-    """Load cross-validation configuration."""
-    if CV_CONFIG_PATH.exists():
-        return load_yaml_config(CV_CONFIG_PATH)
-    logger.info(
-        f"CV config not found at {CV_CONFIG_PATH}. "
-        f"Using built-in defaults. To customize, create this file."
-    )
-    return {}
-
-
-def get_environment_overrides(
-    training_config: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Get environment-specific configuration overrides."""
-    if training_config is None:
-        training_config = load_training_config()
-
-    environments = training_config.get("environments", {})
-    env = detect_environment()
-
-    env_map = {
-        Environment.COLAB: "colab",
-        Environment.LOCAL_GPU: "local_gpu",
-        Environment.LOCAL_CPU: "local_cpu",
-    }
-    return dict(environments.get(env_map.get(env, ""), {}))
 
 
 def validate_ensemble_base_models(

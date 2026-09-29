@@ -153,7 +153,6 @@ def run_one(spec: dict, data_path: Path, out_dir: Path) -> dict:
     cfg.training.max_epochs = 1
     cfg.training.batch_size = 128
     cfg.training.early_stopping_patience = 1
-    cfg.training.device = "cpu"
     cfg.training.build_ensemble = len(models) > 1
     cfg.training.meta_learner = spec.get("meta", "ridge_meta")
     cfg.training.optuna.n_trials = 0

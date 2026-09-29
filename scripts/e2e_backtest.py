@@ -21,7 +21,7 @@ config = ExperimentConfig(
         build_ensemble=True,
         optuna=OptunaConfig(n_trials=0),
     ),
-    evaluation=EvaluationSection(run_backtest=True, generate_report=True),
+    evaluation=EvaluationSection(run_backtest=True),
     bundling=BundlingSection(create_bundle=True, deploy_artifact=True),
 )
 

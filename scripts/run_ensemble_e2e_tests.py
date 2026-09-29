@@ -89,7 +89,7 @@ def run_test(models, label, idx):
                 batch_size=256,
                 optuna=OptunaConfig(n_trials=0),
             ),
-            evaluation=EvaluationSection(run_backtest=True, generate_report=True),
+            evaluation=EvaluationSection(run_backtest=True),
             bundling=BundlingSection(create_bundle=True, deploy_artifact=True),
         )
 

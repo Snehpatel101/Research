@@ -124,6 +124,8 @@ class TrainingOpsMixin:
                     n_classes=getattr(self.config, "n_classes", 3),
                     early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
                     optuna_timeout=getattr(self.config, "optuna_timeout", None),
+                    use_calibration=self.config.auto_calibrate,
+                    calibration_method=self.config.calibration_method,
                 )
             )
 
@@ -274,6 +276,8 @@ class TrainingOpsMixin:
             n_classes=getattr(self.config, "n_classes", 3),
             early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
             optuna_timeout=getattr(self.config, "optuna_timeout", None),
+            use_calibration=self.config.auto_calibrate,
+            calibration_method=self.config.calibration_method,
         )
 
         training_degraded = False
@@ -313,6 +317,8 @@ class TrainingOpsMixin:
                 n_classes=getattr(self.config, "n_classes", 3),
                 early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
                 optuna_timeout=getattr(self.config, "optuna_timeout", None),
+                use_calibration=self.config.auto_calibrate,
+                calibration_method=self.config.calibration_method,
             )
             result = self._model_service.train_model(request)
             training_degraded = True
