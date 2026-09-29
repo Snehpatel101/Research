@@ -95,7 +95,7 @@ class ArtifactManager:
         Save metrics summary.
 
         Args:
-            model_results: Dictionary mapping model keys to TrainingResult objects
+            model_results: Dictionary mapping model keys to ModelTrainingResult objects
             output_dir: Optional output directory. Uses self.output_dir if not provided.
 
         Returns:

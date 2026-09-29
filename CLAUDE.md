@@ -687,7 +687,6 @@ grep -r "from src\.feature_selection" src/ --include="*.py" | wc -l
 
 | Exception | Reason | Status |
 |-----------|--------|--------|
-| Dual AdapterResult | Circular import prevention | Bidirectional properties added; bridge drift found 2026-08 — consolidation pending user decision |
 | Pyright pandas errors | Type stub limitations | Not blocking, document when seen |
 
 ---

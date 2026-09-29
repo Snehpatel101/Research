@@ -54,7 +54,7 @@ from src.config.experiment import ExperimentConfig
 from src.config.symbol import SymbolConfig
 
 if TYPE_CHECKING:
-    from src.core.interfaces import TrainingResult
+    from src.models.training.unified_orchestrator import TrainingRunResult
 from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class ExperimentResult:
     deploy_path: Path | None = None
     output_dir: Path | None = None
     error_message: str | None = None
-    training_result: Any = None
+    training_result: TrainingRunResult | None = None
     equity_curve: Any = None
     backtest_trades: list = field(default_factory=list)
 
@@ -228,7 +228,6 @@ class MLFactory:
 
         # Cache for intermediate results (used during resume)
         self._cached_df: pd.DataFrame | None = None
-        self._cached_training_result: TrainingResult | None = None
 
         # Raw-OHLCV -> features recipe (bar timeframe + FeatureEngineer spec),
         # recorded by the data pipeline and baked into bundles for inference.
@@ -444,7 +443,7 @@ class MLFactory:
             n_columns=len(df.columns),
         )
 
-    def _save_checkpoint_training(self, training_result: Any) -> None:
+    def _save_checkpoint_training(self, training_result: TrainingRunResult) -> None:
         """Save checkpoint after training stage."""
         if not self._checkpoint_manager:
             return
@@ -546,7 +545,7 @@ class MLFactory:
         self._log("  WARNING: 4D models need MTF data but none available")
         return None
 
-    def _load_cached_training(self) -> Any:
+    def _load_cached_training(self) -> TrainingRunResult:
         """Load cached training result from checkpoint."""
         from src.core.utils.safe_pickle import safe_pickle_load
 
@@ -904,7 +903,7 @@ class MLFactory:
         self,
         df: pd.DataFrame,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
-    ) -> Any:
+    ) -> TrainingRunResult:
         """
         Train models using UnifiedTrainingOrchestrator.
 
@@ -932,7 +931,9 @@ class MLFactory:
 
         return result
 
-    def _run_evaluation(self, df: pd.DataFrame, training_result: Any) -> dict[str, float]:
+    def _run_evaluation(
+        self, df: pd.DataFrame, training_result: TrainingRunResult
+    ) -> dict[str, float]:
         """
         Run evaluation (backtesting, metrics computation).
 
@@ -1045,7 +1046,7 @@ class MLFactory:
             logger.warning(f"Backtest failed: {e}")
             return {}
 
-    def _create_bundle(self, training_result: Any) -> Path | None:
+    def _create_bundle(self, training_result: TrainingRunResult) -> Path | None:
         """
         Create deployment bundle with trained models and artifacts.
 
@@ -1083,7 +1084,9 @@ class MLFactory:
             logger.warning(f"Bundling failed: {e}")
             return None
 
-    def _create_deploy(self, training_result: Any, bundle_path: Path | None) -> Path | None:
+    def _create_deploy(
+        self, training_result: TrainingRunResult, bundle_path: Path | None
+    ) -> Path | None:
         """
         Create deploy artifact directory with manifest.
 
@@ -1177,7 +1180,9 @@ class MLFactory:
             logger.warning(f"Deploy artifact creation failed: {e}")
             return None
 
-    def _extract_predictions(self, df: pd.DataFrame, training_result: Any) -> pd.DataFrame | None:
+    def _extract_predictions(
+        self, df: pd.DataFrame, training_result: TrainingRunResult
+    ) -> pd.DataFrame | None:
         """
         Extract predictions from training result for backtesting.
 
@@ -1248,7 +1253,7 @@ class MLFactory:
 
         return None
 
-    def _extract_ensemble_metrics(self, training_result: Any) -> dict[str, float]:
+    def _extract_ensemble_metrics(self, training_result: TrainingRunResult) -> dict[str, float]:
         """
         Extract ensemble metrics from training result.
 

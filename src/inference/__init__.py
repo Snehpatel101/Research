@@ -8,7 +8,6 @@ This package provides end-to-end inference capabilities:
 - BundleBuilder: Create bundles from PHASE_3/PHASE_4 training results
 - InferencePipeline: High-level prediction interface
 - BatchPredictor: Efficient batch processing
-- ModelServer: Optional HTTP serving
 
 Usage:
     # RECOMMENDED: Use InferenceOrchestrator (PHASE_5 unified interface)
@@ -161,11 +160,6 @@ from src.inference.regime_bundle import (
     REGIME_BUNDLE_VERSION,
     RegimeBundle,
 )
-from src.inference.server import (
-    ModelServer,
-    ServerConfig,
-    start_server,
-)
 from src.inference.universal_pipeline import (
     UniversalInferencePipeline,
     UniversalPredictionResult,
@@ -197,10 +191,6 @@ __all__ = [
     "BatchInference",
     "BatchInferenceResult",
     "ModelPrediction",
-    # Server
-    "ModelServer",
-    "ServerConfig",
-    "start_server",
     # Builder (PHASE_5)
     "BundleBuilder",
     "BundleBuildResult",

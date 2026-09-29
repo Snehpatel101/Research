@@ -44,7 +44,7 @@ Import configs from their canonical locations:
     # Inference configs
     from src.config import (
         InferenceConfig, BacktestConfig,
-        BundleConfig, ServerConfig
+        BundleConfig
     )
 
 Configuration Access Utility:
@@ -65,7 +65,7 @@ Package Structure:
         cv.py               <- CV configs (CPCV, WalkForward, etc.)
         model_configs.py    <- Model configs (XGBoost, LSTM, etc.)
         ensemble.py         <- Ensemble configs (Stacking, Voting, etc.)
-        inference.py        <- Inference configs (Backtest, Server, etc.)
+        inference.py        <- Inference configs (Backtest, Bundle, etc.)
         utils.py            <- get_config_value (single implementation)
         validators.py       <- Schema validation
         global_config.py    <- GlobalConfig (YAML loader)
@@ -189,7 +189,6 @@ from src.config.global_config import (
 # =============================================================================
 from src.config.inference import (
     # Configs
-    AlertConfig,
     BacktestConfig,
     BundleConfig,
     InferenceConfig,
@@ -198,7 +197,6 @@ from src.config.inference import (
     PositionSizerConfig,
     PositionSizingMethod,
     PreprocessingGraphConfig,
-    ServerConfig,
 )
 
 # =============================================================================
@@ -416,11 +414,9 @@ __all__ = [
     # Configs
     "InferenceConfig",
     "BundleConfig",
-    "ServerConfig",
     "BacktestConfig",
     "PositionSizerConfig",
     "PreprocessingGraphConfig",
-    "AlertConfig",
     # ==========================================================================
     # SYMBOL CONFIGURATION
     # ==========================================================================

@@ -27,8 +27,7 @@ anything above Layer 4 runs in Colab.
    !pip install -q -r requirements-colab.txt
    ```
    `requirements-colab.txt` deliberately pins `pandas==2.2.2` to match Colab's
-   pre-installed stack and omits `river` (pandas conflict — install with
-   `pip install river --no-deps` only if drift detection is needed).
+   pre-installed stack.
 
 3. **Data**: mount Drive and point `config.data.data_path` at the 1-min OHLCV
    parquet (`from google.colab import drive; drive.mount('/content/drive')`).
