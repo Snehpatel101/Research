@@ -62,6 +62,24 @@ Feature configuration. (`src.config.data.FeatureConfig`)
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `selection_enabled` | `bool` | `True` | Run train-only MDA feature selection per model. |
+| `governance` | `FeatureGovernanceConfig` | see below | Opt-in stability / label-perturbation / registry diagnostics. See [`data.features.governance`](#datafeaturesgovernance). |
+
+## `data.features.governance`
+
+Opt-in feature-governance diagnostics run after feature selection. (`src.config.data.FeatureGovernanceConfig`)
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `report` | `bool` | `False` | Master switch. Writes ``<output_dir>/feature_governance/h{h}.json`` (h = the ranking horizon) with per-feature MDA importance, selection stability across contiguous blocks, label-perturbation rank shifts, robustness score and per-model selection. |
+| `bootstrap_stability` | `bool` | `True` | Include block-subsample selection frequency (stability selection). Only used when ``report`` is on. |
+| `label_perturbation` | `bool` | `True` | Include rank shifts when triple-barrier widths change by ``barrier_scales``. Only used when ``report`` is on. |
+| `registry` | `bool` | `True` | Persist a cross-run FeatureRegistry (lifecycle state per feature) updated from this run's selection and stability verdicts. Only used when ``report`` is on. |
+| `registry_path` | `str \| None` | `None` | Registry JSON path. None = ``<runs dir>/feature_registry_<SYMBOL>.json`` next to the run directories, so every run of a symbol shares it. |
+| `n_bootstrap` | `int` | `8` | Number of contiguous blocks for the stability estimate. |
+| `stability_threshold` | `float` | `0.6` | Minimum share of blocks a feature must rank in the top-K (K = the largest per-model feature budget) to count as stable. |
+| `window_fraction` | `float` | `0.5` | Length of each block as a share of the train rows. |
+| `barrier_scales` | `list[float]` | `[0.75, 1.25]` | Multipliers applied to the label's k_up and k_down for the perturbed label variants (e.g. 0.75 = tighter, 1.25 = wider). |
+| `max_degraded_runs` | `int` | `3` | Consecutive failing runs in DEGRADED before the registry retires a feature (retirement is recorded, never applied). |
 
 ## `data.labeling`
 
@@ -214,6 +232,19 @@ data:
   bar_timeframe: null
   features:
     selection_enabled: true
+    governance:
+      report: false
+      bootstrap_stability: true
+      label_perturbation: true
+      registry: true
+      registry_path: null
+      n_bootstrap: 8
+      stability_threshold: 0.6
+      window_fraction: 0.5
+      barrier_scales:
+      - 0.75
+      - 1.25
+      max_degraded_runs: 3
   labeling:
     upper_mult: null
     lower_mult: null

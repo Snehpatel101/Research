@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
-from src.inference.meta_labeling_bundle import ConstantBetFilter
+from src.inference.meta_labeling_bundle import ConstantBetFilter, build_meta_features
 
 
 def test_constant_filter_returns_the_win_rate_for_every_bar() -> None:
@@ -24,3 +24,10 @@ def test_constant_filter_survives_the_bundle_pickle_round_trip(tmp_path) -> None
     safe_pickle_dump(ConstantBetFilter(0.6), tmp_path / "meta_model.pkl")
     loaded = safe_pickle_load(tmp_path / "meta_model.pkl")
     np.testing.assert_allclose(loaded.predict_proba(np.zeros((2, 1)))[:, 1], 0.6)
+
+
+def test_meta_features_for_a_primary_that_never_bets() -> None:
+    """Zero sided rows (e.g. a 4D primary that always predicts neutral) keep their width."""
+    for shape in [(0, 7), (0, 16, 5), (0, 3, 16, 5)]:
+        features = build_meta_features(np.zeros(shape), np.zeros((0, 3)))
+        assert features.shape == (0, int(np.prod(shape[1:])) + 3 + 1)

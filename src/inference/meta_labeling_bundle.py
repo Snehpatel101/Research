@@ -98,9 +98,12 @@ def build_meta_features(model_input: np.ndarray, primary_probabilities: np.ndarr
         raise ValueError(
             f"primary_probabilities must be (n_samples={n}, n_classes), got {probs.shape}"
         )
+    inputs = np.asarray(model_input, dtype=np.float32)
+    # Explicit width: reshape(0, -1) is ambiguous when the primary bets on no rows.
+    n_inputs = int(np.prod(inputs.shape[1:], dtype=np.int64))
     return np.hstack(
         [
-            np.asarray(model_input, dtype=np.float32).reshape(n, -1),
+            inputs.reshape(n, n_inputs),
             probs,
             probs.max(axis=1, keepdims=True),
         ]
