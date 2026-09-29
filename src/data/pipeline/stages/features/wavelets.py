@@ -14,7 +14,6 @@ import logging
 
 import numpy as np
 import pandas as pd
-from numba import njit
 
 from ._helpers import np_shift1 as _np_shift1
 
@@ -52,6 +51,10 @@ SUPPORTED_WAVELETS = {
 DEFAULT_WAVELET = "db4"
 DEFAULT_LEVEL = 3
 DEFAULT_WINDOW = 64
+# Trailing window (bars) for the coefficient z-scores, and the values required
+# before the first one is emitted.
+NORMALIZE_WINDOW = 256
+NORMALIZE_MIN_PERIODS = 20
 
 
 def _compute_dwt_all(signal: np.ndarray, wavelet: str, level: int, window_size: int) -> dict:
@@ -162,51 +165,22 @@ def _compute_energy_ratio(
         return np.where(total_energy > 0, approx_energy / total_energy, np.nan)
 
 
-@njit(cache=True)
-def _normalize_coefficients_numba(coeffs: np.ndarray) -> np.ndarray:
-    """
-    Normalize wavelet coefficients to z-scores using Welford's online algorithm.
-
-    O(n) single-pass algorithm instead of O(n²) expanding window approach.
-    Uses Welford's numerically stable online variance computation.
-    """
-    n = len(coeffs)
-    result = np.full(n, np.nan)
-
-    # Welford's online algorithm state
-    count = 0
-    mean = 0.0
-    M2 = 0.0  # Sum of squared deviations
-
-    for i in range(n):
-        val = coeffs[i]
-        if np.isnan(val):
-            continue
-
-        # Update Welford's accumulators
-        count += 1
-        delta = val - mean
-        mean += delta / count
-        delta2 = val - mean
-        M2 += delta * delta2
-
-        # Only output after minimum warmup period
-        if count >= 20:
-            # Compute std from M2 (population std)
-            variance = M2 / count
-            std = np.sqrt(variance) if variance > 0 else 0.0
-
-            if std > 1e-10:
-                result[i] = (val - mean) / std
-            else:
-                result[i] = 0.0
-
-    return result
-
-
 def _normalize_coefficients(coeffs: np.ndarray) -> np.ndarray:
-    """Normalize wavelet coefficients to z-scores using expanding window."""
-    return _normalize_coefficients_numba(coeffs.astype(np.float64))
+    """Z-score wavelet coefficients against their trailing NORMALIZE_WINDOW values.
+
+    A bounded window keeps each value a function of recent bars only; an
+    expanding mean/std from the first bar made the same bar's feature depend on
+    how much history the input starts with (training's full history vs. a
+    served window of recent bars). Population std; 0 where it vanishes.
+    """
+    series = pd.Series(coeffs, dtype=np.float64)
+    rolling = series.rolling(NORMALIZE_WINDOW, min_periods=NORMALIZE_MIN_PERIODS)
+    mean = rolling.mean()
+    std = rolling.std(ddof=0)
+    z = ((series - mean) / std.where(std > 1e-10)).to_numpy(copy=True)
+    flat = (std <= 1e-10).to_numpy() & series.notna().to_numpy()
+    z[flat] = 0.0
+    return z
 
 
 def _get_freq_label(lev: int) -> str:

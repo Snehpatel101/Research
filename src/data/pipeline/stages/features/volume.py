@@ -15,6 +15,17 @@ from src.core.utils.math_utils import safe_divide
 logger = logging.getLogger(__name__)
 
 
+def _session_obv(df: pd.DataFrame) -> pd.Series:
+    """Unlagged On Balance Volume, reset at each session (calendar date, as VWAP).
+
+    A running sum from the first bar would make every value depend on where the
+    input starts: a bar served from a window of recent history would get a
+    different OBV than the same bar computed over the full training history.
+    """
+    signed_volume = (np.sign(df["close"].diff()) * df["volume"]).fillna(0)
+    return signed_volume.groupby(df["datetime"].dt.date.to_numpy()).cumsum()
+
+
 def add_volume_features(
     df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 20
 ) -> pd.DataFrame:
@@ -45,7 +56,7 @@ def add_volume_features(
 
     # ANTI-LOOKAHEAD: All volume features shifted by 1 bar
     # OBV - computed then shifted
-    obv_raw = (np.sign(df["close"].diff()) * df["volume"]).fillna(0).cumsum()
+    obv_raw = _session_obv(df)
     df["obv"] = obv_raw.shift(1)
 
     # OBV SMA - computed on raw, then shifted
@@ -64,7 +75,7 @@ def add_volume_features(
     volume_zscore_raw = safe_divide(df["volume"] - vol_mean, vol_std, fill_value=np.nan)
     df["volume_zscore"] = volume_zscore_raw.shift(1)
 
-    feature_metadata["obv"] = "On Balance Volume (lagged)"
+    feature_metadata["obv"] = "On Balance Volume (session, lagged)"
     feature_metadata[obv_sma_col] = f"OBV {period}-period SMA (lagged)"
     feature_metadata[volume_sma_col] = f"Volume {period}-period SMA (lagged)"
     feature_metadata["volume_ratio"] = f"Volume ratio to {period}-period SMA (lagged)"
@@ -150,10 +161,9 @@ def add_obv(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     logger.info("Adding OBV...")
 
     # ANTI-LOOKAHEAD: shift(1) ensures OBV at bar[t] uses data up to bar[t-1]
-    obv_raw = (np.sign(df["close"].diff()) * df["volume"]).fillna(0).cumsum()
-    df["obv"] = obv_raw.shift(1)
+    df["obv"] = _session_obv(df).shift(1)
 
-    feature_metadata["obv"] = "On Balance Volume (lagged)"
+    feature_metadata["obv"] = "On Balance Volume (session, lagged)"
 
     return df
 

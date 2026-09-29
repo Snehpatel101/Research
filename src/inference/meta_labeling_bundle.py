@@ -9,7 +9,9 @@ the primary predicts neutral are never traded.
 
 Meta features (``build_meta_features``) are the primary's own scaled model
 input plus its uncalibrated class probabilities and confidence — built by the
-same function at training and at serving time (train/serve parity).
+same function at training and at serving time (train/serve parity). The
+served primary is the model refit on all training rows: on training-range bars
+its probabilities are in-sample, so compare the filter with training on later bars.
 
 Layout on disk:
     path/

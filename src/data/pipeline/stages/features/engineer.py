@@ -54,8 +54,9 @@ from .wavelets import PYWT_AVAILABLE, add_wavelet_features
 logger = logging.getLogger(__name__)
 
 # Part of the feature-cache key: bump when feature values change so stale
-# caches are never reused (2: pywt read-only fix, SampEn caps, causal ffill).
-FEATURE_ENGINE_VERSION = 2
+# caches are never reused (2: pywt read-only fix, SampEn caps, causal ffill;
+# 3: session-reset OBV, trailing-window wavelet z-scores).
+FEATURE_ENGINE_VERSION = 3
 logger.addHandler(logging.NullHandler())
 
 

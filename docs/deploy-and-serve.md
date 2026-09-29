@@ -44,6 +44,14 @@ deployed bundle must reproduce the trained model's validation probabilities
 from raw bars, and features recomputed from raw OHLCV must equal the training
 features ([verification matrix](MIX_AND_MATCH.md)).
 
+**Pass enough history.** Features look back over a bounded window
+(session-reset OBV/VWAP, trailing windows) or an exponentially fading one
+(EMA-based indicators), so a bar gets the value training gave it once that
+lookback is inside the bars you pass. Long lookbacks
+(SMA-200 regimes, 256-bar wavelet z-scores) mean the first ~300 rows scored
+from a short window can still differ; pass at least that many bars before the
+ones you act on.
+
 ## What a run writes
 
 ```text
@@ -133,6 +141,11 @@ meta.trade_mask            # side taken AND P(win) >= threshold
 meta.positions             # side x P(win) on traded bars, 0 elsewhere
 meta.n_trades
 ```
+
+The primary inside the bundle is refit on all training rows, so on bars from
+the training range its probabilities are in-sample (more confident than the
+out-of-fold ones the meta-model learned from); judge the filter on bars after
+the training range.
 
 ### Several bundles at once
 
