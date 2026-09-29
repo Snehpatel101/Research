@@ -31,3 +31,20 @@ def test_meta_features_for_a_primary_that_never_bets() -> None:
     for shape in [(0, 7), (0, 16, 5), (0, 3, 16, 5)]:
         features = build_meta_features(np.zeros(shape), np.zeros((0, 3)))
         assert features.shape == (0, int(np.prod(shape[1:])) + 3 + 1)
+
+
+def test_meta_labeling_bet_filter_is_saved_with_the_models(tmp_path) -> None:
+    """The bet filter is a plain estimator (no .save()); it must still be persisted."""
+    from sklearn.linear_model import LogisticRegression
+
+    from src.models.training.services.artifact_persistence import ArtifactManager
+
+    X, y = np.random.default_rng(0).normal(size=(40, 3)), np.tile([0, 1], 20)
+    models = {
+        "meta_labeling_h5_meta": LogisticRegression().fit(X, y),
+        "const": ConstantBetFilter(0.4),
+    }
+    ArtifactManager(tmp_path).save_models(models)
+    for key, model in models.items():
+        loaded = safe_pickle_load(tmp_path / "models" / f"{key}.pkl")
+        np.testing.assert_allclose(loaded.predict_proba(X), model.predict_proba(X))

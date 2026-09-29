@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core import PipelineConfig
+from src.core.utils.safe_pickle import safe_pickle_dump
 from src.validation.cv import OOFPrediction
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,11 @@ class ArtifactManager:
         for key, trainer in trained_models.items():
             try:
                 model_path = models_dir / f"{key}.pkl"
-                trainer.save(model_path)
+                if hasattr(trainer, "save"):
+                    trainer.save(model_path)
+                else:
+                    # Plain estimators (e.g. the meta-labeling bet filter)
+                    safe_pickle_dump(trainer, model_path)
                 saved_count += 1
                 logger.debug(f"  Saved model {key} to: {model_path}")
             except Exception as e:
