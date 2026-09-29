@@ -10,6 +10,8 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning", Chapt
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 from numba import njit
@@ -48,18 +50,38 @@ def _frac_diff_inner(x: np.ndarray, weights: np.ndarray) -> np.ndarray:
     return result
 
 
+def ffd_weights(d: float, threshold: float = 1e-5, max_window: int = 100) -> np.ndarray:
+    """FFD weights ``[w_0 = 1, w_1, ...]`` for order ``d``.
+
+    The window is fixed by ``d``, ``threshold`` and ``max_window`` alone — never
+    by the length of the series it is applied to — so a value computed on a
+    long training history equals the value computed on a short serving window
+    wherever both have the ``len(weights)`` bars of history it needs.
+    """
+    if max_window < 2:
+        raise ValueError(f"max_window must be >= 2, got {max_window}")
+    return _get_weights_ffd(float(d), float(threshold), int(max_window))
+
+
 def frac_diff_ffd(
     series: pd.Series,
     d: float = 0.3,
     threshold: float = 1e-5,
+    max_window: int | None = None,
 ) -> pd.Series:
     """Compute fixed-width window fractional differentiation.
+
+    Causal: the value at bar ``t`` uses bars ``t - window + 1 .. t`` only.
 
     Args:
         series: Input price series (typically log prices or close prices).
         d: Differentiation order. 0 = original, 1 = first diff.
            Typical range: 0.2-0.4 for stationarity with memory.
         threshold: Weight truncation threshold. Smaller = more precise but slower.
+        max_window: Hard cap on the window length. Pass an explicit value
+            whenever the result must not depend on how much data is supplied
+            (features replayed at inference). ``None`` keeps the legacy
+            data-dependent cap ``min(500, len(series) // 2)``.
 
     Returns:
         pd.Series aligned to original index with NaN for warmup period.
@@ -72,10 +94,9 @@ def frac_diff_ffd(
         return series.copy()
 
     x = clean.values.astype(np.float64)
-    # Cap window at half the data length to ensure sufficient output.
-    # For d=0.3, threshold=1e-5 produces ~2000 weights, which is too long
-    # for most financial series. A window of 200-500 is standard practice.
-    max_window = min(500, len(x) // 2)
+    if max_window is None:
+        # Legacy: cap at half the data length to ensure sufficient output.
+        max_window = min(500, len(x) // 2)
     weights = _get_weights_ffd(d, threshold, max_len=max(max_window, 2))
     result = _frac_diff_inner(x, weights)
 
@@ -89,6 +110,8 @@ def find_min_d(
     p_value_threshold: float = 0.05,
     d_range: tuple[float, float] = (0.0, 1.0),
     d_step: float = 0.05,
+    threshold: float = 1e-5,
+    max_window: int | None = None,
 ) -> float:
     """Find minimum d that makes series stationary (ADF test).
 
@@ -101,22 +124,43 @@ def find_min_d(
         p_value_threshold: ADF p-value threshold for stationarity.
         d_range: Range of d values to search.
         d_step: Step size for d search.
+        threshold: FFD weight truncation threshold used for every candidate d.
+        max_window: FFD window cap used for every candidate d. Pass the same
+            value the features are computed with, so the d found is the d
+            that makes THOSE features stationary.
 
     Returns:
         Minimum d value for stationarity. Returns 1.0 if no d found.
+
+    Raises:
+        ImportError: statsmodels (the ADF test) is not installed.
     """
-    from statsmodels.tsa.stattools import adfuller
+    try:
+        from statsmodels.tsa.stattools import adfuller
+    except ImportError as exc:
+        raise ImportError(
+            "find_min_d needs statsmodels for the ADF stationarity test. "
+            "Install the optional extra: uv pip install -e '.[stats]' "
+            "(or set an explicit frac_diff d instead of 'auto')."
+        ) from exc
 
     d_values = np.arange(d_range[0], d_range[1] + d_step / 2, d_step)
 
     for d in d_values:
-        diffed = series.dropna() if d == 0.0 else frac_diff_ffd(series, d=d).dropna()
+        diffed = (
+            series.dropna()
+            if d == 0.0
+            else frac_diff_ffd(series, d=d, threshold=threshold, max_window=max_window).dropna()
+        )
 
         if len(diffed) < 20:
             continue
 
         try:
-            adf_stat, p_value, *_ = adfuller(diffed, maxlag=1, autolag=None)
+            with warnings.catch_warnings():
+                # statsmodels announces a future return type; the tuple form is fine here
+                warnings.simplefilter("ignore", FutureWarning)
+                adf_stat, p_value, *_ = adfuller(diffed, maxlag=1, autolag=None)
         except Exception:
             continue
 
@@ -124,3 +168,30 @@ def find_min_d(
             return float(round(d, 10))
 
     return 1.0
+
+
+def resolve_frac_diff_d(
+    d: float | str,
+    train_log_price: pd.Series,
+    threshold: float = 1e-5,
+    max_window: int = 100,
+) -> float:
+    """Resolve the configured ``d`` (a number, or ``"auto"``) into a frozen number.
+
+    ``"auto"`` runs :func:`find_min_d` (ADF) on ``train_log_price`` — the
+    TRAINING rows only — with the same window and threshold the features use.
+    The result is frozen into the feature spec, so inference replays the same
+    ``d`` and never re-fits it on serving data.
+
+    Raises:
+        ImportError: ``"auto"`` without statsmodels installed.
+        ValueError: ``d`` is not ``"auto"`` or a number in (0, 1].
+    """
+    if isinstance(d, str):
+        if d != "auto":
+            raise ValueError(f"frac_diff d must be a number or 'auto', got {d!r}")
+        return find_min_d(train_log_price, threshold=threshold, max_window=max_window)
+    value = float(d)
+    if not 0.0 < value <= 1.0:
+        raise ValueError(f"frac_diff d must be in (0, 1], got {value}")
+    return value

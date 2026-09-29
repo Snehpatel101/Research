@@ -141,7 +141,9 @@ from .position_sizing import (
     KellyCriterion,
     PositionSizerConfig,
     PositionSizingMethod,
+    ProbabilityBetSizer,
     VolatilityTargeted,
+    afml_bet_size,
     create_position_sizer,
 )
 
@@ -179,6 +181,8 @@ __all__ = [
     "VolatilityTargeted",
     "EqualWeight",
     "FixedContracts",
+    "ProbabilityBetSizer",
+    "afml_bet_size",
     "PositionSizerConfig",
     "create_position_sizer",
     # Metrics

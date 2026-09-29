@@ -158,7 +158,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 5 | Seeded runs, `run_manifest.json`, determinism test, `tracking` config (MLflow extra) | `src/factory.py`, `src/config/experiment.py`, `src/core/reproducibility.py` | 🔄 |
 | 6 | Harness 4D prediction parity; batched TFT variable selection; binary `ml cv` | `scripts/mix_match.py`, `src/models/neural/tft_model.py`, `src/validation/cv/cv_feature_selection.py` | 🔄 |
 | 7 | Hypothesis property tests (causality, purging, carve, labels, backtest, streaming parity, config, sanitizer) | `tests/property/` | 🔄 |
-| 8 | CUSUM event sampling, fractional differentiation, meta-probability bet sizing | `src/data/features/{cusum_filter,frac_diff}.py`, backtest sizing | ⬜ |
+| 8 | CUSUM event sampling (`data.labeling.event_sampling`, train-only auto threshold frozen in the bundle, backtest on event bars, `is_event` at serve), fractional differentiation (`data.features.frac_diff`, fixed-window FFD, train-fitted `d` frozen in the `FeatureEngineer` spec), AFML probability bet sizing (`evaluation.position_sizing: probability`); all opt-in, defaults unchanged | `src/data/features/{cusum_filter,frac_diff}.py`, `src/data/labeling/event_sampling.py`, `src/data/pipeline/stages/features/frac_diff_features.py`, `src/inference/backtesting/position_sizing.py`, `src/factory.py`, `tests/e2e/test_event_frac_bet_e2e.py` | ✅ |
 | 9 | Optional thin serving extra + Dockerfile | `src/cli/`, new serve module | ⬜ |
 | 10 | Validated config (pydantic v2, JSON schema, `validate-config`) | `src/config/` | ⬜ |
 | 11 | Import-cycle break (lazy facades, DECISIONS #10) + package rename `src` → `mlfactory`, public API, entry-point model registry | package-wide | ⬜ |

@@ -139,3 +139,50 @@ def get_cusum_threshold(
             hi = mid  # threshold too high, lower it
 
     return (lo + hi) / 2.0
+
+
+def log_returns(close: pd.Series) -> pd.Series:
+    """Bar-to-bar log returns of a price series (first bar NaN). Causal."""
+    return pd.Series(np.log(close.to_numpy(dtype=np.float64)), index=close.index).diff()
+
+
+def auto_cusum_threshold(train_returns: pd.Series, vol_multiple: float = 3.0) -> float:
+    """CUSUM threshold as a multiple of the per-bar volatility of the TRAIN returns.
+
+    For i.i.d. returns with standard deviation ``sigma`` a symmetric CUSUM with
+    threshold ``h`` fires about every ``(h / sigma)^2`` bars, so ``vol_multiple``
+    sets the sampling density: 3 gives an event roughly every 9 bars, 5 every
+    25. The caller passes the training rows only — the threshold then carries
+    no information about the validation or test period.
+
+    Raises:
+        ValueError: ``vol_multiple`` is not positive, or the returns have fewer
+            than 30 finite observations or no variance.
+    """
+    if vol_multiple <= 0:
+        raise ValueError(f"vol_multiple must be positive, got {vol_multiple}")
+    values = train_returns.to_numpy(dtype=np.float64)
+    values = values[np.isfinite(values)]
+    if len(values) < 30:
+        raise ValueError(
+            f"Need at least 30 training returns to calibrate a CUSUM threshold, got {len(values)}"
+        )
+    sigma = float(np.std(values, ddof=1))
+    if not np.isfinite(sigma) or sigma <= 0:
+        raise ValueError("Training returns have no variance; cannot calibrate a CUSUM threshold")
+    return vol_multiple * sigma
+
+
+def cusum_event_mask(close: pd.Series, threshold: float) -> np.ndarray:
+    """Boolean event mask over the bars of ``close`` (True = CUSUM event bar).
+
+    The filter runs forward over the log returns of ``close``: the decision for
+    bar ``t`` depends on bars ``<= t`` only, so the mask of a prefix equals the
+    prefix of the mask. It is path dependent (the sums reset at every event),
+    so the same history start must be used when the mask is replayed.
+    """
+    mask = np.zeros(len(close), dtype=bool)
+    events = cusum_filter(log_returns(close), threshold)
+    if len(events):
+        mask[events] = True
+    return mask

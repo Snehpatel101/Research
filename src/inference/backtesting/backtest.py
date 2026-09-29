@@ -151,6 +151,11 @@ class BacktestConfig:
         risk_per_trade: Risk per trade for position sizing
         kelly_fraction: Kelly fraction for Kelly sizing
         target_volatility: Target volatility for vol-targeted sizing
+        bet_max_contracts / bet_n_classes / bet_step_size: AFML probability
+            sizing (``position_sizing="probability"``): contracts at full
+            size, outcome count K (3 = short/neutral/long), and the size
+            discretization step (0 = none). The probability fed to the sizer
+            is each prediction's ``confidence``.
         min_holding_period: Minimum bars before a SIGNAL-driven exit (stops,
             take-profits, time and forced exits are always honored)
         max_holding_period: Maximum bars to hold, counted from the signal bar
@@ -188,6 +193,9 @@ class BacktestConfig:
     kelly_fraction: float = 0.25
     target_volatility: float = 0.10
     fixed_contracts: int = 1
+    bet_max_contracts: int = 5
+    bet_n_classes: int = 3
+    bet_step_size: float = 0.0
     min_holding_period: int = 1
     max_holding_period: int = 0
     max_drawdown_threshold: float = 0.10
@@ -501,6 +509,9 @@ class Backtester:
                 target_volatility=self.config.target_volatility,
                 point_value=self.config.point_value,
                 contracts=self.config.fixed_contracts,
+                bet_max_contracts=self.config.bet_max_contracts,
+                bet_n_classes=self.config.bet_n_classes,
+                bet_step_size=self.config.bet_step_size,
             )
         else:
             self.position_sizer = position_sizer
@@ -544,7 +555,7 @@ class Backtester:
         """Map canonical position_sizing values to local PositionSizingMethod values.
 
         ExperimentConfig.evaluation.position_sizing uses short names like
-        "fixed", "kelly", "volatility", "confidence".  The local position sizer
+        "fixed", "kelly", "volatility", "confidence", "probability".  The local position sizer
         (position_sizing.py) expects "fixed_contracts", "kelly",
         "volatility_targeted", "bet_sizing", etc.  This method bridges the two.
         """

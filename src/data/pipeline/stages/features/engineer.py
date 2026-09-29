@@ -21,6 +21,7 @@ from src.core.constants import OHLCV_COLUMNS
 from ..mtf import add_mtf_features
 from ..mtf.generator import MTFFeatureGenerator
 from .entropy import add_entropy_features
+from .frac_diff_features import FRAC_DIFF_PRICE_COLUMNS, add_frac_diff_features
 from .microstructure import add_microstructure_features
 from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
 from .moving_averages import add_ema, add_sma
@@ -202,6 +203,10 @@ class FeatureEngineer:
         wavelet_window: int = 64,
         nan_threshold: float = 0.9,
         cache_dir: str | Path | None = None,
+        frac_diff_columns: list[str] | None = None,
+        frac_diff_d: float | None = None,
+        frac_diff_window: int = 100,
+        frac_diff_threshold: float = 1e-5,
     ):
         """
         Initialize feature engineer.
@@ -304,6 +309,24 @@ class FeatureEngineer:
             raise ValueError(f"nan_threshold must be between 0.0 and 1.0, got {nan_threshold}")
         self.nan_threshold = nan_threshold
 
+        # Fractional differentiation configuration
+        self.frac_diff_columns = list(frac_diff_columns or [])
+        self.frac_diff_d = frac_diff_d
+        self.frac_diff_window = frac_diff_window
+        self.frac_diff_threshold = frac_diff_threshold
+        if self.frac_diff_columns:
+            unknown = [c for c in self.frac_diff_columns if c not in FRAC_DIFF_PRICE_COLUMNS]
+            if unknown:
+                raise ValueError(
+                    f"frac_diff_columns must be among {FRAC_DIFF_PRICE_COLUMNS}, got {unknown}"
+                )
+            if frac_diff_d is None or not 0.0 < frac_diff_d <= 1.0:
+                raise ValueError(
+                    f"frac_diff_columns needs a resolved frac_diff_d in (0, 1], got {frac_diff_d}"
+                )
+            if frac_diff_window < 2:
+                raise ValueError(f"frac_diff_window must be >= 2, got {frac_diff_window}")
+
         # Create output directory
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -345,6 +368,10 @@ class FeatureEngineer:
         "wavelet_level",
         "wavelet_window",
         "nan_threshold",
+        "frac_diff_columns",
+        "frac_diff_d",
+        "frac_diff_window",
+        "frac_diff_threshold",
     )
 
     def to_spec(self) -> dict[str, Any]:
@@ -355,6 +382,7 @@ class FeatureEngineer:
         """
         spec = {name: getattr(self, name) for name in self._SPEC_FIELDS}
         spec["mtf_timeframes"] = list(spec["mtf_timeframes"])
+        spec["frac_diff_columns"] = list(spec["frac_diff_columns"])
         return spec
 
     @classmethod
@@ -464,6 +492,18 @@ class FeatureEngineer:
 
         # Add information-theoretic entropy features (Shannon, LZ, ApEn)
         df = add_entropy_features(df, self.feature_metadata)
+
+        # Fractionally differentiated log prices (opt-in; d frozen in the spec)
+        if self.frac_diff_columns:
+            assert self.frac_diff_d is not None
+            df = add_frac_diff_features(
+                df,
+                self.feature_metadata,
+                columns=self.frac_diff_columns,
+                d=self.frac_diff_d,
+                max_window=self.frac_diff_window,
+                threshold=self.frac_diff_threshold,
+            )
 
         # Add Wavelet decomposition features
         wavelet_cols_added = 0
@@ -614,9 +654,20 @@ class FeatureEngineer:
 
         # Hash input data + config for cache key
         data_hash = hashlib.sha256(pd.util.hash_pandas_object(df).values.tobytes()).hexdigest()[:16]
+        frac_diff_key = (
+            {
+                "frac_diff_columns": self.frac_diff_columns,
+                "frac_diff_d": self.frac_diff_d,
+                "frac_diff_window": self.frac_diff_window,
+                "frac_diff_threshold": self.frac_diff_threshold,
+            }
+            if self.frac_diff_columns
+            else {}
+        )
         config_hash = hashlib.sha256(
             json.dumps(
                 {
+                    **frac_diff_key,
                     # Bump FEATURE_ENGINE_VERSION whenever computed values change
                     "engine_version": FEATURE_ENGINE_VERSION,
                     "timeframe": self.timeframe,

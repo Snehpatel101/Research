@@ -538,8 +538,12 @@ class FeatureSelectionMixin:
                     break
 
             if label_col is not None and feature_names and len(feature_names) > 0:
-                X_features = df[feature_names]
-                y_labels = df[label_col].values
+                # Rows with the invalid-label sentinel (-99: warmup, end of data, and
+                # every non-event bar under event sampling) carry no label; keeping
+                # them would correlate features with "is a valid row" instead
+                valid_rows = df[label_col].to_numpy() != INVALID_LABEL
+                X_features = df.loc[valid_rows, feature_names]
+                y_labels = df.loc[valid_rows, label_col].values
                 report = check_feature_label_correlation(
                     features=X_features,
                     labels=y_labels,

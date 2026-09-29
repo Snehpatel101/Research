@@ -204,14 +204,43 @@ class TrainingSection:
     meta_learner: str = "ridge_meta"
 
 
+# Accepted evaluation.position_sizing values: the short names plus the
+# backtester's own method names
+POSITION_SIZING_CHOICES = (
+    "fixed",
+    "kelly",
+    "volatility",
+    "confidence",
+    "probability",
+    "fixed_contracts",
+    "fixed_fractional",
+    "volatility_targeted",
+    "equal_weight",
+    "bet_sizing",
+    "drawdown_adjusted",
+)
+
+
 @dataclass
 class EvaluationSection:
     """
     Evaluation-related configuration section.
+
+    Attributes:
+        position_sizing: Backtest position sizing. ``"fixed"`` (default, one
+            contract), ``"kelly"``, ``"volatility"``, ``"confidence"``
+            (meta-labeling bet sizing) or ``"probability"`` (AFML ch. 10: size
+            from the predicted probability of the chosen side —
+            ``2 * Phi((p - 1/K) / sqrt(p (1 - p))) - 1`` of ``bet_max_contracts``).
+        bet_max_contracts: ``"probability"`` sizing: contracts at full size
+        bet_step_size: ``"probability"`` sizing: discretization step of the
+            size in (0, 1] (AFML 10.3); 0 = none
     """
 
     run_backtest: bool = False
     position_sizing: str = "fixed"
+    bet_max_contracts: int = 5
+    bet_step_size: float = 0.0
 
     # Transaction cost overrides (passed to BacktestConfig)
     commission_per_contract: float | None = None
@@ -300,6 +329,29 @@ class ExperimentConfig:
             value = getattr(self.training, name)
             if value is not None and value < 0:
                 raise ValueError(f"training.{name} must be >= 0 or None, got {value}")
+
+    def validate(self) -> list[str]:
+        """Config problems that would only surface deep inside a run (empty = valid).
+
+        Covers the labeling (barriers, event sampling), fractional-differentiation
+        and position-sizing options. ``MLFactory`` raises on a non-empty result.
+        """
+        issues = self.data.labeling.validate() + self.data.features.validate()
+        sizing = self.evaluation.position_sizing
+        if sizing not in POSITION_SIZING_CHOICES:
+            issues.append(
+                f"evaluation.position_sizing must be one of {list(POSITION_SIZING_CHOICES)}, "
+                f"got {sizing!r}"
+            )
+        if self.evaluation.bet_max_contracts < 1:
+            issues.append(
+                f"evaluation.bet_max_contracts must be >= 1, got {self.evaluation.bet_max_contracts}"
+            )
+        if not 0.0 <= self.evaluation.bet_step_size <= 1.0:
+            issues.append(
+                f"evaluation.bet_step_size must be in [0, 1], got {self.evaluation.bet_step_size}"
+            )
+        return issues
 
     @property
     def symbol(self) -> str:

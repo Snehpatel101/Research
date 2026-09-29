@@ -983,7 +983,27 @@ class ModelBundle:
         # Bar timestamp of every prediction row — lets ensembles align base
         # models whose warmup (sequence windows, 4D streams) differs.
         result.metadata["timestamps"] = timestamps
+        flags = self.event_flags(raw_df, timestamps, skip_cleaning=skip_cleaning)
+        if flags is not None:
+            result.metadata["is_event"] = flags
         return result
+
+    def event_flags(
+        self,
+        raw_df: pd.DataFrame,
+        timestamps: pd.DatetimeIndex,
+        skip_cleaning: bool = False,
+    ) -> np.ndarray | None:
+        """Event-bar flags for ``timestamps`` (None if trained on every bar).
+
+        A model trained with event sampling (``data.labeling.event_sampling``)
+        learned from event bars only, yet ``predict_from_raw`` scores every
+        bar: act on the predictions where ``metadata["is_event"]`` is True,
+        as the backtest does.
+        """
+        if self.preprocessing_graph is None:
+            return None
+        return self.preprocessing_graph.event_flags(raw_df, timestamps, skip_cleaning=skip_cleaning)
 
     def raw_to_input(
         self,

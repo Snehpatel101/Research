@@ -18,6 +18,24 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   positions, derived purge/embargo, exact PSR/DSR, CSCV PBO, CPCV path assembly.
 - CI on uv (ruff, black, pyright, vulture, fast tests; weekly slow tests),
   `make check`, pre-commit, `slow` test marker.
+- Opt-in Lopez de Prado options (defaults leave results unchanged):
+  `data.labeling.event_sampling: "cusum"` (AFML ch. 2; labels only CUSUM event
+  bars, threshold `"auto"` = multiple of the training-rows volatility, frozen
+  into the bundle; the backtest acts on event bars, `predict_from_raw` flags
+  them in `metadata["is_event"]`), `data.features.frac_diff` (AFML ch. 5;
+  fixed-window `ffd_log_*` features, `d: "auto"` fitted on training rows and
+  replayed from the recorded feature spec) and
+  `evaluation.position_sizing: "probability"` (AFML ch. 10 bet size from the
+  predicted probability, `ProbabilityBetSizer`).
+- `ExperimentConfig.validate()` (checked by `MLFactory`); `scripts/mix_match.py
+  --set KEY=VALUE` config overrides.
+
+### Changed
+- `frac_diff_ffd(..., max_window=)` and `find_min_d(..., threshold=, max_window=)`
+  accept an explicit window (the default keeps the data-length-dependent cap).
+- The pre-training leakage check ignores invalid-label (-99) rows, and
+  `UnifiedDataPreparation.prepare` no longer warns about them (they are dropped
+  by `filter_invalid_labels`).
 
 ### Fixed
 - Backtest filled at the open of the bar whose close produced the signal

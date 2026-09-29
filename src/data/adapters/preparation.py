@@ -580,10 +580,13 @@ class UnifiedDataPreparation:
             label_end_positions=label_ends,
         )
 
-        # Validate the prepared data
+        # Validate the prepared data. Invalid-label rows (-99) are expected here —
+        # warmup, end of data and, with event sampling, every non-event bar; the
+        # caller drops them with filter_invalid_labels() — so they are not a warning.
         is_valid, issues = prepared.validate()
-        if not is_valid:
-            logger.warning(f"PreparedData validation issues: {issues}")
+        unexpected = [i for i in issues if "invalid labels" not in i]
+        if unexpected:
+            logger.warning(f"PreparedData validation issues: {unexpected}")
 
         logger.info(prepared.summary())
         return prepared
