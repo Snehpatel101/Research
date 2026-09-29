@@ -198,6 +198,18 @@ class TestFactoryRunCompletes:
         assert metrics, "backtest should produce metrics"
         assert "total_trades" in metrics
 
+    def test_backtest_uses_label_cost_term(
+        self, first_run: tuple[ExperimentConfig, ExperimentResult, MLFactory]
+    ) -> None:
+        """The backtester's barriers carry the exact cost term the labeler
+        added (Phase 116 parity), and the run reports circuit-breaker halts."""
+        _cfg, result, factory = first_run
+        label_cost = factory._label_cost_in_atr[5]
+        assert label_cost > 0
+        assert result.backtest_metrics["barrier_cost_in_atr"] == pytest.approx(label_cost)
+        assert result.backtest_metrics["signal_delay_bars"] == 1
+        assert "n_halts" in result.backtest_metrics
+
     def test_output_artifacts_exist(
         self, first_run: tuple[ExperimentConfig, ExperimentResult, MLFactory]
     ) -> None:

@@ -41,6 +41,7 @@ class Trade:
         label: Actual label at entry (for analysis)
         prediction: Model prediction
         confidence: Model confidence (0-1)
+        exit_reason: Why the position was closed (backtest ExitReason value)
     """
 
     entry_time: datetime
@@ -59,6 +60,7 @@ class Trade:
     initial_risk_1r: float = 0.0
     r_multiple: float = 0.0
     stop_loss_price: float | None = None
+    exit_reason: str | None = None
 
     @property
     def is_winner(self) -> bool:
@@ -117,6 +119,7 @@ class Trade:
             "initial_risk_1r": self.initial_risk_1r,
             "r_multiple": self.r_multiple,
             "stop_loss_price": self.stop_loss_price,
+            "exit_reason": self.exit_reason,
         }
 
 

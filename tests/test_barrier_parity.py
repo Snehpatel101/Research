@@ -13,7 +13,8 @@ backtester (_run_evaluation). These tests pin down:
    TripleBarrierConfig built the way the factory builds it carries symbol and
    horizon=max_bars from the table, not the prediction horizon).
 4. Cost parity: TripleBarrierLabeler._calculate_cost_in_atr uses per-symbol
-   costs from barriers_config (MGC vs MES differ by the expected ratio).
+   costs from barriers_config in PRICE units (ticks * tick_size), so MGC vs
+   MES differ by the expected ratio.
 5. PipelineConfig/LabelingConfig barrier fields default to None ("auto") and
    LabelingConfig.validate() accepts None but rejects non-positive values.
 """
@@ -26,15 +27,14 @@ import pytest
 
 from src.config.data import LabelingConfig
 from src.config.experiment import ExperimentConfig
+from src.config.symbol import SymbolConfig
 from src.core.config import PipelineConfig
 from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 from src.data.pipeline.config.barriers_config import (
     BARRIER_PARAMS,
     BARRIER_PARAMS_DEFAULT,
-    TICK_VALUES,
     TRANSACTION_COSTS,
     get_barrier_params,
-    get_tick_value,
     get_total_trade_cost,
 )
 from src.factory import MLFactory
@@ -191,12 +191,15 @@ def test_labeling_and_backtest_use_same_resolved_params(tmp_path):
 
 def test_cost_in_atr_uses_per_symbol_costs():
     """_calculate_cost_in_atr for MGC vs MES must differ by the exact ratio of
-    (total_trade_cost * tick_value) from barriers_config."""
-    # Table sanity (values documented in barriers_config.py)
+    (total_trade_cost * tick_size) from barriers_config + SymbolConfig.
+
+    Barriers live in price space, so the cost is ticks * tick_size (price
+    points), never ticks * tick_value (dollars — 5x too wide for MES)."""
+    # Table sanity (values documented in barriers_config.py / symbol.py)
     assert TRANSACTION_COSTS["MES"] == pytest.approx(2.43)
     assert TRANSACTION_COSTS["MGC"] == pytest.approx(3.04)
-    assert TICK_VALUES["MES"] == pytest.approx(1.25)
-    assert TICK_VALUES["MGC"] == pytest.approx(1.00)
+    tick_size = {s: SymbolConfig.from_symbol(s).tick_size for s in ("MES", "MGC")}
+    assert tick_size == {"MES": pytest.approx(0.25), "MGC": pytest.approx(0.10)}
 
     df = _synthetic_ohlcv_with_atr(n_bars=300)
     atr = df["atr_14"].to_numpy()
@@ -214,15 +217,15 @@ def test_cost_in_atr_uses_per_symbol_costs():
         labeler = TripleBarrierLabeler(config)
         costs[symbol] = labeler._calculate_cost_in_atr(atr)
 
-    # Each symbol: cost_in_atr = total_trade_cost(ticks) * tick_value / median_atr
+    # Each symbol: cost_in_atr = total_trade_cost(ticks) * tick_size / median_atr
     for symbol in ("MES", "MGC"):
-        expected = get_total_trade_cost(symbol, "low_vol") * get_tick_value(symbol) / median_atr
+        expected = get_total_trade_cost(symbol, "low_vol") * tick_size[symbol] / median_atr
         assert costs[symbol] == pytest.approx(expected, rel=1e-9), symbol
 
     # Symbols must actually differ, by the exact price-cost ratio
     assert costs["MGC"] != pytest.approx(costs["MES"])
-    expected_ratio = (get_total_trade_cost("MGC", "low_vol") * get_tick_value("MGC")) / (
-        get_total_trade_cost("MES", "low_vol") * get_tick_value("MES")
+    expected_ratio = (get_total_trade_cost("MGC", "low_vol") * tick_size["MGC"]) / (
+        get_total_trade_cost("MES", "low_vol") * tick_size["MES"]
     )
     assert costs["MGC"] / costs["MES"] == pytest.approx(expected_ratio, rel=1e-9)
 

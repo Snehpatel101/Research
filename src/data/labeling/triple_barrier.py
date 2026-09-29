@@ -480,6 +480,68 @@ else:
 
 
 # =============================================================================
+# TRANSACTION COST -> BARRIER DISTANCE (shared with the backtester)
+# =============================================================================
+# Single source of truth for the cost term of the barriers. The labeler and
+# src/inference/backtesting/backtest.py both call these, so a label's barrier
+# and the backtest's stop/take-profit are the same distance from entry:
+#
+#   distance_up   = (k_up   + cost_in_atr) * ATR
+#   distance_down = (k_down + cost_in_atr) * ATR
+#
+# cost_in_atr is the round-trip cost in PRICE units (ticks * tick_size, not
+# tick_value dollars) divided by the dataset's median ATR.
+
+
+def transaction_cost_in_price(symbol: str, volatility_regime: str = "low_vol") -> float:
+    """Round-trip trade cost (commission + entry/exit slippage) in price units.
+
+    ``get_total_trade_cost`` returns ticks; one tick is ``tick_size`` price
+    points (MES: 0.25). Multiplying by ``tick_value`` (dollars per tick) would
+    mix dollars into a price-space barrier (5x too wide for MES).
+    """
+    from src.config.symbol import SymbolConfig
+    from src.data.pipeline.config.barriers_config import get_total_trade_cost
+
+    cost_ticks = get_total_trade_cost(symbol, volatility_regime, include_slippage=True)
+    tick_size = SymbolConfig.from_symbol_or_default(symbol).tick_size
+    return float(cost_ticks * tick_size)
+
+
+def cost_in_atr_units(cost_in_price: float, atr_values: np.ndarray) -> float:
+    """Express a price-unit cost in ATR units using the median valid ATR.
+
+    The global median is intentional: a training-time calibration that turns a
+    fixed price cost into one ATR multiple for the whole dataset (an expanding
+    median would bias early samples with larger cost adjustments).
+    Returns 0.0 when no ATR value is valid.
+    """
+    atr = np.asarray(atr_values, dtype=float)
+    valid = atr[np.isfinite(atr) & (atr > 0)]
+    if len(valid) == 0:
+        return 0.0
+    return float(cost_in_price / np.median(valid))
+
+
+def compute_cost_in_atr(
+    symbol: str, atr_values: np.ndarray, volatility_regime: str = "low_vol"
+) -> float:
+    """Round-trip cost of ``symbol`` in ATR units (labeler and backtester)."""
+    return cost_in_atr_units(transaction_cost_in_price(symbol, volatility_regime), atr_values)
+
+
+def barrier_distances(
+    atr: float, k_up: float, k_down: float, cost_in_atr: float
+) -> tuple[float, float]:
+    """Price distance of the (upper, lower) barrier from the entry reference.
+
+    Mirrors ``triple_barrier_numba_with_costs``: both multipliers are widened
+    by ``cost_in_atr`` (pass 0.0 for the cost-free labeler).
+    """
+    return (k_up + cost_in_atr) * atr, (k_down + cost_in_atr) * atr
+
+
+# =============================================================================
 # TRIPLE BARRIER LABELER
 # =============================================================================
 
@@ -582,32 +644,15 @@ class TripleBarrierLabeler(LabelingStrategy):
     def _calculate_cost_in_atr(self, atr_values: np.ndarray) -> float:
         """
         Calculate transaction cost expressed in ATR units.
+
+        Delegates to ``compute_cost_in_atr`` — the same helper the backtester
+        uses for its stop/take-profit distances (label/backtest parity).
         """
-        try:
-            from src.data.pipeline.config.barriers_config import (
-                get_tick_value,
-                get_total_trade_cost,
-            )
-
-            cost_ticks = get_total_trade_cost(
-                self.config.symbol, self.config.volatility_regime, include_slippage=True
-            )
-            tick_value = get_tick_value(self.config.symbol)
-            cost_in_price = cost_ticks * tick_value
-
-            valid_atr = atr_values[~np.isnan(atr_values) & (atr_values > 0)]
-            if len(valid_atr) == 0:
-                logger.warning("No valid ATR values for cost calculation, using cost_in_atr=0")
-                return 0.0
-
-            # Global median is intentional: this is a training-time calibration that
-            # converts a fixed dollar cost into ATR units once for the entire dataset.
-            # An expanding median would bias early samples with higher cost adjustments.
-            median_atr = np.median(valid_atr)
-            return float(cost_in_price / median_atr)
-        except ImportError:
-            logger.warning("barriers_config not available, using default cost_in_atr=0.1")
-            return 0.1
+        atr = np.asarray(atr_values, dtype=float)
+        if not np.any(np.isfinite(atr) & (atr > 0)):
+            logger.warning("No valid ATR values for cost calculation, using cost_in_atr=0")
+            return 0.0
+        return compute_cost_in_atr(self.config.symbol, atr, self.config.volatility_regime)
 
     def compute_labels(
         self,
@@ -822,6 +867,10 @@ class TripleBarrierLabeler(LabelingStrategy):
 __all__ = [
     "TripleBarrierConfig",
     "TripleBarrierLabeler",
+    "barrier_distances",
+    "compute_cost_in_atr",
+    "cost_in_atr_units",
+    "transaction_cost_in_price",
     "triple_barrier_numba",
     "triple_barrier_numba_with_costs",
     "LabelingResult",
