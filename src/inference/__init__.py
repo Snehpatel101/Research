@@ -27,19 +27,8 @@ Building blocks:
 - ModelBundle / EnsembleBundle / RegimeBundle / MetaLabelingBundle: serializable artifacts
 - BundleBuilder / build_bundles: create bundles from a TrainingRunResult
 - PreprocessingGraph: serializable preprocessing for train/serve parity
-- BatchPredictor: batch processing (used by scripts/batch_inference.py)
-- InferenceOrchestrator / InferencePipeline: older interfaces with no in-repo consumers
 """
 
-from src.inference.batch import (
-    BatchInference,
-    BatchInferenceResult,
-    BatchPredictor,
-    BatchProgress,
-    BatchResult,
-    ModelPrediction,
-    run_batch_inference,
-)
 from src.inference.builder import (
     BundleBuilder,
     BundleBuildResult,
@@ -93,20 +82,6 @@ from src.inference.meta_labeling_bundle import (
     MetaLabelingBundle,
     MetaLabelingPrediction,
 )
-
-# InferenceOrchestrator: older interface (no in-repo consumers)
-from src.inference.orchestrator import (
-    InferenceOrchestrator,
-    PredictionResult,
-    load_inference,
-    predict_batch_from_bundle,
-    predict_from_bundle,
-)
-from src.inference.pipeline import (
-    EnsembleResult,
-    InferencePipeline,
-    InferenceResult,
-)
 from src.inference.preprocessing_graph import (
     PREPROCESSING_GRAPH_FILE,
     PREPROCESSING_GRAPH_VERSION,
@@ -135,19 +110,6 @@ __all__ = [
     "PreprocessingGraphConfig",
     "PREPROCESSING_GRAPH_VERSION",
     "PREPROCESSING_GRAPH_FILE",
-    # Pipeline
-    "InferencePipeline",
-    "InferenceResult",
-    "EnsembleResult",
-    # Batch data processing
-    "BatchPredictor",
-    "BatchProgress",
-    "BatchResult",
-    "run_batch_inference",
-    # Parallel ensemble inference
-    "BatchInference",
-    "BatchInferenceResult",
-    "ModelPrediction",
     # Builder (PHASE_5)
     "BundleBuilder",
     "BundleBuildResult",
@@ -159,12 +121,6 @@ __all__ = [
     "EnsembleBundleManifest",
     "AlignmentConfig",
     "ENSEMBLE_BUNDLE_VERSION",
-    # InferenceOrchestrator (older interface, no in-repo consumers)
-    "InferenceOrchestrator",
-    "PredictionResult",
-    "load_inference",
-    "predict_from_bundle",
-    "predict_batch_from_bundle",
     # Deploy artifact
     "DeployManifest",
     "HorizonArtifactEntry",

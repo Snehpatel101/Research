@@ -8,8 +8,6 @@ NOTE: This is the CANONICAL data contract for model data requirements.
 Do NOT confuse with:
 - OHLCVValidationSchema (src/data/pipeline/stages/validation/data_contract.py):
   OHLCV-specific validation schema for pipeline data
-- DatasetContract (src/core/data_contract.py):
-  Pipeline stage data passing contract
 
 Phase 0 of the SNwH (Unified Multi-Timeframe Model Factory) implementation.
 """

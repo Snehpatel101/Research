@@ -19,11 +19,7 @@ Exception Hierarchy:
     ├── TrainingError - Model training failures
     │   ├── PreTrainingValidationError - Pre-training validation failures
     │   └── ScalerFitError - Scaler fitting failures
-    ├── InferenceError - Model inference failures
-    └── ResilienceError - Resilience mechanism failures (in src.core.resilience)
-        ├── ResilienceTimeoutError - Operation timeout
-        ├── CircuitOpenError - Circuit breaker open
-        └── RetryExhaustedError - All retry attempts exhausted
+    └── InferenceError - Model inference failures
 
 Usage:
     from src.core.exceptions import ValidationError, ContractViolation
@@ -353,6 +349,4 @@ __all__ = [
     "EnsembleCompatibilityError",
     "SecurityError",
     "StageValidationError",
-    # Note: ResilienceError hierarchy is in src.core.resilience to avoid
-    # circular imports (resilience module imports from exceptions)
 ]

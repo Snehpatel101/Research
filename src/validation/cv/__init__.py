@@ -41,13 +41,6 @@ from .cv_feature_selection import (
     compute_feature_stability,
     run_cv_with_per_fold_feature_selection,
 )
-from .cv_orchestrator import (
-    CVFoldResult,
-    CVOrchestrator,
-    CVSplitInfo,
-    create_cv_orchestrator,
-    get_cv_for_model,
-)
 from .cv_runner import CrossValidationRunner
 from .cv_stacking import (
     analyze_cv_stability,
@@ -169,10 +162,4 @@ __all__ = [
     "OOFAlignmentValidator",
     "compute_oof_coverage",
     "validate_oof_for_stacking",
-    # CV Orchestrator (PHASE_3)
-    "CVOrchestrator",
-    "CVFoldResult",
-    "CVSplitInfo",
-    "get_cv_for_model",
-    "create_cv_orchestrator",
 ]

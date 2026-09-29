@@ -146,21 +146,6 @@ from src.config.utils import (
     validate_config_path,
 )
 
-# =============================================================================
-# VALIDATION
-# =============================================================================
-from src.config.validators import (
-    ConfigValidationError,
-    ValidationIssue,
-    # Result types
-    ValidationResult,
-    ValidationSeverity,
-    coerce_types,
-    # Main functions
-    validate_config,
-    validate_config_file,
-)
-
 __all__ = [
     # Base
     "BaseConfig",
@@ -193,14 +178,6 @@ __all__ = [
     "ConfigAccessEntry",
     "ConfigSource",
     "ConfigValueError",
-    # Validation
-    "validate_config",
-    "validate_config_file",
-    "coerce_types",
-    "ValidationResult",
-    "ValidationIssue",
-    "ValidationSeverity",
-    "ConfigValidationError",
     # Global config
     "GlobalConfig",
     "load_global_config",

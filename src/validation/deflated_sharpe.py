@@ -82,7 +82,8 @@ class DSRComputeConfig:
         deployment_threshold: Minimum DSR required to recommend deployment
             (default 0.95, i.e. 95% confidence that the selected strategy's true
             Sharpe is positive after deflating for selection bias).
-        strict_threshold: Minimum DSR used by ``dsr_gate(strict=True)``
+        strict_threshold: Minimum DSR reported as a STRONG result by
+            ``DSRResult.get_risk_level()``
             (default 0.99).
     """
 
@@ -502,38 +503,6 @@ def compute_dsr_from_optuna_study(
 # =============================================================================
 
 
-def dsr_gate(
-    dsr_result: DSRResult,
-    strict: bool = False,
-) -> tuple[bool, str]:
-    """
-    Deployment gate based on DSR.
-
-    Args:
-        dsr_result: DSRResult from compute_deflated_sharpe.
-        strict: Use ``config.strict_threshold`` instead of ``deployment_threshold``.
-
-    Returns:
-        Tuple of (should_proceed, reason).
-    """
-    cfg = dsr_result.config
-    threshold = cfg.strict_threshold if strict else cfg.deployment_threshold
-
-    if dsr_result.dsr < threshold:
-        return False, (
-            f"DSR ({dsr_result.dsr:.3f}) below threshold ({threshold:.2f}). "
-            f"Per-period Sharpe {dsr_result.sharpe_ratio:.4f} vs expected max under "
-            f"the null SR0={dsr_result.expected_max_sharpe:.4f} "
-            f"(N={dsr_result.n_trials}, T={dsr_result.n_observations}). "
-            f"Risk: {dsr_result.get_risk_level()}"
-        )
-
-    return True, (
-        f"DSR ({dsr_result.dsr:.3f}) meets threshold ({threshold:.2f}). "
-        f"Risk: {dsr_result.get_risk_level()}"
-    )
-
-
 def analyze_selection_bias(
     returns_matrix: np.ndarray,
     strategy_names: list[str] | None = None,
@@ -617,7 +586,6 @@ __all__ = [
     "compute_deflated_sharpe",
     "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",
-    "dsr_gate",
     "expected_max_sharpe",
     "is_sharpe_like_metric",
     "probabilistic_sharpe_ratio",

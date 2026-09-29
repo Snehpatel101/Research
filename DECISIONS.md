@@ -128,12 +128,7 @@ metric comparison on a reference dataset.
 
 ## 5. The 5-dimension Optuna island — keep, wire, or delete (~3,500 lines)
 
-> **Phase 116 status:** deletion + behavioral replacement tests are prepared on
-> branch `worktree-agent-aeee8a73f7ed7b404` (commit 8c22b29). Merging it was
-> blocked by the session's auto-mode permission check on removing the files, so
-> it awaits your go-ahead (`git merge worktree-agent-aeee8a73f7ed7b404`, keep the
-> deletions). The one live bug it found — the live tuner scored single-class
-> labels as a perfect 1.0 — was fixed and ported separately.
+> **RESOLVED in Phase 117 (2026-09-29):** option C — the four island modules, their dead constants/helpers (`purged_train_val_split`, 5-D trade-rate/feature-search constants, `dsr_gate`, `PipelineConfig.enforce_dsr_gate`/`dsr_deployment_threshold`) and the pinning tests deleted; the degenerate-label property is pinned on the live tuner (`tests/test_tuner_degenerate_labels.py`), MDA tail-feature reach behaviorally (`tests/test_d3_feature_index.py`).
 
 **What:** `src/optimization/five_dimension_objective.py`, `hyperparameters.py`,
 `base_feature_sets.py`, `artifact_saver.py`. Zero live consumers — the live
@@ -353,6 +348,8 @@ train/serve and label/backtest drift keeps reappearing.
 
 ## 14. Unused public-API modules (~7k lines)
 
+> **RESOLVED in Phase 117 (2026-09-29):** deleted — every listed module plus `models/regime_evaluation` (+ its uncalled `compute_regime_metrics` wrappers), `validation/evaluation/cpcv_pbo_evaluator`, `scripts/batch_inference.py` (duplicated `UniversalInferencePipeline`); `data/features/cusum_filter` and `frac_diff` kept for a later wiring wave.
+
 **What:** modules that are exported by a package `__init__` but used by nothing
 in the repo (no notebook, script, CLI or pipeline path): `core/resilience`,
 `inference/orchestrator` (InferenceOrchestrator), `inference/pipeline`,
@@ -378,7 +375,7 @@ and add tests. **Recommendation:** delete — the supported serving API is
 | 2 | Special-mode bundles | ✅ Resolved (Phase 115) | — | — |
 | 3 | Governance modules | Tests-only forever | Wire lifecycle+registry, park rest | 1–2 days |
 | 4 | Contract seq_len | ✅ Resolved (Phase 116) | — | — |
-| 5 | 5-D Optuna island | Dead code pinned by tests | Merge prepared branch (needs your OK) | minutes |
+| 5 | 5-D Optuna island | ✅ Resolved (Phase 117) | — | — |
 | 6 | Dual AdapterResult | ✅ Resolved (Phase 116) | — | — |
 | 7 | Core TrainingResult | ✅ Resolved (Phase 116) | — | — |
 | 8 | to_*_config methods | ✅ Resolved (Phase 116) | — | — |
@@ -387,7 +384,7 @@ and add tests. **Recommendation:** delete — the supported serving API is
 | 11 | Source-grep tests | Documentation-grade tests stay | Replace opportunistically | rolling |
 | 12 | uv adoption | ✅ Resolved (Phase 116: uv venv, lock regenerated, CI on uv) | — | — |
 | 13 | Second data pipeline | Broken parallel pipeline stays | Re-point CLI at MLFactory, delete runner | 2–3 days |
-| 14 | Unused public-API modules | ~7k unused lines stay | Delete | ~2 h |
+| 14 | Unused public-API modules | ✅ Resolved (Phase 117) | — | — |
 
 ---
 

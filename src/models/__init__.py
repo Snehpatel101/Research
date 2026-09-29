@@ -98,21 +98,6 @@ from .device import (
     print_gpu_info,
     setup_colab,
 )
-from .metrics import (
-    compute_metrics_with_regime_breakdown,
-    compute_regime_metrics,
-)
-from .regime_evaluation import (
-    RegimeClassifier,
-    RegimeEvaluationResult,
-    RegimeEvaluator,
-    RegimeMetrics,
-    TimeOfDay,
-    TrendRegime,
-    VolatilityRegime,
-    evaluate_regime_performance,
-    get_regime_summary,
-)
 from .registry import (
     ModelRegistry,
     register,
@@ -165,18 +150,6 @@ __all__ = [
     "train_model",
     "evaluate_model",
     "compute_classification_metrics",
-    # Regime evaluation
-    "VolatilityRegime",
-    "TrendRegime",
-    "TimeOfDay",
-    "RegimeMetrics",
-    "RegimeEvaluationResult",
-    "RegimeClassifier",
-    "RegimeEvaluator",
-    "evaluate_regime_performance",
-    "get_regime_summary",
-    "compute_regime_metrics",
-    "compute_metrics_with_regime_breakdown",
     # Environment detection
     "is_colab",
     "is_kaggle",

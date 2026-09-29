@@ -1,7 +1,8 @@
 """
 Regression tests for Phases 1-3 fixes in ML Factory.
 
-Phase 1: Leakage Fixes (7 tests)
+Phase 1: Leakage Fixes (6 tests; the 5-D Optuna ATR test left with its module —
+    Wilder ATR parity is pinned by tests/test_d6_atr_parity.py)
 Phase 2: Accuracy Fixes (4 tests)
 Phase 3: Memory Fixes (3 tests)
 """
@@ -23,54 +24,6 @@ import pytest
 
 class TestPhase1LeakageFixes:
     """Tests verifying Phase 1 leakage prevention fixes."""
-
-    def test_optuna_atr_wilders_ema(self) -> None:
-        """Verify that ATR in five_dimension_objective uses Wilder's EMA (alpha=1/period).
-
-        Wilder's EMA uses alpha = 1/period, NOT the standard EMA alpha = 2/(period+1).
-        This ensures the Optuna objective's ATR matches the labeling and backtest ATR.
-        """
-        from src.optimization.five_dimension_objective import _compute_atr
-
-        # Create synthetic OHLCV with a known true-range pattern
-        n = 100
-        np.random.seed(42)
-        close = 100.0 + np.cumsum(np.random.randn(n) * 0.5)
-        high = close + np.abs(np.random.randn(n) * 0.3)
-        low = close - np.abs(np.random.randn(n) * 0.3)
-
-        df = pd.DataFrame({"high": high, "low": low, "close": close})
-
-        period = 14
-        atr = _compute_atr(df, period=period)
-
-        # Manually compute Wilder's EMA with alpha = 1/period
-        prev_close = np.roll(close, 1)
-        prev_close[0] = close[0]
-        tr = np.maximum(
-            high - low,
-            np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)),
-        )
-
-        alpha = 1.0 / period  # Wilder's EMA
-        expected_atr = np.zeros(n)
-        expected_atr[0] = tr[0]
-        for i in range(1, n):
-            expected_atr[i] = alpha * tr[i] + (1 - alpha) * expected_atr[i - 1]
-
-        np.testing.assert_allclose(atr, expected_atr, rtol=1e-10)
-
-        # Also verify it does NOT match standard EMA (alpha = 2/(period+1))
-        alpha_standard = 2.0 / (period + 1)
-        standard_atr = np.zeros(n)
-        standard_atr[0] = tr[0]
-        for i in range(1, n):
-            standard_atr[i] = alpha_standard * tr[i] + (1 - alpha_standard) * standard_atr[i - 1]
-
-        # They should differ meaningfully
-        assert not np.allclose(
-            atr, standard_atr, rtol=1e-6
-        ), "ATR should use Wilder's alpha=1/period, NOT standard alpha=2/(period+1)"
 
     @staticmethod
     def _make_regime_ohlcv(n: int, seed: int = 42) -> pd.DataFrame:

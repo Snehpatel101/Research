@@ -30,7 +30,6 @@ from src.validation.deflated_sharpe import (
     compute_deflated_sharpe,
     compute_deflated_sharpe_from_returns,
     compute_dsr_from_optuna_study,
-    dsr_gate,
     expected_max_sharpe,
     probabilistic_sharpe_ratio,
     return_moments,
@@ -182,7 +181,7 @@ class TestDSR:
         result = compute_deflated_sharpe_from_returns(matrix[:, 7], sharpes)
         assert result.dsr > 0.99
         assert result.should_deploy
-        assert dsr_gate(result)[0]
+        assert result.get_risk_level().startswith("STRONG")
 
     def test_gate_threshold_configurable(self) -> None:
         trials = np.array([-0.01, 0.0, 0.01])
@@ -193,8 +192,7 @@ class TestDSR:
             config=DSRComputeConfig(deployment_threshold=0.5, strict_threshold=0.9999),
         )
         assert result.should_deploy
-        assert dsr_gate(result)[0]
-        assert not dsr_gate(result, strict=True)[0]
+        assert result.get_risk_level().startswith("OK"), "passes deployment, not strict"
         with pytest.raises(ValueError):
             DSRComputeConfig(deployment_threshold=1.5)
 
@@ -409,48 +407,8 @@ class TestCPCVPurge:
 
 
 # =============================================================================
-# Evaluator / CLI helpers
+# CLI helpers
 # =============================================================================
-
-
-class _SignModel:
-    """Predicts sign(feature * direction); fit is a no-op."""
-
-    def __init__(self, direction: float) -> None:
-        self.direction = direction
-
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
-        return None
-
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        return np.sign(X["signal"].to_numpy() * self.direction)
-
-
-def test_cpcv_pbo_evaluator_ranks_real_signal(tmp_path) -> None:
-    from src.validation.evaluation.cpcv_pbo_evaluator import CPCVPBOEvaluator
-
-    rng = np.random.default_rng(5)
-    n = 640
-    signal = rng.normal(size=n)
-    fwd = 0.002 * np.sign(signal) + rng.normal(0, 0.001, size=n)
-    X = pd.DataFrame({"signal": signal})
-    y = pd.Series(np.sign(fwd))
-
-    evaluator = CPCVPBOEvaluator(
-        {"purge_bars": 2, "pbo_partitions": 8, "output_dir": str(tmp_path)}
-    )
-    out = evaluator.run(
-        X,
-        y,
-        {"good": _SignModel(1.0), "bad": _SignModel(-1.0), "flat": _SignModel(0.0)},
-        forward_returns=fwd,
-    )
-    assert out["n_paths"] == 5
-    assert out["pbo_result"]["pbo"] == 0.0
-    assert (
-        out["cpcv_results"]["good"]["mean_sharpe"] > 0 > out["cpcv_results"]["bad"]["mean_sharpe"]
-    )
-    assert len(out["cpcv_results"]["good"]["paths"]) == 5
 
 
 def test_cli_forward_returns_and_costs() -> None:

@@ -223,14 +223,6 @@ class PipelineConfig:
     optuna_timeout: int | None = DEFAULT_OPTUNA_TIMEOUT  # 43200 = 12h
     optuna_metric: str = "f1_weighted"  # Optimization metric (from OptunaConfig.metric)
 
-    enforce_dsr_gate: bool = True
-    # Enforce Deflated Sharpe Ratio gate after optimization.
-    # When True, optimization raises ValueError if DSR is below deployment threshold,
-    # preventing deployment of strategies that appear good only due to selection bias.
-
-    dsr_deployment_threshold: float = 0.5
-    # Minimum Deflated Sharpe Ratio for deployment (default: 0.5)
-
     # =========================================================================
     # REGIME-AWARE TRAINING CONFIGURATION
     # =========================================================================
