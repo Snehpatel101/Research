@@ -22,6 +22,7 @@ from src.models.calibration.calibrator import (
     CalibrationConfig,
     CalibrationMetrics,
     ProbabilityCalibrator,
+    estimate_holdout_improvement,
 )
 from src.models.calibration.conformal import (
     ConformalConfig,
@@ -41,6 +42,7 @@ __all__ = [
     "ProbabilityCalibrator",
     "CalibrationConfig",
     "CalibrationMetrics",
+    "estimate_holdout_improvement",
     # Metrics
     "ReliabilityBins",
     "compute_brier_score",

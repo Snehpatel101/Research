@@ -39,7 +39,7 @@ class XGBoostMeta(BaseModel):
     - Captures complex non-linear interactions
     - Built-in regularization (L1, L2, tree constraints)
     - Feature importance for model contribution analysis
-    - Handles imbalanced classes well
+    - Optional class balancing (``class_weight="balanced"``; off by default)
 
     Configuration Notes:
     - Uses shallow trees (max_depth=3-4) to prevent overfitting
@@ -61,6 +61,7 @@ class XGBoostMeta(BaseModel):
         self._model: Any = None  # xgb.Booster
         self._feature_names: list[str] | None = None
         self._use_gpu: bool = False
+        self._n_rounds_used: int = 0
 
     @property
     def model_family(self) -> str:
@@ -88,8 +89,11 @@ class XGBoostMeta(BaseModel):
             "gamma": 0.1,
             "reg_alpha": 0.1,
             "reg_lambda": 1.0,
-            # Early stopping
+            # Early stopping (on X_val; 0/None trains a fixed n_estimators)
             "early_stopping_rounds": 20,
+            # None keeps class priors in the probabilities; "balanced"
+            # reweights classes inversely to their frequency
+            "class_weight": None,
             # Training
             "eval_metric": "mlogloss",
             "use_gpu": False,
@@ -126,19 +130,23 @@ class XGBoostMeta(BaseModel):
         y_train_xgb = map_labels_to_classes(y_train, self._n_classes)
         y_val_xgb = map_labels_to_classes(y_val, self._n_classes)
 
-        # Apply balanced class weights
+        # Optional class balancing (off by default: balancing shifts the
+        # probabilities away from the base rates the ensemble is sized on)
+        class_weight = train_config.get("class_weight")
         final_weights = sample_weights
-        unique_classes, class_counts = np.unique(y_train_xgb, return_counts=True)
-        n_samples = len(y_train_xgb)
-        n_classes = len(unique_classes)
-        class_weight_values = n_samples / (n_classes * class_counts)
-        class_weight_dict = dict(zip(unique_classes, class_weight_values, strict=False))
-        sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_xgb])
-
-        if sample_weights is not None:
-            final_weights = sample_weights * sample_class_weights
-        else:
-            final_weights = sample_class_weights
+        if class_weight == "balanced":
+            unique_classes, class_counts = np.unique(y_train_xgb, return_counts=True)
+            per_class = len(y_train_xgb) / (len(unique_classes) * class_counts)
+            lookup = np.zeros(self._n_classes)
+            lookup[unique_classes] = per_class
+            sample_class_weights = lookup[y_train_xgb]
+            final_weights = (
+                sample_class_weights
+                if sample_weights is None
+                else sample_weights * sample_class_weights
+            )
+        elif class_weight is not None:
+            raise ValueError(f"class_weight must be None or 'balanced', got {class_weight!r}")
 
         # Create DMatrix objects
         dtrain = xgb.DMatrix(X_train, label=y_train_xgb, weight=final_weights)
@@ -147,7 +155,7 @@ class XGBoostMeta(BaseModel):
         # Build parameters
         params = self._build_params(train_config)
         n_estimators = train_config.get("n_estimators", 100)
-        early_stopping = train_config.get("early_stopping_rounds", 20)
+        early_stopping = train_config.get("early_stopping_rounds", 20) or None
 
         evals = [(dtrain, "train"), (dval, "val")]
         evals_result: dict[str, dict[str, list[float]]] = {}
@@ -174,8 +182,15 @@ class XGBoostMeta(BaseModel):
         train_losses = evals_result.get("train", {}).get(metric_name, [])
         val_losses = evals_result.get("val", {}).get(metric_name, [])
 
-        best_iteration = self._model.best_iteration
+        if early_stopping:
+            # xgb.train returns the LAST iteration; keep the best one so the
+            # model matches what early stopping selected.
+            best_iteration = int(self._model.best_iteration)
+            self._model = self._model[: best_iteration + 1]
+        else:
+            best_iteration = int(self._model.num_boosted_rounds()) - 1
         epochs_trained = best_iteration + 1
+        self._n_rounds_used = epochs_trained
 
         # Compute accuracy and F1
         train_metrics = self._compute_metrics(dtrain, y_train)
@@ -209,6 +224,16 @@ class XGBoostMeta(BaseModel):
                 "use_gpu": self._use_gpu,
             },
         )
+
+    @property
+    def uses_early_stopping(self) -> bool:
+        """Whether fit() selects its boosting round count on X_val."""
+        return bool(self._config.get("early_stopping_rounds", 20))
+
+    def refit_config(self) -> dict[str, Any]:
+        """Config for refitting on more rows: the chosen round count, fixed."""
+        self._validate_fitted()
+        return {"n_estimators": self._n_rounds_used, "early_stopping_rounds": None}
 
     def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""

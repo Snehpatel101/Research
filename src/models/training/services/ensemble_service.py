@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -25,6 +25,50 @@ if TYPE_CHECKING:
     from src.core import PipelineConfig
 
 logger = logging.getLogger(__name__)
+
+# Trailing share of the aligned OOF rows held out to evaluate the meta-learner
+META_HOLDOUT_FRACTION = 0.2
+# Trailing share of the meta-train rows used for early stopping (when the
+# meta-learner early-stops) — kept apart from the holdout it is scored on
+META_EARLY_STOPPING_FRACTION = 0.15
+# Fewest meta-train rows worth keeping a purge gap for
+MIN_META_TRAIN_ROWS = 20
+
+
+def split_temporal_tail(
+    rows: np.ndarray,
+    fraction: float,
+    purge_bars: int,
+    min_head: int = MIN_META_TRAIN_ROWS,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """
+    Split positions into a head and a trailing tail with a purge gap.
+
+    ``rows`` are the source-bar indices of time-ordered samples. The tail is
+    the last ``fraction`` of the samples; the head keeps only samples whose
+    bar lies more than ``purge_bars`` bars before the tail's first bar, so
+    no head label window reaches into the tail.
+
+    Returns:
+        (head_positions, tail_positions, purge_used). When the purge would
+        leave fewer than ``min_head`` head samples it is dropped (purge_used=0)
+        and a warning is logged.
+    """
+    rows = np.asarray(rows)
+    n = len(rows)
+    n_tail = max(1, int(round(n * fraction)))
+    tail = np.arange(n - n_tail, n)
+    candidates = np.arange(n - n_tail)
+    head = candidates[rows[candidates] < rows[tail[0]] - purge_bars]
+    if purge_bars > 0 and len(head) < min(min_head, len(candidates)):
+        logger.warning(
+            "Purge gap of %d bars would leave %d head rows (< %d); splitting without it",
+            purge_bars,
+            len(head),
+            min_head,
+        )
+        return candidates, tail, 0
+    return head, tail, purge_bars
 
 
 @dataclass
@@ -46,6 +90,9 @@ class EnsembleServiceResult:
     meta_learner: Any | None = None
     training_time_seconds: float = 0.0
     diversity_metrics: DiversityMetrics | None = None
+    # Each base model scored on the meta-learner's holdout rows, from its
+    # OOF probabilities with the same metric code (model name -> metrics)
+    base_model_holdout_metrics: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 class EnsembleService:
@@ -187,6 +234,11 @@ class EnsembleService:
             y_aligned = y_aligned[:min_len]
 
         stacking_df["y_true"] = y_aligned
+        row_indices = (
+            np.asarray(aligned.common_indices)[: len(stacking_df)]
+            if aligned.common_indices is not None
+            else np.arange(len(stacking_df))
+        )
 
         stacking_dataset = StackingDataset(
             data=stacking_df,
@@ -195,13 +247,16 @@ class EnsembleService:
             metadata={
                 "n_common": aligned.n_common,
                 "coverage": aligned.coverage,
+                "row_indices": row_indices,
             },
         )
 
         logger.info(f"Stacking dataset: {stacking_dataset.n_samples} samples")
 
         # Train meta-learner
-        meta_learner, ensemble_metrics = self._train_meta_learner(stacking_dataset, config)
+        meta_learner, ensemble_metrics, base_metrics = self._train_meta_learner(
+            stacking_dataset, config
+        )
 
         training_time = time.time() - start_time
 
@@ -212,6 +267,7 @@ class EnsembleService:
             meta_learner=meta_learner,
             training_time_seconds=training_time,
             diversity_metrics=diversity_metrics,
+            base_model_holdout_metrics=base_metrics,
         )
 
     def _convert_to_oof_results(
@@ -348,88 +404,135 @@ class EnsembleService:
         self,
         stacking_dataset: StackingDataset,
         config: PipelineConfig,
-    ) -> tuple[Any, dict[str, Any]]:
-        """Train meta-learner directly on stacking features.
+    ) -> tuple[Any, dict[str, Any], dict[str, dict[str, float]]]:
+        """Evaluate the meta-learner on a purged temporal holdout, then refit it.
 
-        Uses the meta-learner's fit() method directly rather than routing
-        through Trainer/TimeSeriesDataContainer, which is designed for
-        OHLCV time-series data and incompatible with OOF stacking features.
+        1. The trailing ``META_HOLDOUT_FRACTION`` of the aligned OOF rows is
+           the holdout; meta-train rows within ``config.purge_bars`` bars of
+           it are dropped so no meta-train label overlaps the holdout.
+        2. A meta-learner that early-stops selects its stopping point on a
+           purged tail of the meta-train rows, never on the holdout.
+        3. The meta-learner AND every base model are scored on the identical
+           holdout rows from their class probabilities (same metric code).
+        4. The deployed meta-learner is refit on ALL aligned OOF rows (with
+           the iteration count chosen in step 2 fixed), so the most recent
+           rows inform the deployed model. The reported metrics are the
+           step-3 holdout metrics of the evaluation fit.
+
+        Uses the meta-learner's fit() directly rather than routing through
+        Trainer/TimeSeriesDataContainer, which is designed for OHLCV
+        time-series data and incompatible with OOF stacking features.
+
+        Returns:
+            (deployed meta-learner, ensemble metrics, base-model holdout metrics)
         """
         try:
-            from sklearn.metrics import accuracy_score, f1_score
-
             from src.models.ensemble import get_meta_learner
+            from src.models.metrics import compute_probability_metrics
 
             start = time.time()
+            n_classes = int(getattr(config, "n_classes", 3) or 3)
+            purge_bars = int(getattr(config, "purge_bars", 0) or 0)
 
             X_stack = stacking_dataset.get_features()
             y_stack = stacking_dataset.get_labels()
+            rows = np.asarray(stacking_dataset.metadata.get("row_indices", np.arange(len(X_stack))))
 
             # Drop rows with NaN values (common when heterogeneous models
             # have different coverage, e.g. sequence models produce NaN
             # probabilities for early indices lost to windowing)
-            nan_mask = X_stack.isna().any(axis=1) | y_stack.isna()
+            nan_mask = (X_stack.isna().any(axis=1) | y_stack.isna()).to_numpy()
             n_nan = int(nan_mask.sum())
             if n_nan > 0:
                 logger.warning(
                     f"Dropping {n_nan}/{len(X_stack)} NaN rows from stacking dataset "
                     f"({n_nan / len(X_stack) * 100:.1f}% of samples)"
                 )
-                X_stack = X_stack[~nan_mask].reset_index(drop=True)
-                y_stack = y_stack[~nan_mask].reset_index(drop=True)
+            # Time order (by source bar) so the holdout is the most recent rows
+            keep = np.flatnonzero(~nan_mask)
+            keep = keep[np.argsort(rows[keep], kind="stable")]
+            X = X_stack.to_numpy()[keep]
+            y = y_stack.to_numpy()[keep].astype(int)
+            rows = rows[keep]
 
-            if len(X_stack) < 10:
+            if len(X) < 10:
                 raise ValueError(
-                    f"Insufficient samples after NaN removal: {len(X_stack)} " f"(need at least 10)"
+                    f"Insufficient samples after NaN removal: {len(X)} (need at least 10)"
                 )
 
-            # Time-based split into train/val (preserves temporal ordering)
-            n_samples = len(X_stack)
-            n_train = int(n_samples * 0.8)
-
-            X_train = X_stack.iloc[:n_train].values
-            X_val = X_stack.iloc[n_train:].values
-            y_train = y_stack.iloc[:n_train].values
-            y_val = y_stack.iloc[n_train:].values
-
-            # n_classes is the problem definition — the meta-learner must
-            # agree with the run's class count (binary mode uses 2).
-            meta_learner = get_meta_learner(
-                config.meta_learner, n_classes=getattr(config, "n_classes", 3)
+            # 1. Purged temporal holdout
+            train_pos, holdout_pos, holdout_purge = split_temporal_tail(
+                rows, META_HOLDOUT_FRACTION, purge_bars
             )
 
-            # Train meta-learner directly
+            # 2. Evaluation fit (early stopping on a purged meta-train tail)
+            meta_learner = get_meta_learner(config.meta_learner, n_classes=n_classes)
+            fit_pos, es_pos = train_pos, holdout_pos
+            early_stops = bool(getattr(meta_learner, "uses_early_stopping", False))
+            if early_stops:
+                head, tail, _ = split_temporal_tail(
+                    rows[train_pos], META_EARLY_STOPPING_FRACTION, purge_bars
+                )
+                fit_pos, es_pos = train_pos[head], train_pos[tail]
+            # Non-early-stopping learners only report on X_val; for them it
+            # is the holdout, which never influences the fit.
             training_metrics = meta_learner.fit(
-                X_train=X_train,
-                y_train=y_train,
-                X_val=X_val,
-                y_val=y_val,
+                X_train=X[fit_pos],
+                y_train=y[fit_pos],
+                X_val=X[es_pos],
+                y_val=y[es_pos],
             )
 
-            # Evaluate on validation set
-            output = meta_learner.predict(X_val)
-            val_accuracy = float(accuracy_score(y_val, output.class_predictions))
-            val_f1 = float(
-                f1_score(y_val, output.class_predictions, average="macro", zero_division=0)
+            # 3. Uniform holdout metrics: meta-learner and every base model
+            X_hold, y_hold = X[holdout_pos], y[holdout_pos]
+            holdout_metrics = compute_probability_metrics(
+                y_hold, meta_learner.predict(X_hold).class_probabilities, n_classes
             )
+            base_metrics = {
+                name: compute_probability_metrics(
+                    y_hold, X_hold[:, i * n_classes : (i + 1) * n_classes], n_classes
+                )
+                for i, name in enumerate(stacking_dataset.model_names)
+            }
+
+            # 4. Refit on every aligned OOF row for deployment
+            refit_overrides: dict[str, Any] = meta_learner.refit_config() if early_stops else {}
+            deployed = get_meta_learner(config.meta_learner, n_classes=n_classes, **refit_overrides)
+            deployed.fit(X_train=X, y_train=y, X_val=X_hold, y_val=y_hold)
 
             training_time = time.time() - start
-
-            metrics = {
-                "val_f1": val_f1,
-                "val_accuracy": val_accuracy,
+            n_holdout = holdout_metrics.pop("n_samples")
+            metrics: dict[str, Any] = {
+                # Legacy keys (factory summary, bundle score) = holdout values
+                "val_f1": holdout_metrics["macro_f1"],
+                "val_accuracy": holdout_metrics["accuracy"],
+                "val_loss": holdout_metrics["log_loss"],
                 "train_loss": training_metrics.train_loss,
-                "val_loss": training_metrics.val_loss,
+                **holdout_metrics,
+                "n_meta_train": len(fit_pos),
+                "n_meta_early_stopping": len(es_pos) if early_stops else 0,
+                "n_holdout": int(n_holdout),
+                "holdout_purge_bars": holdout_purge,
+                "n_refit": len(X),
                 "training_time": training_time,
             }
 
-            logger.info(f"Meta-learner ({config.meta_learner}) trained: val_f1={val_f1:.4f}")
+            logger.info(
+                f"Meta-learner ({config.meta_learner}) holdout ({int(n_holdout)} rows): "
+                f"macro_f1={holdout_metrics['macro_f1']:.4f}, "
+                f"log_loss={holdout_metrics['log_loss']:.4f}; refit on {len(X)} rows"
+            )
+            for name, bm in base_metrics.items():
+                logger.info(
+                    f"  base {name} on same holdout: macro_f1={bm['macro_f1']:.4f}, "
+                    f"log_loss={bm['log_loss']:.4f}"
+                )
 
-            return meta_learner, metrics
+            return deployed, metrics, base_metrics
 
         except Exception as e:
             logger.error(f"Failed to train meta-learner: {e}")
-            return None, {"error": str(e)}
+            return None, {"error": str(e)}, {}
 
     def _analyze_diversity(
         self,

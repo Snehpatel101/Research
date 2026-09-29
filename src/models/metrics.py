@@ -103,6 +103,57 @@ def compute_classification_metrics(
     return metrics
 
 
+def compute_probability_metrics(
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    n_classes: int,
+) -> dict[str, float]:
+    """
+    Metrics computed from class probabilities alone.
+
+    Every model is scored the same way — predictions are the argmax of its
+    probabilities — so base models and meta-learners evaluated on the same
+    rows are directly comparable.
+
+    Args:
+        y_true: Trading labels ({-1,0,1}, or {0,1} in binary mode).
+        probabilities: (n_samples, n_classes) class probabilities.
+        n_classes: Class count (2 or 3).
+
+    Returns:
+        macro_f1, accuracy, log_loss, brier, n_samples, and precision_/recall_
+        for each directional class (long/short; the "1" class in binary mode).
+    """
+    from sklearn.metrics import accuracy_score, f1_score, log_loss, precision_score, recall_score
+
+    from src.models.calibration.metrics import compute_brier_score
+    from src.models.common.label_mapping import map_classes_to_labels, map_labels_to_classes
+
+    y_true = np.asarray(y_true).astype(int)
+    probabilities = np.asarray(probabilities, dtype=np.float64)
+    # Renormalize: float32 model outputs drift from summing to exactly 1
+    probabilities = probabilities / probabilities.sum(axis=1, keepdims=True)
+    y_idx = map_labels_to_classes(y_true, n_classes)
+    y_pred = map_classes_to_labels(probabilities.argmax(axis=1), n_classes)
+
+    metrics: dict[str, float] = {
+        "macro_f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "log_loss": float(log_loss(y_idx, probabilities, labels=list(range(n_classes)))),
+        "brier": compute_brier_score(y_true, probabilities, n_classes=n_classes),
+        "n_samples": float(len(y_true)),
+    }
+    directional = {1: "1"} if n_classes == 2 else {1: "long", -1: "short"}
+    for label, name in directional.items():
+        metrics[f"precision_{name}"] = float(
+            precision_score(y_true, y_pred, labels=[label], average="macro", zero_division=0)
+        )
+        metrics[f"recall_{name}"] = float(
+            recall_score(y_true, y_pred, labels=[label], average="macro", zero_division=0)
+        )
+    return metrics
+
+
 def compute_trading_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -598,6 +649,7 @@ def compute_metrics_with_regime_breakdown(
 
 __all__ = [
     "compute_classification_metrics",
+    "compute_probability_metrics",
     "compute_trading_metrics",
     "compute_backtest_metrics",
     "compute_regime_metrics",

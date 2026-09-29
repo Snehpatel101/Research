@@ -36,6 +36,8 @@ from typing import Any, Literal
 
 import numpy as np
 
+from src.models.common.label_mapping import map_labels_to_classes
+
 logger = logging.getLogger(__name__)
 
 
@@ -205,7 +207,8 @@ class ConformalPredictor:
         IMPORTANT: Must use held-out calibration data (not training data).
 
         Args:
-            y_true: True labels, shape (n_samples,)
+            y_true: Trading labels, shape (n_samples,): {-1,0,1} (3-class) or
+                {0,1} (binary). The class count is probabilities.shape[1].
             probabilities: Class probabilities, shape (n_samples, n_classes)
 
         Returns:
@@ -238,13 +241,14 @@ class ConformalPredictor:
         scores = self._compute_scores(y_normalized, probabilities)
         self._calibration_scores = scores
 
-        # Compute threshold as quantile
-        # For coverage 1-alpha, we use the (1-alpha)(1 + 1/n) quantile
+        # Split-conformal threshold: the ceil((n+1)(1-alpha))-th smallest
+        # score, i.e. the "higher" empirical quantile at that rank / n. This
+        # gives finite-sample coverage >= 1 - alpha (interpolating between
+        # order statistics can land below it).
         alpha = 1 - self.config.confidence_level
-        quantile_level = (1 - alpha) * (1 + 1 / n_samples)
-        quantile_level = min(quantile_level, 1.0)  # Clip to 1
+        quantile_level = min(np.ceil((n_samples + 1) * (1 - alpha)) / n_samples, 1.0)
 
-        self._threshold = float(np.quantile(scores, quantile_level))
+        self._threshold = float(np.quantile(scores, quantile_level, method="higher"))
         self._is_fitted = True
 
         # Compute metrics on calibration set
@@ -384,16 +388,8 @@ class ConformalPredictor:
         return self._compute_metrics(y_normalized, pred_sets, set_sizes)
 
     def _normalize_labels(self, y: np.ndarray) -> np.ndarray:
-        """Normalize labels to 0-indexed."""
-        y = np.asarray(y)
-        unique = np.unique(y)
-
-        # Handle -1, 0, 1 format
-        if set(unique).issubset({-1, 0, 1}):
-            return y + 1  # Map to 0, 1, 2
-
-        # Already 0-indexed
-        return y
+        """Trading labels -> class indices for this predictor's class count."""
+        return map_labels_to_classes(np.asarray(y), self._n_classes)
 
     def _compute_scores(
         self,

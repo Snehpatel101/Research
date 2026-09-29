@@ -20,6 +20,7 @@ from sklearn.metrics import accuracy_score, f1_score  # type: ignore[import-unty
 from src.models.registry import ModelRegistry
 
 from .cv_dataclasses import FoldMetrics
+from .early_stopping_split import carve_early_stopping_split
 
 # Import OOFPrediction directly from oof_core (where it's defined)
 # to reduce import chain length and avoid going through oof_generator
@@ -152,14 +153,20 @@ def run_cv_with_per_fold_feature_selection(
             fold_config.update(fold_tuned_params)
             logger.debug(f"    Fold {fold_idx + 1} tuned params: {fold_tuned_params}")
 
-        # Train model on selected features
+        # Train model on selected features. Early stopping selects on a
+        # purged tail of the fold's train rows, never on the held-out fold.
+        es_split = carve_early_stopping_split(
+            train_idx, cv.config.purge_bars if cv is not None else 0
+        )
+        fit_pos = np.flatnonzero(np.isin(train_idx, es_split.fit_idx))
+        es_pos = np.flatnonzero(np.isin(train_idx, es_split.es_idx))
         model = ModelRegistry.create(model_name, config=fold_config)
         model.fit(
-            X_train=X_train_selected.values,
-            y_train=y_train_fold.values,
-            X_val=X_val_selected.values,
-            y_val=y_val_fold.values,
-            sample_weights=w_train,
+            X_train=X_train_selected.values[fit_pos],
+            y_train=y_train_fold.values[fit_pos],
+            X_val=X_train_selected.values[es_pos],
+            y_val=y_train_fold.values[es_pos],
+            sample_weights=w_train[fit_pos] if w_train is not None else None,
         )
 
         # Generate OOF predictions for this fold's validation set

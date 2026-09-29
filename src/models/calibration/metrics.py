@@ -14,6 +14,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from src.models.common.label_mapping import map_labels_to_classes
+
 
 @dataclass
 class ReliabilityBins:
@@ -36,32 +38,10 @@ class ReliabilityBins:
         }
 
 
-def _normalize_labels(y_true: np.ndarray, n_classes: int) -> np.ndarray:
-    """
-    Normalize labels to 0-indexed format.
-
-    Handles labels in {-1, 0, 1} format (trading signals) by mapping to {0, 1, 2}.
-
-    Args:
-        y_true: True class labels (may be -1, 0, 1 or 0, 1, 2)
-        n_classes: Number of classes
-
-    Returns:
-        Labels normalized to {0, 1, ..., n_classes-1}
-    """
-    y_int = y_true.astype(int)
-
-    # Check if labels contain negative values (trading signal format)
-    if y_int.min() < 0:
-        # Map -1 -> 0, 0 -> 1, 1 -> 2
-        y_int = y_int + 1
-
-    return y_int
-
-
 def compute_brier_score(
     y_true: np.ndarray,
     probabilities: np.ndarray,
+    n_classes: int | None = None,
 ) -> float:
     """
     Compute multi-class Brier score.
@@ -70,8 +50,10 @@ def compute_brier_score(
     probabilities and one-hot encoded true labels. Lower is better.
 
     Args:
-        y_true: True class labels, shape (n_samples,). Can be {-1,0,1} or {0,1,2}.
+        y_true: Trading labels, shape (n_samples,): {-1,0,1} (3-class) or
+            {0,1} (binary).
         probabilities: Predicted probabilities, shape (n_samples, n_classes)
+        n_classes: Class count (default: probabilities.shape[1]).
 
     Returns:
         Brier score in [0, 2] for 3-class. 0 = perfect, 2 = worst.
@@ -79,8 +61,8 @@ def compute_brier_score(
     if len(y_true) == 0:
         return 0.0
 
-    n_classes = probabilities.shape[1]
-    y_int = _normalize_labels(y_true, n_classes)
+    n_classes = n_classes or probabilities.shape[1]
+    y_int = map_labels_to_classes(y_true, n_classes)
 
     # One-hot encode
     y_onehot = np.zeros_like(probabilities)
@@ -95,6 +77,7 @@ def compute_ece(
     y_true: np.ndarray,
     probabilities: np.ndarray,
     n_bins: int = 10,
+    n_classes: int | None = None,
 ) -> float:
     """
     Compute Expected Calibration Error.
@@ -103,8 +86,10 @@ def compute_ece(
     accuracy across confidence bins. Lower is better.
 
     Args:
-        y_true: True class labels, shape (n_samples,). Can be {-1,0,1} or {0,1,2}.
+        y_true: Trading labels, shape (n_samples,): {-1,0,1} (3-class) or
+            {0,1} (binary).
         probabilities: Predicted probabilities, shape (n_samples, n_classes)
+        n_classes: Class count (default: probabilities.shape[1]).
         n_bins: Number of confidence bins
 
     Returns:
@@ -113,8 +98,8 @@ def compute_ece(
     if len(y_true) == 0:
         return 0.0
 
-    n_classes = probabilities.shape[1]
-    y_int = _normalize_labels(y_true, n_classes)
+    n_classes = n_classes or probabilities.shape[1]
+    y_int = map_labels_to_classes(y_true, n_classes)
 
     confidences = probabilities.max(axis=1)
     predictions = probabilities.argmax(axis=1)
@@ -140,6 +125,7 @@ def compute_reliability_bins(
     y_true: np.ndarray,
     probabilities: np.ndarray,
     n_bins: int = 10,
+    n_classes: int | None = None,
 ) -> ReliabilityBins:
     """
     Compute reliability diagram bins.
@@ -148,15 +134,17 @@ def compute_reliability_bins(
     confidence. A well-calibrated model has accuracy = confidence.
 
     Args:
-        y_true: True class labels, shape (n_samples,). Can be {-1,0,1} or {0,1,2}.
+        y_true: Trading labels, shape (n_samples,): {-1,0,1} (3-class) or
+            {0,1} (binary).
         probabilities: Predicted probabilities, shape (n_samples, n_classes)
+        n_classes: Class count (default: probabilities.shape[1]).
         n_bins: Number of confidence bins
 
     Returns:
         ReliabilityBins with bin data for plotting
     """
-    n_classes = probabilities.shape[1]
-    y_int = _normalize_labels(y_true, n_classes)
+    n_classes = n_classes or probabilities.shape[1]
+    y_int = map_labels_to_classes(y_true, n_classes)
 
     confidences = probabilities.max(axis=1)
     predictions = probabilities.argmax(axis=1)

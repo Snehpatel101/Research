@@ -63,6 +63,7 @@ class MLPMetaLearner(BaseModel):
         self._model: MLPClassifier | None = None
         self._scaler: StandardScaler | None = None
         self._feature_names: list[str] | None = None
+        self._epochs_used: int = 0
 
     @property
     def model_family(self) -> str:
@@ -83,8 +84,8 @@ class MLPMetaLearner(BaseModel):
             "activation": "relu",
             # Regularization
             "alpha": 0.01,  # L2 penalty
+            # Temporal early stopping on X_val log loss (best epoch restored)
             "early_stopping": True,
-            "validation_fraction": 0.1,
             "n_iter_no_change": 10,
             # Training
             "learning_rate_init": 0.001,
@@ -110,8 +111,13 @@ class MLPMetaLearner(BaseModel):
         """
         Train MLP meta-learner on OOF predictions.
 
-        Note: sample_weights are not directly supported by MLPClassifier.
-        If provided, they will be used for metric computation only.
+        Fits on X_train only. With ``early_stopping`` the network trains one
+        epoch at a time and stops once X_val log loss has not improved for
+        ``n_iter_no_change`` epochs, restoring the best epoch's weights; X_val
+        is never trained on, so the reported val metrics are out-of-sample.
+        With ``early_stopping=False`` it trains a fixed ``max_iter`` epochs.
+
+        Note: sample_weights are not supported by MLPClassifier and are ignored.
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
@@ -130,8 +136,9 @@ class MLPMetaLearner(BaseModel):
         # Convert labels: -1,0,1 -> 0,1,2
         y_train_sk = map_labels_to_classes(y_train, self._n_classes)
         y_val_sk = map_labels_to_classes(y_val, self._n_classes)
+        classes = np.arange(self._n_classes)
 
-        # Feature scaling (important for neural networks)
+        # Feature scaling (important for neural networks), fit on train only
         X_train_scaled = X_train
         X_val_scaled = X_val
         if train_config.get("scale_features", True):
@@ -139,21 +146,15 @@ class MLPMetaLearner(BaseModel):
             X_train_scaled = self._scaler.fit_transform(X_train)
             X_val_scaled = self._scaler.transform(X_val)
 
-        # Combine train and validation for early stopping
-        # MLPClassifier uses validation_fraction from training data
-        X_combined = np.vstack([X_train_scaled, X_val_scaled])
-        y_combined = np.hstack([y_train_sk, y_val_sk])
-
-        # Build MLP classifier
+        # sklearn's own early stopping carves a RANDOM validation split out of
+        # the training rows; epochs are driven here instead so stopping is
+        # temporal (on X_val) and every train row is used for fitting.
         self._model = MLPClassifier(
             hidden_layer_sizes=train_config.get("hidden_layer_sizes", (32, 16)),
             activation=train_config.get("activation", "relu"),
             alpha=train_config.get("alpha", 0.01),
-            early_stopping=train_config.get("early_stopping", True),
-            validation_fraction=train_config.get("validation_fraction", 0.1),
-            n_iter_no_change=train_config.get("n_iter_no_change", 10),
+            early_stopping=False,
             learning_rate_init=train_config.get("learning_rate_init", 0.001),
-            max_iter=train_config.get("max_iter", 200),
             batch_size=train_config.get("batch_size", "auto"),
             solver=train_config.get("solver", "adam"),
             random_state=train_config.get("random_state", 42),
@@ -161,35 +162,55 @@ class MLPMetaLearner(BaseModel):
         )
 
         hidden_layers = train_config.get("hidden_layer_sizes", (32, 16))
+        max_iter = int(train_config.get("max_iter", 200))
+        early_stopping = bool(train_config.get("early_stopping", True))
+        patience = int(train_config.get("n_iter_no_change", 10))
         logger.info(
             f"Training MLPMetaLearner: layers={hidden_layers}, "
-            f"alpha={train_config.get('alpha', 0.01)}, n_features={X_train.shape[1]}"
+            f"alpha={train_config.get('alpha', 0.01)}, n_features={X_train.shape[1]}, "
+            f"early_stopping={early_stopping}"
         )
 
-        # Train model
-        self._model.fit(X_combined, y_combined)
+        val_loss_curve: list[float] = []
+        best_loss = np.inf
+        best_epoch = max_iter - 1
+        best_weights: tuple[list[np.ndarray], list[np.ndarray]] | None = None
+        for epoch in range(max_iter):
+            self._model.partial_fit(X_train_scaled, y_train_sk, classes=classes)
+            if not early_stopping:
+                continue
+            epoch_loss = float(
+                log_loss(y_val_sk, self._model.predict_proba(X_val_scaled), labels=classes)
+            )
+            val_loss_curve.append(epoch_loss)
+            if epoch_loss < best_loss:
+                best_loss, best_epoch = epoch_loss, epoch
+                best_weights = (
+                    [w.copy() for w in self._model.coefs_],
+                    [b.copy() for b in self._model.intercepts_],
+                )
+            elif epoch - best_epoch >= patience:
+                break
+        n_iter = len(val_loss_curve) if early_stopping else max_iter
+        if best_weights is not None:
+            self._model.coefs_, self._model.intercepts_ = best_weights
+        self._epochs_used = best_epoch + 1
 
         training_time = time.time() - start_time
 
-        # Compute metrics on original splits
+        self._is_fitted = True
         train_metrics = self._compute_metrics(X_train_scaled, y_train)
         val_metrics = self._compute_metrics(X_val_scaled, y_val)
-
-        # Compute loss
-        train_proba = self._model.predict_proba(X_train_scaled)
-        val_proba = self._model.predict_proba(X_val_scaled)
-        train_loss = float(log_loss(y_train_sk, train_proba))
-        val_loss = float(log_loss(y_val_sk, val_proba))
-
-        self._is_fitted = True
-
-        # Get training history
-        n_iter = getattr(self._model, "n_iter_", 0)
-        best_loss = getattr(self._model, "best_loss_", None)
+        train_loss = float(
+            log_loss(y_train_sk, self._model.predict_proba(X_train_scaled), labels=classes)
+        )
+        val_loss = float(
+            log_loss(y_val_sk, self._model.predict_proba(X_val_scaled), labels=classes)
+        )
 
         logger.info(
-            f"Training complete: iterations={n_iter}, val_f1={val_metrics['f1']:.4f}, "
-            f"time={training_time:.1f}s"
+            f"Training complete: epochs={n_iter} (kept={self._epochs_used}), "
+            f"val_f1={val_metrics['f1']:.4f}, time={training_time:.1f}s"
         )
 
         return TrainingMetrics(
@@ -201,13 +222,9 @@ class MLPMetaLearner(BaseModel):
             val_f1=val_metrics["f1"],
             epochs_trained=n_iter,
             training_time_seconds=training_time,
-            early_stopped=n_iter < train_config.get("max_iter", 200),
-            best_epoch=None,
-            history={
-                "loss_curve": (
-                    list(self._model.loss_curve_) if hasattr(self._model, "loss_curve_") else []
-                )
-            },
+            early_stopped=early_stopping and n_iter < max_iter,
+            best_epoch=best_epoch if early_stopping else None,
+            history={"val_loss": val_loss_curve},
             metadata={
                 "meta_learner": "mlp",
                 "n_features": X_train.shape[1],
@@ -215,9 +232,19 @@ class MLPMetaLearner(BaseModel):
                 "n_val_samples": len(X_val),
                 "hidden_layers": hidden_layers,
                 "n_iterations": n_iter,
-                "best_loss": best_loss,
+                "best_loss": None if best_weights is None else best_loss,
             },
         )
+
+    @property
+    def uses_early_stopping(self) -> bool:
+        """Whether fit() selects its stopping epoch on X_val."""
+        return bool(self._config.get("early_stopping", True))
+
+    def refit_config(self) -> dict[str, Any]:
+        """Config for refitting on more rows: the chosen epoch count, fixed."""
+        self._validate_fitted()
+        return {"early_stopping": False, "max_iter": self._epochs_used}
 
     def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""

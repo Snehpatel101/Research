@@ -355,7 +355,11 @@ class TrainingOpsMixin:
     def _calibrate_model(self, result: Any, prepared: PreparedData, model_name: str) -> None:
         """Calibrate model probabilities using validation set (Phase 4F)."""
         try:
-            from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
+            from src.models.calibration import (
+                CalibrationConfig,
+                ProbabilityCalibrator,
+                estimate_holdout_improvement,
+            )
 
             logger.info(f"  Calibrating {model_name} probabilities...")
             # Trainer.run_prepared already fits a calibrator on the validation
@@ -394,14 +398,24 @@ class TrainingOpsMixin:
                 method = "auto"
             calib_config = CalibrationConfig(
                 method=method,  # type: ignore[arg-type]
-                min_samples_per_class=self.config.calibration_min_samples,
+                min_samples_per_class=self.config.calibration_isotonic_min_samples,
             )
             calibrator = ProbabilityCalibrator(calib_config)
             metrics = calibrator.fit(prepared.y_val, val_probas)
-            logger.info(
-                f"    Brier improvement: {metrics.brier_improvement:.1%}, "
-                f"ECE improvement: {metrics.ece_improvement:.1%}"
-            )
+            # The fit's own before/after numbers are in-sample; report the
+            # gain on a temporal holdout of the validation split instead.
+            holdout = estimate_holdout_improvement(prepared.y_val, val_probas, calib_config)
+            if holdout is not None:
+                logger.info(
+                    f"    Held-out calibration gain (last 30% of val): "
+                    f"Brier {holdout['brier_improvement']:.1%}, "
+                    f"ECE {holdout['ece_improvement']:.1%}"
+                )
+            else:
+                logger.info(
+                    f"    In-sample calibration gain (optimistic): "
+                    f"Brier {metrics.brier_improvement:.1%}, ECE {metrics.ece_improvement:.1%}"
+                )
             # Always store the fitted calibrator — both result flavors accept
             # attribute assignment (the canonical dataclass has the field; the
             # service dataclass takes a dynamic attribute). The previous

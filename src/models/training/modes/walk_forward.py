@@ -27,6 +27,7 @@ from src.core.contracts import get_model_contract
 from src.core.types import DataRank
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
+from src.validation.cv.early_stopping_split import carve_early_stopping_split
 from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from src.validation.cv.walk_forward import (
     WalkForwardConfig,
@@ -390,21 +391,30 @@ class WalkForwardTrainer:
             )
             all_window_features.append(selected_col_idx)
 
+            # Early stopping selects on a purged tail of the window's TRAIN
+            # rows — never on the test window these predictions are made for.
+            es_split = carve_early_stopping_split(train_idx, wf_config.gap_bars)
+            train_idx, es_idx = es_split.fit_idx, es_split.es_idx
+
             # Extract window data with selected features only
             X_train_raw = X_np[train_idx][:, selected_col_idx]
-            X_test_raw = X_np[test_idx][:, selected_col_idx]
+            X_heldout_raw = np.concatenate(
+                [X_np[es_idx][:, selected_col_idx], X_np[test_idx][:, selected_col_idx]]
+            )
             y_train = y.iloc[train_idx]
+            y_es = y.iloc[es_idx]
             y_test = y.iloc[test_idx]
 
-            # Fold-aware scaling
+            # Fold-aware scaling (fit on the fit rows only)
             scaler = FoldAwareScaler(method=scaling_method)
-            scaling_result = scaler.fit_transform_fold(X_train_raw, X_test_raw)
+            scaling_result = scaler.fit_transform_fold(X_train_raw, X_heldout_raw)
             X_train_scaled = scaling_result.X_train_scaled
-            X_test_scaled = scaling_result.X_val_scaled
+            X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
+            X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
             # Free raw arrays immediately — they are no longer needed after scaling.
             # For TCN (13,620 cols), this frees ~47GB before model training starts.
-            del X_train_raw, X_test_raw, scaling_result
+            del X_train_raw, X_heldout_raw, scaling_result
 
             # Reshape/sequence data for sequential models (LSTM, GRU, etc.)
             # Sequential models need 3D: (n_samples, seq_len, n_features)
@@ -416,6 +426,7 @@ class WalkForwardTrainer:
                     # Data was pre-sequenced then flattened — reshape back
                     n_features = n_flat // seq_len
                     X_train_scaled = X_train_scaled.reshape(-1, seq_len, n_features)
+                    X_es_scaled = X_es_scaled.reshape(-1, seq_len, n_features)
                     X_test_scaled = X_test_scaled.reshape(-1, seq_len, n_features)
                     logger.debug(
                         f"    Reshaped to 3D: ({X_train_scaled.shape[0]}, {seq_len}, {n_features})"
@@ -424,11 +435,13 @@ class WalkForwardTrainer:
                     # Data is raw 2D features — create sequences via sliding window
                     n_features = n_flat
                     X_train_scaled = self._create_sequences(X_train_scaled, seq_len)
+                    X_es_scaled = self._create_sequences(X_es_scaled, seq_len)
                     X_test_scaled = self._create_sequences(X_test_scaled, seq_len)
                     # Trim labels/weights to match shortened arrays
                     n_train_new = X_train_scaled.shape[0]
                     n_test_new = X_test_scaled.shape[0]
                     y_train = y_train.iloc[-n_train_new:]
+                    y_es = y_es.iloc[len(y_es) - X_es_scaled.shape[0] :]
                     y_test = y_test.iloc[-n_test_new:]
                     # Also update train/test indices for proper metric alignment
                     train_idx = train_idx[-n_train_new:]
@@ -445,6 +458,7 @@ class WalkForwardTrainer:
                 if nd_shape is not None:
                     # Reconstruct from stored original shape: (n_timeframes, seq_len, n_features)
                     X_train_scaled = X_train_scaled.reshape(-1, *nd_shape)
+                    X_es_scaled = X_es_scaled.reshape(-1, *nd_shape)
                     X_test_scaled = X_test_scaled.reshape(-1, *nd_shape)
                     logger.debug(f"    Reshaped to 4D: {X_train_scaled.shape}")
                 else:
@@ -457,6 +471,7 @@ class WalkForwardTrainer:
                     if n_flat % (n_tf * seq_len) == 0:
                         n_features = n_flat // (n_tf * seq_len)
                         X_train_scaled = X_train_scaled.reshape(-1, n_tf, seq_len, n_features)
+                        X_es_scaled = X_es_scaled.reshape(-1, n_tf, seq_len, n_features)
                         X_test_scaled = X_test_scaled.reshape(-1, n_tf, seq_len, n_features)
                         logger.debug(f"    Inferred 4D reshape: {X_train_scaled.shape}")
                     else:
@@ -484,19 +499,26 @@ class WalkForwardTrainer:
                 _model_config["early_stopping_rounds"] = getattr(
                     self._pipeline_config, "early_stopping_patience", 10
                 )
+            if len(X_es_scaled) == 0:
+                # Windowing swallowed the early-stopping tail: fit fixed-length,
+                # validating on the fit rows themselves.
+                logger.warning(
+                    f"    Window {window_idx + 1}: no early-stopping rows; fitting fixed-length"
+                )
+                X_es_scaled, y_es = X_train_scaled, y_train
             model = ModelRegistry.create(model_name, config=_model_config)
             model.fit(
                 X_train=X_train_scaled,
                 y_train=y_train.values,
-                X_val=X_test_scaled,
-                y_val=y_test.values,
+                X_val=X_es_scaled,
+                y_val=y_es.values,
                 sample_weights=w_train,
                 config=_model_config,
             )
 
             # Free training arrays immediately — only test data needed for prediction.
             # For TCN (13,620 flattened cols), X_train_scaled alone is ~47GB.
-            del X_train_scaled, y_train, w_train
+            del X_train_scaled, X_es_scaled, y_train, y_es, w_train
 
             # Generate predictions
             prediction_output: PredictionResult = model.predict(X_test_scaled)

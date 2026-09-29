@@ -97,7 +97,11 @@ class TestSingleClassPassThrough:
         np.testing.assert_allclose(calibrated, probs_test, atol=1e-5)
 
     def test_partial_single_class_skips_only_missing_class(self) -> None:
-        """With labels {0,1} out of 3 classes, only class 2 is pass-through."""
+        """3-class trading labels {0,1} (no shorts): only the short class passes through.
+
+        Labels are trading signals, so 0 (neutral) is class index 1 and 1 (long)
+        is class index 2 — the absent -1 (short, index 0) gets no calibrator.
+        """
         n = 200
         y_val = np.array([0, 1] * (n // 2))
         probs = _make_probs(n)
@@ -105,9 +109,9 @@ class TestSingleClassPassThrough:
         calibrator = ProbabilityCalibrator(CalibrationConfig())
         calibrator.fit(y_val, probs)
 
-        assert calibrator._calibrators[0] is not None
+        assert calibrator._calibrators[0] is None  # pass-through (no shorts)
         assert calibrator._calibrators[1] is not None
-        assert calibrator._calibrators[2] is None  # pass-through
+        assert calibrator._calibrators[2] is not None
 
         calibrated = calibrator.calibrate(_make_probs(60))
         np.testing.assert_allclose(calibrated.sum(axis=1), 1.0, atol=1e-9)
@@ -131,6 +135,7 @@ class _Host(TrainingOpsMixin):
     def __init__(self, min_samples: int = 10, method: str = "auto") -> None:
         self.config = SimpleNamespace(  # type: ignore[assignment]
             calibration_min_samples=min_samples,
+            calibration_isotonic_min_samples=1000,
             calibration_method=method,
         )
 
@@ -157,12 +162,11 @@ class TestCalibrateModelStoresCalibrator:
         dataclass default) must still receive the fitted calibrator. The old
         ``if not hasattr(result, "calibrator")`` guard silently skipped it.
 
-        Note: predict_proba here returns shape (n, 1) because _calibrate_model
-        collapses any (n, >1) output to 1D, which ProbabilityCalibrator.fit
-        rejects (see TestCalibrateModelGuards for that documented behavior).
+        predict_proba returns the full (n, n_classes) matrix the calibrator
+        requires; labels are trading signals (all neutral here).
         """
         n = 60
-        trainer = _FakeTrainer(np.full((n, 1), 0.6))
+        trainer = _FakeTrainer(_make_probs(n))
         result = ModelTrainingResult(model_name="fake", horizon=5, trainer=trainer)
         assert result.calibrator is None  # dataclass field preexists as None
 
@@ -177,7 +181,7 @@ class TestCalibrateModelStoresCalibrator:
     def test_stores_calibrator_on_service_flavor_result(self) -> None:
         """Service-flavor results declare calibrator fields (default None)."""
         n = 60
-        trainer = _FakeTrainer(np.full((n, 1), 0.55))
+        trainer = _FakeTrainer(_make_probs(n))
         service_result = ServiceModelTrainingResult(model_name="fake", horizon=5, trainer=trainer)
         assert service_result.calibrator is None  # declared field, not dynamic
 

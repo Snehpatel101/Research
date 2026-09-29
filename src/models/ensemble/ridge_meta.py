@@ -1,5 +1,5 @@
 """
-Ridge regression meta-learner for stacking ensembles.
+L2-regularized logistic (ridge) meta-learner for stacking ensembles.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from sklearn.linear_model import RidgeClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.preprocessing import StandardScaler
 
@@ -19,7 +19,6 @@ from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
-from .meta_base import softmax
 
 logger = logging.getLogger(__name__)
 
@@ -27,35 +26,35 @@ logger = logging.getLogger(__name__)
 @register(
     name="ridge_meta",
     family="meta_learner",
-    description="Ridge regression meta-learner for combining OOF predictions",
+    description="L2-regularized logistic (ridge) meta-learner",
     aliases=["ridge_meta_learner", "ridge_stacking"],
 )
 class RidgeMetaLearner(BaseModel):
     """
-    Ridge regression meta-learner for stacking ensembles.
+    L2-regularized (ridge) multinomial logistic regression meta-learner.
 
-    Uses Ridge regularization (L2) to combine base model OOF predictions
-    into final class predictions. Effective for linear combination of
-    well-calibrated base models.
+    Combines base-model OOF probabilities with a linear model whose output is
+    a proper probability distribution (softmax of a model fit by maximum
+    likelihood), so ensemble probabilities can drive position sizing and
+    conformal sets directly.
 
-    Input shape: (n_samples, n_base_models * n_classes) for probability inputs
-                 or (n_samples, n_base_models) for class predictions
+    Config:
+        C: Inverse L2 strength (default 1.0; smaller = stronger shrinkage).
+        class_weight: None (default) keeps the empirical class priors in the
+            probabilities; "balanced" reweights classes (probabilities are
+            then no longer calibrated to the base rates).
 
-    Advantages:
-    - Fast training, closed-form solution
-    - Robust to multicollinearity in base model predictions
-    - Interpretable weights show relative model contribution
-    - Effective when base models are well-calibrated
+    Input shape: (n_samples, n_base_models * n_classes + derived features)
 
     Example:
-        meta = RidgeMetaLearner(config={"alpha": 1.0})
+        meta = RidgeMetaLearner(config={"C": 0.5})
         meta.fit(oof_features, y_train, oof_val, y_val)
         output = meta.predict(stacking_features)
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._model: RidgeClassifier | None = None
+        self._model: LogisticRegression | None = None
         self._scaler: StandardScaler | None = None
         self._feature_names: list[str] | None = None
 
@@ -74,12 +73,12 @@ class RidgeMetaLearner(BaseModel):
 
     def get_default_config(self) -> dict[str, Any]:
         return {
-            "alpha": 1.0,  # Regularization strength
+            "C": 1.0,  # Inverse L2 regularization strength
             "fit_intercept": True,
-            "class_weight": "balanced",
-            "random_state": 42,
+            "class_weight": None,  # None keeps priors; "balanced" reweights
+            "max_iter": 1000,
             "tol": 1e-4,
-            "solver": "auto",  # 'auto', 'svd', 'cholesky', 'lsqr', etc.
+            "random_state": 42,
             "scale_features": True,  # Scale input features internally
         }
 
@@ -93,11 +92,13 @@ class RidgeMetaLearner(BaseModel):
         config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """
-        Train Ridge meta-learner on OOF predictions.
+        Train the logistic meta-learner on OOF predictions.
+
+        X_val is used for reporting only (the fit is closed over X_train).
 
         Args:
             X_train: OOF predictions, shape (n_samples, n_features)
-            y_train: True labels (-1, 0, 1)
+            y_train: True labels (-1, 0, 1), or (0, 1) in binary mode
             X_val: Validation OOF predictions
             y_val: Validation labels
             sample_weights: Optional sample weights
@@ -111,11 +112,9 @@ class RidgeMetaLearner(BaseModel):
         if config:
             train_config.update(config)
 
-        # Convert labels: -1,0,1 -> 0,1,2
         y_train_sk = map_labels_to_classes(y_train, self._n_classes)
         y_val_sk = map_labels_to_classes(y_val, self._n_classes)
 
-        # Optional feature scaling
         X_train_scaled = X_train
         X_val_scaled = X_val
         if train_config.get("scale_features", True):
@@ -123,48 +122,44 @@ class RidgeMetaLearner(BaseModel):
             X_train_scaled = self._scaler.fit_transform(X_train)
             X_val_scaled = self._scaler.transform(X_val)
 
-        # Build Ridge classifier
-        self._model = RidgeClassifier(
-            alpha=train_config.get("alpha", 1.0),
+        # lbfgs with more than two classes fits the multinomial (softmax) model
+        self._model = LogisticRegression(
+            C=float(train_config.get("C", 1.0)),
             fit_intercept=train_config.get("fit_intercept", True),
-            class_weight=train_config.get("class_weight", "balanced"),
+            class_weight=train_config.get("class_weight"),
+            max_iter=int(train_config.get("max_iter", 1000)),
+            tol=float(train_config.get("tol", 1e-4)),
             random_state=train_config.get("random_state", 42),
-            tol=train_config.get("tol", 1e-4),
-            solver=train_config.get("solver", "auto"),
+            solver="lbfgs",
         )
 
         logger.info(
-            f"Training RidgeMetaLearner: alpha={train_config.get('alpha', 1.0)}, "
-            f"n_features={X_train.shape[1]}"
+            f"Training RidgeMetaLearner (L2 logistic): C={train_config.get('C', 1.0)}, "
+            f"class_weight={train_config.get('class_weight')}, n_features={X_train.shape[1]}"
         )
 
-        # Train model
         self._model.fit(X_train_scaled, y_train_sk, sample_weight=sample_weights)
+        self._is_fitted = True
 
         training_time = time.time() - start_time
 
-        # Compute metrics
-        train_metrics = self._compute_metrics(X_train_scaled, y_train)
-        val_metrics = self._compute_metrics(X_val_scaled, y_val)
+        labels = list(range(self._n_classes))
+        train_probs = self._probabilities(X_train_scaled)
+        val_probs = self._probabilities(X_val_scaled)
+        train_pred = map_classes_to_labels(train_probs.argmax(axis=1), self._n_classes)
+        val_pred = map_classes_to_labels(val_probs.argmax(axis=1), self._n_classes)
+        val_f1 = float(f1_score(y_val, val_pred, average="macro", zero_division=0))
 
-        # Compute pseudo-loss using decision function distance
-        train_loss = self._compute_loss(X_train_scaled, y_train_sk)
-        val_loss = self._compute_loss(X_val_scaled, y_val_sk)
-
-        self._is_fitted = True
-
-        logger.info(
-            f"Training complete: val_f1={val_metrics['f1']:.4f}, " f"time={training_time:.1f}s"
-        )
+        logger.info(f"Training complete: val_f1={val_f1:.4f}, time={training_time:.1f}s")
 
         return TrainingMetrics(
-            train_loss=train_loss,
-            val_loss=val_loss,
-            train_accuracy=train_metrics["accuracy"],
-            val_accuracy=val_metrics["accuracy"],
-            train_f1=train_metrics["f1"],
-            val_f1=val_metrics["f1"],
-            epochs_trained=1,
+            train_loss=float(log_loss(y_train_sk, train_probs, labels=labels)),
+            val_loss=float(log_loss(y_val_sk, val_probs, labels=labels)),
+            train_accuracy=float(accuracy_score(y_train, train_pred)),
+            val_accuracy=float(accuracy_score(y_val, val_pred)),
+            train_f1=float(f1_score(y_train, train_pred, average="macro", zero_division=0)),
+            val_f1=val_f1,
+            epochs_trained=int(np.max(self._model.n_iter_)),
             training_time_seconds=training_time,
             early_stopped=False,
             best_epoch=None,
@@ -174,7 +169,8 @@ class RidgeMetaLearner(BaseModel):
                 "n_features": X_train.shape[1],
                 "n_train_samples": len(X_train),
                 "n_val_samples": len(X_val),
-                "alpha": train_config.get("alpha", 1.0),
+                "C": train_config.get("C", 1.0),
+                "class_weight": train_config.get("class_weight"),
             },
         )
 
@@ -183,32 +179,22 @@ class RidgeMetaLearner(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
-        if self._model is None:
-            raise RuntimeError("Meta model is not fitted")
-
-        # Scale if scaler was used during training
         X_scaled = X
         if self._scaler is not None:
             X_scaled = self._scaler.transform(X)
 
-        # Get decision function and convert to pseudo-probabilities
-        decision = self._decision_matrix(X_scaled)
-
-        # Convert decision function to probabilities using softmax
-        probabilities = softmax(decision)
-        class_predictions_sk = np.argmax(probabilities, axis=1)
-        class_predictions = map_classes_to_labels(class_predictions_sk, self._n_classes)
-        confidence = np.max(probabilities, axis=1)
+        probabilities = self._probabilities(X_scaled)
+        class_predictions = map_classes_to_labels(probabilities.argmax(axis=1), self._n_classes)
 
         return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
-            confidence=confidence,
+            confidence=probabilities.max(axis=1),
             metadata={"meta_learner": "ridge"},
         )
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Return pseudo-probabilities from decision function."""
+        """Return class probabilities."""
         output = self.predict(X)
         return output.class_probabilities
 
@@ -238,7 +224,7 @@ class RidgeMetaLearner(BaseModel):
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
-        self._model = safe_pickle_load(model_path)
+        self._model = safe_pickle_load(model_path, allowed_types=(LogisticRegression,))
 
         scaler_path = path / "scaler.pkl"
         if scaler_path.exists():
@@ -255,11 +241,10 @@ class RidgeMetaLearner(BaseModel):
         logger.info(f"Loaded RidgeMetaLearner from {path}")
 
     def get_feature_importance(self) -> dict[str, float] | None:
-        """Return coefficient magnitudes as feature importance."""
+        """Return coefficient magnitudes (averaged over classes) as importance."""
         if not self._is_fitted or self._model is None:
             return None
 
-        # Average absolute coefficients across classes
         coefs = np.abs(self._model.coef_).mean(axis=0)
         feature_names = self._feature_names or [f"f{i}" for i in range(len(coefs))]
 
@@ -269,36 +254,20 @@ class RidgeMetaLearner(BaseModel):
         """Set feature names for interpretability."""
         self._feature_names = names
 
-    def _decision_matrix(self, X: np.ndarray) -> np.ndarray:
-        """(n, n_classes) decision scores; binary RidgeClassifier returns 1-D scores."""
+    def _probabilities(self, X_scaled: np.ndarray) -> np.ndarray:
+        """
+        (n, n_classes) probabilities in class-index order.
+
+        A class absent from the training labels gets probability 0 — the
+        model has no evidence for it — so the output width always matches
+        the run's class count.
+        """
         if self._model is None:
             raise RuntimeError("Meta model is not fitted")
-        decision = np.asarray(self._model.decision_function(X))
-        if decision.ndim == 1:
-            # Score is the class-1 logit: [0, d] softmaxes to sigmoid(d)
-            decision = np.column_stack([np.zeros_like(decision), decision])
-        return decision
-
-    def _compute_loss(self, X: np.ndarray, y: np.ndarray) -> float:
-        """Compute hinge-like loss from decision function."""
-        if self._model is None:
-            raise RuntimeError("Meta model is not fitted")
-        decision = self._decision_matrix(X)
-        # Use negative log softmax as loss proxy
-        probs = softmax(decision)
-        return float(log_loss(y, probs))
-
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
-        """Compute accuracy and F1 for a dataset."""
-        if self._model is None:
-            raise RuntimeError("Meta model is not fitted")
-        y_pred_sk = self._model.predict(X)
-        y_pred = map_classes_to_labels(y_pred_sk, self._n_classes)
-
-        return {
-            "accuracy": float(accuracy_score(y_true, y_pred)),
-            "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
-        }
+        fitted = np.asarray(self._model.predict_proba(X_scaled))
+        probabilities = np.zeros((len(X_scaled), self._n_classes), dtype=np.float64)
+        probabilities[:, np.asarray(self._model.classes_, dtype=int)] = fitted
+        return probabilities
 
 
 __all__ = ["RidgeMetaLearner"]

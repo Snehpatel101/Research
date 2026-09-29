@@ -10,7 +10,7 @@ Ensemble Models:
 - BlendingEnsemble: Blending with holdout set
 
 Meta-Learners (for stacking/blending):
-- RidgeMetaLearner: Ridge regression for linear combination of predictions
+- RidgeMetaLearner: L2-regularized logistic (ridge) regression over base probabilities
 - MLPMetaLearner: Multi-layer perceptron for non-linear combinations
 - CalibratedMetaLearner: Calibration wrapper using Isotonic/Platt scaling
 - XGBoostMeta: XGBoost gradient boosting as meta-learner
@@ -83,8 +83,6 @@ Example:
 """
 
 from .blending import BlendingEnsemble
-
-# REORG-003: Meta-learners now at top level (flattened from meta_learners/)
 from .calibrated_meta import CalibratedMetaLearner
 from .diversity import (
     DiversityAnalysisResult,
@@ -108,13 +106,6 @@ from .diversity import (
     select_diverse_models,
 )
 
-# PHASE_4: Heterogeneous stacking dataset builder
-from .heterogeneous_stacking import (
-    HeterogeneousStackingBuilder,
-    StackingFeatures,
-    build_stacking_features,
-)
-
 # PHASE_4: Meta-learner factory for config-driven creation
 from .meta_factory import (
     META_LEARNER_REGISTRY,
@@ -125,14 +116,6 @@ from .meta_factory import (
     list_meta_learners,
     register_meta_learner,
 )
-
-# PHASE_16C: Optuna-based meta-learner selection
-from .meta_selection import (
-    AVAILABLE_META_LEARNER_TYPES,
-    MetaLearnerSelectionResult,
-    MetaLearnerSelector,
-    select_meta_learner_with_optuna,
-)
 from .mlp_meta import MLPMetaLearner
 
 # PHASE_4: EnsembleOrchestrator - THE single entry point for ensemble training
@@ -142,15 +125,6 @@ from .orchestrator import (
     build_ensemble,
 )
 from .ridge_meta import RidgeMetaLearner
-
-# PHASE_16D: Second-level stacking for large ensembles
-from .second_level import (
-    ClusterInfo,
-    SecondLevelResult,
-    SecondLevelStacker,
-    SecondLevelStackingConfig,
-    build_second_level_stacking,
-)
 from .stacking import StackingEnsemble
 from .validator import (
     HETEROGENEOUS_ENSEMBLE_TYPES,
@@ -214,23 +188,8 @@ __all__ = [
     "EnsembleCompatibilityError",
     "HETEROGENEOUS_ENSEMBLE_TYPES",
     "HOMOGENEOUS_ENSEMBLE_TYPES",
-    # Heterogeneous stacking builder (PHASE_4)
-    "HeterogeneousStackingBuilder",
-    "StackingFeatures",
-    "build_stacking_features",
     # Ensemble orchestrator (PHASE_4)
     "EnsembleOrchestrator",
     "EnsembleResult",
     "build_ensemble",
-    # Meta-learner selection (PHASE_16C)
-    "MetaLearnerSelector",
-    "MetaLearnerSelectionResult",
-    "select_meta_learner_with_optuna",
-    "AVAILABLE_META_LEARNER_TYPES",
-    # Second-level stacking (PHASE_16D)
-    "SecondLevelStacker",
-    "SecondLevelStackingConfig",
-    "SecondLevelResult",
-    "ClusterInfo",
-    "build_second_level_stacking",
 ]

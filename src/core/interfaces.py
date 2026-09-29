@@ -231,10 +231,9 @@ class OOFPredictionProtocol(Protocol):
     Protocol for OOFPrediction objects - enables type checking without
     importing the actual class, breaking circular dependencies.
 
-    This matches the interface of src.cross_validation.oof_core.OOFPrediction.
-    Used in heterogeneous_stacking.py to avoid:
-        cross_validation -> models -> models.ensemble -> heterogeneous_stacking
-        -> oof_core (CIRCULAR)
+    This matches the interface of src.validation.cv.oof_core.OOFPrediction.
+    Used by the ensemble orchestrator to avoid the circular import
+    validation.cv -> models -> models.ensemble -> validation.cv.oof_core.
     """
 
     model_name: str
