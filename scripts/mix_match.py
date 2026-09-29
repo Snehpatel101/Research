@@ -582,6 +582,24 @@ def write_report(out_dir: Path, report_path: Path) -> None:
     print(f"Wrote {report_path} ({passed}/{total} pass)")
 
 
+def _code_revision() -> str | None:
+    """HEAD commit, or None when the tree has uncommitted changes to tracked files."""
+    try:
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return None if dirty else head
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
@@ -597,6 +615,11 @@ def main() -> None:
     parser.add_argument("--binary", action="store_true", help="binary labels (move vs no move)")
     parser.add_argument("--out", default=str(REPO_ROOT / "experiments" / "mix_match"))
     parser.add_argument("--only", default="", help="comma-separated spec names to run")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="reuse passing results recorded on the current commit (clean tree only)",
+    )
     parser.add_argument("--_child", default="", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -607,6 +630,7 @@ def main() -> None:
     if args._child:
         spec = json.loads(args._child)
         record = run_one(spec, data_path, out_dir / "runs")
+        record["code_revision"] = _code_revision()
         (out_dir / "results" / f"{spec['name']}.json").write_text(json.dumps(record, indent=2))
         return
 
@@ -625,8 +649,14 @@ def main() -> None:
 
     env = dict(os.environ, OMP_NUM_THREADS="1", MKL_NUM_THREADS="1", PYTHONPATH=str(REPO_ROOT))
 
+    revision = _code_revision()
+
     def launch(spec: dict) -> dict:
         result_file = out_dir / "results" / f"{spec['name']}.json"
+        if args.resume and revision and result_file.exists():
+            previous = json.loads(result_file.read_text())
+            if previous.get("ok") and previous.get("code_revision") == revision:
+                return previous
         result_file.unlink(missing_ok=True)
         log_file = out_dir / "results" / f"{spec['name']}.log"
         t0 = time.time()
