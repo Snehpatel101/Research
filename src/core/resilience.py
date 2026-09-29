@@ -197,7 +197,7 @@ def _timeout_with_signal(  # noqa: UP047
         TimeoutError: If execution exceeds timeout
     """
 
-    def handler(signum: int, frame: Any) -> None:
+    def handler(_signum: int, _frame: Any) -> None:
         raise ResilienceTimeoutError(
             f"Function '{func.__name__}' timed out after {seconds}s",
             timeout_seconds=seconds,
@@ -591,8 +591,8 @@ class CircuitBreaker:
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: Any,
+        _exc_val: BaseException | None,
+        _exc_tb: Any,
     ) -> bool:
         """Exit context - record success or failure."""
         if exc_type is None:

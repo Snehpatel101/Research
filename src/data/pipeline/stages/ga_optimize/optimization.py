@@ -33,9 +33,6 @@ def run_ga_optimization(
     symbol: str = "MES",
     population_size: int = 50,
     generations: int = 30,
-    crossover_prob: float = 0.7,
-    mutation_prob: float = 0.2,
-    tournament_size: int = 3,
     subset_fraction: float = 0.3,
     atr_column: str = "atr_14",
     seed: int = 42,
@@ -45,8 +42,7 @@ def run_ga_optimization(
 
     NOTE: This function now uses Optuna TPE internally but maintains
     the same interface for backward compatibility. The parameters
-    population_size, generations, crossover_prob, mutation_prob, and
-    tournament_size are deprecated but accepted for compatibility.
+    population_size and generations only set the Optuna trial budget.
 
     Parameters:
     -----------
@@ -55,9 +51,6 @@ def run_ga_optimization(
     symbol : 'MES' or 'MGC' for symbol-specific optimization
     population_size : (deprecated) GA population size - mapped to n_trials
     generations : (deprecated) number of generations - mapped to n_trials
-    crossover_prob : (deprecated) ignored
-    mutation_prob : (deprecated) ignored
-    tournament_size : (deprecated) ignored
     subset_fraction : fraction of data to use (for speed)
     atr_column : ATR column name
     seed : random seed for reproducibility (default: 42)
@@ -103,9 +96,6 @@ def run_ga_optimization_safe(
     train_ratio: float = DEFAULT_TRAIN_RATIO,
     population_size: int = 50,
     generations: int = 30,
-    crossover_prob: float = 0.7,
-    mutation_prob: float = 0.2,
-    tournament_size: int = 3,
     subset_fraction: float = 0.3,
     atr_column: str = "atr_14",
     seed: int = 42,
@@ -128,9 +118,6 @@ def run_ga_optimization_safe(
                   This MUST match the train ratio used in the splits stage.
     population_size : (deprecated) GA population size - mapped to n_trials
     generations : (deprecated) number of generations - mapped to n_trials
-    crossover_prob : (deprecated) ignored
-    mutation_prob : (deprecated) ignored
-    tournament_size : (deprecated) ignored
     subset_fraction : fraction of TRAINING data to use (for speed)
     atr_column : ATR column name
     seed : random seed for reproducibility (default: 42)

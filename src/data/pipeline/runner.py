@@ -79,7 +79,7 @@ def _run_with_timeout(
         )
         return func()
 
-    def timeout_handler(signum: int, frame: Any) -> None:
+    def timeout_handler(_signum: int, _frame: Any) -> None:
         raise StageTimeoutError(stage_name, timeout_seconds)
 
     # Set up the timeout

@@ -439,6 +439,13 @@ class MultiResolution4DDataset(Dataset):
         pad_to_max: bool,
     ) -> np.ndarray:
         """Convert DataFrame to 3D numpy array: (n_timeframes, n_samples, max_features)."""
+        if not pad_to_max:
+            counts = {tf: len(feature_map.get(tf, [])) for tf in timeframes}
+            if len(set(counts.values())) > 1:
+                raise ValueError(
+                    f"Timeframes have different feature counts {counts}; "
+                    "set pad_missing_features=True to pad them to the maximum"
+                )
         n_samples = len(df)
         n_timeframes = len(timeframes)
 
