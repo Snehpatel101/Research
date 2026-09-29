@@ -577,7 +577,8 @@ def write_report(out_dir: Path, report_path: Path) -> None:
                 )
                 lines.append(f"| `{r['name']}` | {detail} | {r.get('seconds', 0)} |")
         lines.append("")
-    lines.insert(8, f"**Overall: {passed}/{total} runs pass.**\n")
+    # After the "Generated ... from the results of ..." lead paragraph
+    lines.insert(5, f"**Overall: {passed}/{total} runs pass.**\n")
     report_path.write_text("\n".join(lines))
     print(f"Wrote {report_path} ({passed}/{total} pass)")
 

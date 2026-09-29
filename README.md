@@ -1,124 +1,116 @@
 # ML Factory
 
-Config-driven factory for financial time-series models: put OHLCV bars in, get a
-leakage-free, backtested, deployable model or ensemble out.
+Config-driven factory for financial time-series models: put OHLCV bars in, get
+a leakage-free, cost-aware, backtested model or ensemble out — packaged so that
+production inference replays training exactly.
 
-```
-Raw OHLCV ─► features + triple-barrier labels ─► per-model feature selection
-          ─► any mix of 16 models (2D tabular / 3D sequence / 4D multi-stream)
+```text
+Raw OHLCV ─► features + triple-barrier labels ─► per-model feature selection (train rows only)
+          ─► any mix of 16 models (2D tabular / 3D sequence / 4D multi-timeframe)
           ─► purged-CV out-of-fold predictions ─► stacking meta-learner
-          ─► cost-aware backtest ─► bundles + deploy artifact
-          ─► predict_from_raw(raw_bars)   # same features, same scaling, same routing
+          ─► cost-aware backtest (fills at bar i+1) ─► bundles + deploy manifest
+          ─► load_deploy_artifact(...).predict_from_raw(raw_bars)
 ```
+
+## 30-second quickstart
+
+```bash
+uv venv .venv --python 3.11 && source .venv/bin/activate
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install -e ".[dev,stats]"
+
+# One week of bundled MES 1-minute bars → 5-minute XGBoost model, backtested and deployed (<1 min)
+python -m src.cli run -d data/raw/MES_1m_1week.parquet --bar-timeframe 5min -m xgboost -h 5 --backtest
+```
+
+```python
+import pandas as pd
+from src.config.experiment import ExperimentConfig
+from src.factory import MLFactory
+from src.inference import load_deploy_artifact
+
+cfg = ExperimentConfig(name="mes_mix")
+cfg.data.data_path = "data/raw/MES_1m_1month.parquet"
+cfg.data.bar_timeframe = "5min"                           # resample 1-minute bars
+cfg.training.models = ["xgboost", "lstm", "patchtst"]    # 2D + 3D + 4D
+cfg.training.meta_learner = "voting_meta"
+cfg.training.horizons = [5]
+cfg.training.optuna.n_trials = 0                          # skip tuning on a first run
+cfg.training.max_epochs = 5                               # quick look on a CPU
+cfg.evaluation.run_backtest = True
+
+result = MLFactory(cfg).run()
+print(result.summary())
+
+artifact = load_deploy_artifact(result.deploy_path, horizon=5)   # the ensemble
+raw = pd.read_parquet("data/raw/MES_1m_1month.parquet").iloc[-5000:]
+pred = artifact.predict_from_raw(raw)   # same resampling, features, scaling, routing
+pred.class_predictions, pred.class_probabilities, pred.metadata["timestamps"]
+```
+
+No data at hand? `python examples/01_quickstart.py` generates synthetic bars
+and runs end to end in about a minute ([examples](examples/README.md)).
 
 ## Mix and match
 
 | Building block | Choices |
 |---|---|
-| Base models | `xgboost` `lightgbm` `catboost` `random_forest` `logistic` `svm` · `lstm` `gru` `tcn` `transformer` `inceptiontime` `resnet1d` `nbeats` `tft` · `patchtst` `itransformer` |
-| Meta-learner (stacking) | `ridge_meta` `xgboost_meta` `mlp_meta` `calibrated_meta` `voting_meta` |
-| Training mode | `standard` · `walk_forward` · `regime_aware` (one model per market regime, routed per bar) · `meta_labeling` (primary = `models[0]` + bet filter) |
+| Base models (any subset) | `xgboost` `lightgbm` `catboost` `random_forest` `logistic` `svm` · `lstm` `gru` `tcn` `transformer` `inceptiontime` `resnet1d` `nbeats` `tft` · `patchtst` `itransformer` |
+| Meta-learner | `ridge_meta` `xgboost_meta` `mlp_meta` `calibrated_meta` `voting_meta` |
+| Training mode | `standard` · `walk_forward` · `regime_aware` (one model per regime, routed per bar) · `meta_labeling` (primary `models[0]` + meta bet filter) |
 
-Any subset of base models can be combined, in any mode, with any meta-learner.
 Models of different input ranks are aligned on the bar each prediction belongs
-to, so a gradient-boosted tree, an LSTM and a multi-timeframe PatchTST stack
-cleanly. Every combination is verified end to end — see
-[`docs/MIX_AND_MATCH.md`](docs/MIX_AND_MATCH.md) and `scripts/mix_match.py`.
+to, so a boosted tree, an LSTM and a multi-timeframe PatchTST stack cleanly.
+Every combination runs end to end through deploy and `predict_from_raw` in the
+[verification matrix](docs/MIX_AND_MATCH.md) (`scripts/mix_match.py`).
+[Adding a model](docs/mix-and-match.md#adding-a-model) takes a `BaseModel`
+subclass and a contract.
 
-## Install
+## Guarantees
 
-```bash
-uv venv .venv --python 3.11 && source .venv/bin/activate
-uv pip install torch --index-url https://download.pytorch.org/whl/cpu   # or a CUDA build
-uv pip install -e ".[dev,stats]"
-```
+| Guarantee | How |
+|---|---|
+| No lookahead in features | Higher-timeframe features from completed bars only (`shift(1)`); lagged entropy/regime/microstructure features; session-reset cumulative features |
+| No label leakage in CV | Purge = longest label span, embargo = one trading day, plus purging on every label's actual end bar |
+| Honest out-of-fold predictions | Fold models early-stop on a purged tail of their own training rows |
+| Labels and backtest agree | One barrier resolution and one cost term feed the labeler and the backtester |
+| No same-bar fills | Signal at bar *i* fills at bar *i + 1* (open); stops/targets at the barrier price |
+| Train/serve parity | Bundles replay bar timeframe, `FeatureEngineer` spec, scaler and calibrator; checked per combination |
+| Overfitting is measured | PSR/DSR, CPCV paths, CSCV PBO (`ml cpcv-pbo`) |
+| Reproducible | One saved `ExperimentConfig`, seeded runs, checkpoint/resume |
 
-## Quick start (Python)
+## Documentation
 
-```python
-from src.config.experiment import ExperimentConfig
-from src.factory import MLFactory
+| | |
+|---|---|
+| [Getting started](docs/getting-started.md) | Install, data format, first run (CLI and Python), predicting |
+| [Concepts](docs/concepts.md) | Triple-barrier labels, purge/embargo, uniqueness weights, OOF stacking, meta-labeling, regimes, walk-forward, execution timing, costs, DSR/PSR/PBO/CPCV — and why each exists |
+| [Mix and match](docs/mix-and-match.md) | Models × meta-learners × modes; how to add a model |
+| [Configuration](docs/configuration.md) | Every `ExperimentConfig` field and default (generated) |
+| [CLI](docs/cli.md) | Every `ml` command and option (generated) |
+| [Deploy and serve](docs/deploy-and-serve.md) | Bundles, deploy manifest, `predict_from_raw`, warmup |
+| [Examples](examples/README.md) | Three scripts, a few minutes each on a CPU |
+| [Colab notebook](docs/USER_GUIDE.md) | GPU runs on large datasets |
 
-cfg = ExperimentConfig(name="mes_mix")
-cfg.data.symbol = "MES"
-cfg.data.data_path = "data/raw/MES_1m_1month.parquet"
-cfg.data.bar_timeframe = "5min"            # resample 1-minute input to 5-minute bars
-cfg.training.models = ["xgboost", "lstm", "patchtst"]
-cfg.training.meta_learner = "voting_meta"
-cfg.training.training_mode = "standard"    # or walk_forward / regime_aware / meta_labeling
-cfg.training.horizons = [5]
-# purge/embargo are derived: purge = longest label span (triple-barrier max_bars),
-# embargo = one trading day of bars at the bar timeframe (set training.purge_bars /
-# training.embargo_bars to override). CV also purges on every label's actual end bar,
-# and training samples are weighted by label uniqueness (training.sample_weighting).
-cfg.training.optuna.n_trials = 0           # first run: skip Optuna (default 100 trials per model)
-cfg.evaluation.run_backtest = True
+Browse it as a site with `make docs-serve` (`uv pip install -e ".[docs]"`), or
+build it with `make docs` (strict: any warning fails).
 
-result = MLFactory(cfg).run()
-print(result.summary())
-```
-
-## Quick start (CLI)
-
-One pipeline sits behind every command: raw OHLCV bars -> `FeatureEngineer` ->
-triple-barrier labels (with label spans) -> models. There are no intermediate
-stage directories; every command takes the raw bars (`-d`, parquet or csv).
+## Development
 
 ```bash
-python -m src.cli run -d data/raw/MES_1m_1month.parquet --bar-timeframe 5min \
-    -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta -h 5
+make check     # ruff, black --check, pyright (0 errors), vulture, fast tests
+make test      # full suite incl. slow end-to-end tests
+make docs      # regenerate-check + strict docs build
+make matrix    # full mix-and-match matrix (hours)
 ```
 
-`ml` below is shorthand for `python -m src.cli`.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Project process docs live at the root:
+[CLAUDE.md](CLAUDE.md) (status, conventions), [DIRECTION.md](DIRECTION.md)
+(architecture), [CLEANUP_PLAN.md](CLEANUP_PLAN.md) /
+[CLEANUP_TASKS.md](CLEANUP_TASKS.md) (phases), [COMPLETION.md](COMPLETION.md)
+(history), [DECISIONS.md](DECISIONS.md) (open decisions),
+[COMMANDS.md](COMMANDS.md) (agent command system),
+[CHANGELOG.md](CHANGELOG.md). Historical audits and phase reports are archived
+in [docs/archive/](docs/archive/README.md).
 
-| Command | Purpose |
-|---------|---------|
-| `ml run` | Full pipeline: features, labels, training (one model, many, or an ensemble; `--training-mode standard\|walk_forward\|regime_aware\|meta_labeling`), optional `--backtest`, bundle + deploy artifact. `--resume <run_dir>` continues a run from its last checkpoint. |
-| `ml data` | Features and labels to parquet only (`<run_dir>/features_labels.parquet`), no training. |
-| `ml status <run_dir>` | Checkpoint progress of a run. |
-| `ml models [name]` | Registered models, or one model's default configuration. |
-| `ml cv` | Purged k-fold CV of tabular models: fold stability, prediction correlation, out-of-fold stacking datasets. |
-| `ml walk-forward` | Expanding/rolling walk-forward evaluation of tabular models (sequence models: `ml run --training-mode walk_forward`). |
-| `ml cpcv-pbo` | CPCV backtest paths (next-bar returns net of per-symbol costs) and the PBO overfitting gate over 2+ models. |
-
-The evaluation commands (`cv`, `walk-forward`, `cpcv-pbo`) use the same data step
-as `ml run`, evaluate the chronological train split only (validation and test
-stay untouched), scale per fold, and purge on each label's actual end bar with
-derived purge/embargo (`--purge-bars` / `--embargo-bars` override). Results go
-to `<output_dir>/<run_id>/{cv,walk-forward,cpcv-pbo}/`.
-
-Outputs of `ml run` live in `<output_dir>/<run_id>/` (default `experiments/`):
-`experiment_config.yaml`, `checkpoints/`, per-model artifacts, `bundles/` and
-`deploy/manifest.json`. Run `ml <command> --help` for every option.
-
-## Serve
-
-```python
-from src.inference import load_deploy_artifact
-
-artifact = load_deploy_artifact(result.deploy_path, horizon=5)   # ensemble if one was built
-pred = artifact.predict_from_raw(raw_ohlcv_df)                   # raw bars in, same as training
-pred.class_predictions, pred.class_probabilities, pred.metadata["timestamps"]
-```
-
-Bundles replay training exactly: the recorded bar timeframe and
-`FeatureEngineer` spec rebuild the features, the training scaler and calibrator
-are applied, regime bundles route each bar to its regime's model, and
-meta-labeling bundles neutralize bars the meta-model rejects. Give
-`predict_from_raw` enough history for warmup (MTF features need ≥ 500 bars;
-EMA-type and cumulative features converge with more).
-
-## Verify
-
-```bash
-ruff check src/ && black --check src/ && pyright   # lint, format, types (0 errors)
-pytest                                             # unit + end-to-end tests
-python scripts/mix_match.py pairs                   # every pair of models, full pipeline
-python scripts/mix_match.py report                  # regenerate docs/MIX_AND_MATCH.md
-```
-
-## Project docs
-
-`CLAUDE.md` (status and conventions) · `DIRECTION.md` (architecture) ·
-`CLEANUP_PLAN.md` / `CLEANUP_TASKS.md` (phases) · `COMPLETION.md` (history) ·
-`DECISIONS.md` (open decisions) · `docs/USER_GUIDE.md` (Colab notebook guide)
+MIT licensed — see [LICENSE](LICENSE).

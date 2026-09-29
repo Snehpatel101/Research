@@ -45,6 +45,36 @@ jobs:
       - name: Fast tests
         run: uv run --no-sync pytest -m "not slow" -n auto --dist loadfile
 
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.11"
+
+      # The generated pages import the package (config dataclasses, CLI), and
+      # mkdocstrings reads its docstrings, so the package is installed too.
+      - name: Install (CPU torch + docs extra)
+        run: |
+          uv venv
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -e ".[docs]"
+
+      - name: Generated pages are up to date
+        run: |
+          uv run --no-sync python scripts/gen_config_docs.py --check
+          uv run --no-sync python scripts/gen_cli_docs.py --check
+
+      - name: Build site (strict)
+        run: uv run --no-sync mkdocs build --strict
+
+      - name: Relative links in Markdown resolve
+        run: uv run --no-sync python scripts/check_md_links.py
+
   slow:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest

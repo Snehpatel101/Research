@@ -162,7 +162,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 9 | Optional thin serving extra + Dockerfile | `src/cli/`, new serve module | ⬜ |
 | 10 | Validated config (pydantic v2, JSON schema, `validate-config`) | `src/config/` | ⬜ |
 | 11 | Import-cycle break (lazy facades, DECISIONS #10) + package rename `src` → `mlfactory`, public API, entry-point model registry | package-wide | ⬜ |
-| 12 | Docs site (mkdocs-material + mkdocstrings), `examples/`, internal docs archive, regenerate `docs/MIX_AND_MATCH.md` in CI | `docs/`, `mkdocs.yml`, `examples/` | ⬜ |
+| 12 | Docs site (mkdocs-material + mkdocstrings, `make docs` strict, CI `docs` job), generated config/CLI pages (`scripts/gen_{config,cli}_docs.py`, stale check in CI), link checker, `examples/` (3 scripts, CPU minutes), 46 process docs archived to `docs/archive/`, `docs/MIX_AND_MATCH.md` regenerated (the matrix itself is not rerun in CI: it takes hours) | `docs/`, `mkdocs.yml`, `examples/`, `scripts/`, `.github/workflows/ci.yml` | 🔄 review |
 | 13 | CI hardening: 3.11/3.12 matrix, wheel build + import smoke, `uv lock --check`, dependabot | `.github/` | ⬜ |
 | 14 | DIRECTION.md rewrite; final adversarial review; full mix-and-match sweep; land on `main`; delete merged agent branches | root | ⬜ |
 
