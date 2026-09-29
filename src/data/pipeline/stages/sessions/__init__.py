@@ -1,41 +1,16 @@
 """
-Session handling for trading sessions
+Trading session configuration and the CME holiday calendar.
 
-This package provides comprehensive session handling for CME futures trading data:
-- Session classification and filtering
-- CME holiday calendar integration
-- DST (Daylight Saving Time) handling
-
-Sessions:
-- New York: 14:30-21:00 UTC (09:30-16:00 ET)
-- London: 08:00-16:30 UTC
-- Asia: 23:00-07:00 UTC (crosses midnight)
+- Session definitions (New York, London, Asia) with DST handling
+- CME holiday / early-close calendar (used by the backtester's execution model)
 
 Usage:
-    from stages.sessions import SessionFilter, SessionsConfig, CMECalendar
+    from src.data.pipeline.stages.sessions import CMECalendar, SessionName
 
-    # Create filter with configuration
-    config = SessionsConfig(
-        include_sessions=[SessionName.NEW_YORK, SessionName.LONDON],
-        add_session_flags=True,
-        add_overlap_flags=True,
-        filter_holidays=True,
-    )
-    filter = SessionFilter(config)
-
-    # Add session features
-    df = filter.add_session_features(df)
-
-    # Filter holidays
     calendar = CMECalendar()
     df = calendar.filter_holidays(df)
-
-Author: ML Pipeline
-Created: 2025-12-22
 """
 
-# Configuration
-# Calendar
 from .calendar import (
     CME_EARLY_CLOSE,
     CME_HOLIDAYS,
@@ -57,12 +32,6 @@ from .config import (
     get_session_config,
 )
 
-# Filter
-from .filter import (
-    SessionFilter,
-    create_session_filter,
-)
-
 __all__ = [
     # Config
     "SessionName",
@@ -74,9 +43,6 @@ __all__ = [
     "DEFAULT_SESSIONS_CONFIG",
     "get_session_config",
     "get_all_sessions",
-    # Filter
-    "SessionFilter",
-    "create_session_filter",
     # Calendar
     "TradingDayType",
     "TradingDay",

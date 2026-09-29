@@ -242,7 +242,7 @@ class WalkForwardTrainer:
 
     def run(
         self,
-        container: TimeSeriesDataContainer | None = None,
+        container: TimeSeriesDataContainer,
         save_models: bool = True,
         save_predictions: bool = True,
     ) -> dict[str, Any]:
@@ -250,7 +250,7 @@ class WalkForwardTrainer:
         Run walk-forward training.
 
         Args:
-            container: TimeSeriesDataContainer with data. If None, loads from config.
+            container: TimeSeriesDataContainer with the full dataset (train split).
             save_models: Whether to save trained models for each window
             save_predictions: Whether to save prediction DataFrames
 
@@ -261,15 +261,6 @@ class WalkForwardTrainer:
                 - output_path: Path to output directory
         """
         start_time = time.time()
-
-        # Load container if not provided
-        if container is None:
-            from src.core.container import TimeSeriesDataContainer
-
-            container = TimeSeriesDataContainer.from_parquet_dir(
-                path=self.config.data_dir,
-                horizon=self.config.horizons[0],  # Use first horizon
-            )
 
         logger.info("=" * 60)
         logger.info("WALK-FORWARD TRAINING")

@@ -12,7 +12,6 @@ from __future__ import annotations
 import gc
 import logging
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -478,7 +477,6 @@ class TrainingOpsMixin:
             symbol=self.config.symbol,
             horizons=[horizon],
             models=list(self.config.models),
-            data_dir=Path(self.config.data_path).parent,
             output_dir=self.output_dir / f"h{horizon}",
         )
         wf_config = WalkForwardTrainerConfig(
@@ -639,7 +637,6 @@ class TrainingOpsMixin:
                 symbol=exp_config.symbol,
                 horizons=exp_config.horizons,
                 models=[model_name],
-                data_dir=exp_config.data_dir,
                 output_dir=exp_config.output_dir,
             )
             single_trainer = WalkForwardTrainer(

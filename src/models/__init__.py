@@ -61,11 +61,6 @@ from .base import (
 from .config import (
     CONFIG_DIR,
     TrainerConfig,
-    build_config,
-    create_trainer_config,
-    load_model_config,
-    load_yaml_config,
-    merge_configs,
     save_config,
     validate_config,
 )
@@ -153,11 +148,6 @@ __all__ = [
     # Configuration
     "TrainerConfig",
     "CONFIG_DIR",
-    "load_yaml_config",
-    "load_model_config",
-    "build_config",
-    "create_trainer_config",
-    "merge_configs",
     "validate_config",
     "save_config",
     # Training

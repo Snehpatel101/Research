@@ -16,11 +16,9 @@ from .checkpoint_manager import CheckpointManager
 from .colab_setup import (
     ensure_data_in_workspace,
     get_colab_dataloader_kwargs,
-    get_trainer_for_colab,
     is_colab,
     setup_colab_environment,
     setup_environment,
-    train_ensemble_colab,
 )
 from .config_validator import (
     ValidationResult,
@@ -83,8 +81,6 @@ __all__ = [
     "is_colab",
     "setup_environment",
     "setup_colab_environment",
-    "get_trainer_for_colab",
-    "train_ensemble_colab",
     "get_colab_dataloader_kwargs",
     "ensure_data_in_workspace",
     # Checkpoint management

@@ -52,10 +52,10 @@ def _resample_for_model(df: pd.DataFrame, source_tf: str, target_tf: str) -> pd.
 
     Only resamples if target is coarser than source (e.g., 1min -> 5min).
     """
-    from src.data.pipeline.config import parse_timeframe_to_minutes
+    from src.core.common.timeframes import timeframe_to_minutes
 
-    source_mins = parse_timeframe_to_minutes(source_tf)
-    target_mins = parse_timeframe_to_minutes(target_tf)
+    source_mins = timeframe_to_minutes(source_tf)
+    target_mins = timeframe_to_minutes(target_tf)
 
     if target_mins <= source_mins:
         # Target is same or finer resolution, no resampling needed

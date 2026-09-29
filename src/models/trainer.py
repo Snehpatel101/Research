@@ -17,8 +17,8 @@ Example:
     >>> from src.core.container import TimeSeriesDataContainer
     ...
     >>> config = TrainerConfig(model_name="xgboost", horizon=20)
-    >>> container = TimeSeriesDataContainer.from_parquet_dir(
-    ...     "data/splits/scaled", horizon=20
+    >>> container = TimeSeriesDataContainer.from_dataframes(
+    ...     train_df=train_df, val_df=val_df, horizon=20
     ... )
     ...
     >>> trainer = Trainer(config)

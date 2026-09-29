@@ -1,12 +1,15 @@
 """
 MLFactory - Unified Entry Point for ML Factory Operations.
 
-This is THE single entry point for the ML Factory system, coordinating:
-- Data preparation (in-process: raw bars -> FeatureEngineer -> TripleBarrierLabeler;
-  the standalone PipelineRunner behind `ml data` is not used here)
+This is THE single entry point for the ML Factory system (Python API, CLI and
+notebooks all run on it), coordinating:
+- Data preparation (in-process: raw bars -> FeatureEngineer -> TripleBarrierLabeler)
 - Training (via UnifiedTrainingOrchestrator)
 - Evaluation (optional)
 - Bundling (via BundleBuilder)
+
+``prepare_data`` and ``build_evaluation_containers`` expose the data step alone
+(``ml data``, ``ml cv``, ``ml walk-forward``, ``ml cpcv-pbo``).
 
 The factory pattern provides a clean, high-level API while delegating
 heavy lifting to specialized components.
@@ -55,6 +58,7 @@ from src.config.experiment import ExperimentConfig
 from src.config.symbol import SymbolConfig
 
 if TYPE_CHECKING:
+    from src.core.container import TimeSeriesDataContainer
     from src.models.training.unified_orchestrator import TrainingRunResult
 from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
@@ -294,7 +298,7 @@ class MLFactory:
             # Phase 1: Data Pipeline
             if resume_from_stage <= self.STAGE_DATA_PIPELINE:
                 self._log("\n[Phase 1/4] Data Pipeline")
-                df, additional_dfs = self._run_data_pipeline()
+                df, additional_dfs = self.prepare_data()
                 self._save_checkpoint_data_pipeline(df, additional_dfs)
             else:
                 self._log("\n[Phase 1/4] Data Pipeline (cached)")
@@ -786,7 +790,7 @@ class MLFactory:
             self._log(f"  Resampled {source_tf} -> {bar_tf}: {len(raw_df)} bars")
         return raw_df, bar_tf
 
-    def _run_data_pipeline(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
+    def prepare_data(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
         """
         Run data pipeline to prepare features and labels.
 
@@ -937,6 +941,61 @@ class MLFactory:
                     additional_dfs[tf_key] = tf_df.astype(dict.fromkeys(f64, np.float32))
 
         return df_features, additional_dfs
+
+    @property
+    def cv_gaps(self) -> tuple[int, int]:
+        """(purge_bars, embargo_bars) resolved for this run's data.
+
+        Available after ``prepare_data`` + ``build_evaluation_containers`` (or
+        ``run``); derived from the label span and the bar timeframe unless the
+        config sets them explicitly.
+        """
+        if self._cv_gaps is None:
+            raise RuntimeError("CV gaps are resolved once the data has been prepared")
+        return self._cv_gaps
+
+    def build_evaluation_containers(self) -> dict[int, TimeSeriesDataContainer]:
+        """
+        Prepare the data and return one evaluation container per horizon.
+
+        Runs the same raw bars -> ``FeatureEngineer`` -> triple-barrier labels
+        (with label spans) step as ``run``, then hands each horizon's tabular
+        TRAIN split to the standalone evaluators (``ml cv``, ``ml walk-forward``,
+        ``ml cpcv-pbo``) unscaled: they fit scalers per fold. Validation and test
+        rows are never exposed.
+
+        Raises:
+            ValueError: If a configured model is not tabular (2D).
+        """
+        from src.core.contracts import get_model_contract
+        from src.core.types import DataRank
+        from src.models.training.services.data_preparer import DataPreparer
+        from src.validation.cv.evaluation_data import build_evaluation_container
+
+        models = self.config.training.models
+        non_tabular = [m for m in models if get_model_contract(m).input_rank != DataRank.TABULAR_2D]
+        if non_tabular:
+            raise ValueError(
+                f"Standalone evaluation supports tabular models only; {non_tabular} need "
+                "sequence input (evaluate them with `ml run --training-mode walk_forward`)"
+            )
+
+        df, _ = self.prepare_data()
+        preparer = DataPreparer(self._pipeline_config(n_rows=len(df)))
+        self._validate_data_sufficiency(df)
+
+        containers: dict[int, TimeSeriesDataContainer] = {}
+        for horizon in self.config.training.horizons:
+            prepared = preparer.prepare(
+                df,
+                model_name=models[0],
+                label_column=f"label_h{horizon}",
+                apply_scaling=False,
+            ).filter_invalid_labels()
+            containers[horizon] = build_evaluation_container(
+                prepared, df["close"], self.config.data.symbol.upper(), horizon
+            )
+        return containers
 
     def _run_training(
         self,

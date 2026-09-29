@@ -66,7 +66,7 @@ def main():
     )
 
     factory = MLFactory(config, verbose=0)
-    df, additional_dfs = factory._run_data_pipeline()
+    df, additional_dfs = factory.prepare_data()
 
     print(f"    Output shape: {df.shape}")
 

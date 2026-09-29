@@ -8,7 +8,6 @@ DATA-003: Metadata columns are versioned and documented for schema evolution tra
 """
 
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -65,67 +64,3 @@ LABEL_PREFIXES = (
     "fwd_return_log_",
     "time_to_hit_",
 )
-
-
-# =============================================================================
-# METADATA VALIDATION FUNCTIONS (DATA-003)
-# =============================================================================
-
-
-def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any]:
-    """
-    Validate DataFrame columns against expected metadata schema.
-
-    Checks for:
-    - Unexpected columns in metadata position (new columns not in schema)
-    - Missing expected metadata columns
-    - Schema version compatibility
-
-    Args:
-        df_columns: List or set of column names from a DataFrame
-
-    Returns:
-        Dictionary with validation results:
-        - is_valid: bool - True if no unexpected metadata columns
-        - schema_version: str - Current schema version
-        - unexpected_columns: list - Columns that look like metadata but aren't in schema
-        - missing_metadata: list - Expected metadata columns not present
-
-    Note:
-        This function warns but does not block on validation issues.
-        Unexpected columns may indicate schema evolution needs.
-    """
-    df_columns_set = set(df_columns)
-
-    # Find columns that are in the DataFrame but not in our metadata schema
-    # Only flag columns that look like they could be metadata (not feature columns)
-    # Feature columns typically have prefixes like rsi_, atr_, etc.
-    potential_metadata_prefixes = ("session", "roll", "missing", "filled", "bar_")
-
-    unexpected = []
-    for col in df_columns_set:
-        col_lower = col.lower()
-        # Check if column looks like metadata but isn't in our schema
-        if col not in METADATA_COLUMNS and any(
-            col_lower.startswith(prefix) for prefix in potential_metadata_prefixes
-        ):
-            unexpected.append(col)
-
-    # Find expected metadata that's missing (for informational purposes)
-    missing = [col for col in METADATA_COLUMNS if col not in df_columns_set]
-
-    # Log warnings for unexpected metadata-like columns
-    if unexpected:
-        logger.warning(
-            f"Metadata validation: Found {len(unexpected)} unexpected metadata-like columns: "
-            f"{unexpected[:5]}{'...' if len(unexpected) > 5 else ''}. "
-            f"Consider updating METADATA_COLUMNS_DEFINITION (version {METADATA_COLUMNS_VERSION})."
-        )
-
-    return {
-        "is_valid": len(unexpected) == 0,
-        "schema_version": METADATA_COLUMNS_VERSION,
-        "unexpected_columns": unexpected,
-        "missing_metadata": missing,
-        "total_columns_checked": len(df_columns_set),
-    }

@@ -1,110 +1,48 @@
 # Pipeline Stages
 
-Production-ready data preparation pipeline for the ML Factory ensemble trading system.
-
-## Stage Architecture
-
-The pipeline is organized into subdirectories, each containing a `run.py` entry point:
+Building blocks of the one ML Factory pipeline (`MLFactory`, `src/factory.py`).
+Raw OHLCV bars go in; `MLFactory.prepare_data` runs them through `FeatureEngineer` and
+the triple-barrier labeler (`src/data/labeling`), and the training orchestrator does the rest.
 
 ```
 stages/
-├── ingest/          Stage 1: Data Ingestion (run_data_generation)
-├── clean/           Stage 2: Data Cleaning (run_data_cleaning)
-├── features/        Stage 3: Feature Engineering (run_feature_engineering)
-├── labeling/        Stage 4: Initial Labeling (run_initial_labeling)
-├── ga_optimize/     Stage 5: GA Optimization (run_ga_optimization)
-├── final_labels/    Stage 6: Final Labels (run_final_labels)
-├── splits/          Stage 7: Create Splits (run_create_splits)
-├── scaling/         Stage 7.5: Feature Scaling (run_feature_scaling)
-├── datasets/        Stage 7.6: Build Datasets (run_build_datasets)
-├── scaled_validation/ Stage 7.7: Post-Scale Validation (run_scaled_validation)
-├── validation/      Stage 8: Comprehensive Validation (run_validation)
-└── reporting/       Stage 9: Generate Report (run_generate_report)
+├── features/    FeatureEngineer + ~190 feature functions (Numba-accelerated)
+├── mtf/         Multi-timeframe features (every MTF operation uses shift(1))
+├── clean/       resample_ohlcv (shared by training and inference)
+├── sessions/    CME trading calendar and session definitions
+└── regime/      Market regime detection (volatility / trend / structure)
 ```
 
-## Stage Details
+## Features (`features/`)
 
-### Stage 1: Data Ingestion (`ingest/run.py`)
-Generates or validates raw OHLCV data files.
+`FeatureEngineer.engineer_features(df, symbol=...)` generates momentum, volatility,
+volume, trend, temporal, regime, wavelet, entropy and microstructure features, plus MTF
+features when `enable_mtf=True`. `FeatureEngineer.to_spec()` records the exact recipe
+so inference bundles replay the same transform (`PreprocessingGraph`).
 
-### Stage 2: Data Cleaning (`clean/run.py`)
-Cleans and resamples OHLCV data, handling gaps and anomalies.
+## Multi-timeframe (`mtf/`)
 
-### Stage 3: Feature Engineering (`features/run.py`)
-Generates ~180 technical indicators and derived features.
+`MTFFeatureGenerator` resamples to higher timeframes and joins them back with
+`shift(1)`, so a bar only ever sees completed higher-timeframe bars.
 
-**Features:**
-- Momentum indicators (RSI, MACD, etc.)
-- Volatility features (ATR, Bollinger Bands)
-- Volume features (OBV, VWAP)
-- Multi-timeframe (MTF) features
-- Wavelet and entropy features
+## Clean (`clean/utils.py`)
 
-### Stage 4: Initial Labeling (`labeling/run.py`)
-Applies triple-barrier labeling for multi-class targets.
+`resample_ohlcv(df, timeframe)` resamples OHLCV with `closed="left", label="left"`.
+`MLFactory` (`data.bar_timeframe`) and the inference preprocessing graph use the same function.
 
-### Stage 5: GA Optimization (`ga_optimize/run.py`)
-Optimizes barrier parameters using genetic algorithms.
+## Sessions (`sessions/`)
 
-### Stage 6: Final Labels (`final_labels/run.py`)
-Applies optimized labels with quality scores.
+Session definitions and the CME holiday calendar used by the backtester's execution model.
 
-### Stage 7: Create Splits (`splits/run.py`)
-Creates chronological train/val/test splits with purging and embargo.
+## Regime (`regime/`)
 
-**Features:**
-- Chronological splitting (default 70/15/15)
-- Purging: removes N bars at split boundaries
-- Embargo: adds N bars buffer between splits
-- Validates no overlap between splits
+Regime detectors used by `training_mode="regime_aware"` and regime-conditional evaluation.
 
-### Stage 7.5: Feature Scaling (`scaling/run.py`)
-Train-only feature scaling to prevent leakage.
+## Running it
 
-### Stage 7.6: Build Datasets (`datasets/run.py`)
-Builds dataset splits and manifests.
-
-### Stage 7.7: Post-Scale Validation (`scaled_validation/run.py`)
-Validates scaled data for drift and distribution issues.
-
-### Stage 8: Comprehensive Validation (`validation/run.py`)
-Final data integrity, label sanity, and feature quality checks.
-
-### Stage 9: Generate Report (`reporting/run.py`)
-Writes the Markdown completion report (PHASE1_COMPLETION_REPORT_<run_id>.md).
-
-## Usage
-
-The pipeline is orchestrated by `PipelineRunner`:
-
-```python
-from src.data.pipeline.runner import PipelineRunner
-from src.data.pipeline.data_config import DataConfig
-
-config = DataConfig(
-    symbols=["MES"],
-    target_timeframe="5min",
-    project_root=Path("/path/to/project"),
-)
-
-runner = PipelineRunner(config)
-success = runner.run()
+```bash
+ml run -d data/mes_5min.parquet -m xgboost          # full pipeline
+ml data -d data/mes_5min.parquet --horizons 5,20    # features + labels to parquet only
 ```
 
-## Stage Registration
-
-Stages are registered in `stage_registry.py`. Each stage definition includes:
-- Name (from `StageName` enum)
-- Dependencies
-- Description
-- Required flag
-- Stage number (for ordering)
-
-## Configuration
-
-Stage behavior is controlled via `DataConfig`:
-- `stage_timeout_seconds`: Maximum execution time per stage
-- `enable_stage_timeouts`: Enable/disable timeout enforcement
-- `stage3_fail_on_partial`: Fail Stage 3 if tasks fail
-- `stage3_min_success_rate`: Minimum success rate for Stage 3
-- `enable_transition_validation`: Validate data between stages
+See the README for the full CLI.

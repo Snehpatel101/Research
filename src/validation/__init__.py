@@ -6,30 +6,9 @@ cross-validation integrity verification, selection bias correction,
 statistical model comparison, bootstrap confidence intervals,
 feature-label leakage detection, ensemble diversity analysis,
 regime-conditional evaluation, production backtesting,
-walk-forward validation, CPCV, PBO, and feature store.
+walk-forward validation, CPCV, and PBO.
 """
 
-# Phase 5: Feature Store
-from src.data.store import (
-    CacheMetadata,
-    DataSource,
-    FeatureCache,
-    FeatureIntegrityError,
-    FeatureLineage,
-    FeatureNotFoundError,
-    FeatureStore,
-    FeatureStoreError,
-    LineageTracker,
-    SemanticVersion,
-    Transformation,
-    TransformationType,
-    VersionInfo,
-    VersionManager,
-    compute_config_hash,
-    compute_dataframe_checksum,
-    compute_file_checksum,
-    compute_schema_hash,
-)
 from src.inference.backtesting import (
     BacktestConfig,
     Backtester,
@@ -277,23 +256,4 @@ __all__ = [
     "compute_pbo",
     "pbo_gate",
     "analyze_overfitting_risk",
-    # Feature Store (Phase 5)
-    "FeatureStore",
-    "FeatureStoreError",
-    "FeatureNotFoundError",
-    "FeatureIntegrityError",
-    "FeatureCache",
-    "CacheMetadata",
-    "LineageTracker",
-    "FeatureLineage",
-    "DataSource",
-    "Transformation",
-    "TransformationType",
-    "SemanticVersion",
-    "VersionInfo",
-    "VersionManager",
-    "compute_file_checksum",
-    "compute_dataframe_checksum",
-    "compute_schema_hash",
-    "compute_config_hash",
 ]

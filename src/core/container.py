@@ -1,9 +1,9 @@
 """
-TimeSeriesDataContainer - Unified data container for Phase 2 model training.
+TimeSeriesDataContainer - Unified data container for model training and evaluation.
 
 CANONICAL LOCATION: src/core/container.py
 
-This module provides a container class that loads Phase 1 pipeline outputs
+This module provides a container class over prepared train/val/test frames
 and provides data in formats required by different model frameworks:
 - sklearn: (X, y, weights) numpy arrays
 - PyTorch: SequenceDataset with sliding windows
@@ -13,10 +13,8 @@ Usage:
 ------
     from src.core import TimeSeriesDataContainer
 
-    # Load from Phase 1 outputs
-    container = TimeSeriesDataContainer.from_parquet_dir(
-        path="data/splits/scaled",
-        horizon=20
+    container = TimeSeriesDataContainer.from_dataframes(
+        train_df=train_df, val_df=val_df, horizon=20
     )
 
     # Get sklearn arrays
@@ -28,7 +26,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,7 +34,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from src.core.label_spans import NO_LABEL_END, LabelSpans
+from src.core.label_spans import (
+    LabelSpans,
+    frame_label_ends,
+    label_end_column,
+    remap_label_ends,
+)
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
@@ -48,9 +50,6 @@ logger.addHandler(logging.NullHandler())
 # =============================================================================
 # METADATA CONSTANTS (inlined from phase1 to avoid circular dependency)
 # =============================================================================
-
-# Version for tracking schema changes
-METADATA_COLUMNS_VERSION = "1.0"
 
 # Metadata columns to exclude from features
 METADATA_COLUMNS = {
@@ -96,59 +95,6 @@ _LABEL_PREFIXES = (
 def _is_label_column(name: str) -> bool:
     """Check if column name is a label/target column."""
     return any(name.startswith(prefix) for prefix in _LABEL_PREFIXES)
-
-
-def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any]:
-    """
-    Validate DataFrame columns against metadata schema.
-
-    Detects label/target columns that should NOT be used as features,
-    and reports metadata columns found in the data.
-    """
-    columns_set = set(df_columns)
-    metadata_found = columns_set & METADATA_COLUMNS
-
-    # Detect label columns that could leak target information if used as features
-    label_columns_found = [col for col in columns_set if _is_label_column(col)]
-
-    # Feature columns = everything except metadata and labels
-    feature_columns = columns_set - METADATA_COLUMNS - set(label_columns_found)
-
-    # Check for label columns masquerading as features (columns with label
-    # prefixes that aren't explicitly in our label prefix list)
-    suspicious_prefixes = (
-        "target_",
-        "pred_",
-        "prediction_",
-        "meta_label_",
-        "meta_proba_",
-        "bet_size_",
-    )
-    suspicious_columns = [
-        col for col in feature_columns if any(col.startswith(p) for p in suspicious_prefixes)
-    ]
-
-    is_valid = len(suspicious_columns) == 0
-
-    if label_columns_found:
-        logger.debug(
-            f"Metadata validation: found {len(label_columns_found)} label columns, "
-            f"{len(feature_columns)} feature columns"
-        )
-    if suspicious_columns:
-        logger.warning(
-            f"Metadata validation FAILED: suspicious columns in feature set "
-            f"that may leak target info: {suspicious_columns}"
-        )
-
-    return {
-        "version": METADATA_COLUMNS_VERSION,
-        "metadata_columns_found": list(metadata_found),
-        "label_columns_found": label_columns_found,
-        "suspicious_columns": suspicious_columns,
-        "is_valid": is_valid,
-        "unexpected_columns": suspicious_columns,
-    }
 
 
 # =============================================================================
@@ -241,21 +187,28 @@ def _extract_feature_columns(
     return features
 
 
+def _drop_invalid_labels(df: pd.DataFrame, label_col: str) -> pd.DataFrame:
+    """
+    Drop rows with the invalid-label sentinel and renumber the rows.
+
+    The label-end column (row positions, see ``label_end_column``) is re-mapped to
+    the surviving rows, so every label span keeps covering the same bars.
+    """
+    keep = (df[label_col] != INVALID_LABEL).to_numpy()
+    if keep.all():
+        return df.reset_index(drop=True)
+
+    ends = frame_label_ends(df, label_col)
+    out = df.loc[keep].reset_index(drop=True)
+    if ends is not None:
+        out[label_end_column(label_col)] = remap_label_ends(ends[keep], np.flatnonzero(keep))
+    return out
+
+
 def _validate_split_name(split: str) -> None:
     """Validate split name."""
     if split not in VALID_SPLITS:
         raise ValueError(f"Invalid split '{split}'. Must be one of: {VALID_SPLITS}")
-
-
-def _load_parquet_with_validation(path: Path, split_name: str) -> pd.DataFrame:
-    """Load parquet file with basic validation."""
-    if not path.exists():
-        raise FileNotFoundError(f"Split file not found: {path}")
-    df = pd.read_parquet(path)
-    if df.empty:
-        raise ValueError(f"Empty DataFrame loaded from {path}")
-    logger.debug(f"Loaded {split_name}: {len(df)} rows, {len(df.columns)} columns")
-    return df
 
 
 # =============================================================================
@@ -267,18 +220,17 @@ class TimeSeriesDataContainer:
     """
     Unified container for time series ML data.
 
-    Loads Phase 1 pipeline outputs and provides data in formats required
+    Holds prepared train/val/test frames and provides data in formats required
     by different model frameworks (sklearn, PyTorch, NeuralForecast).
 
     Attributes:
         config: DataContainerConfig with horizon and column settings
         splits: Dict mapping split names to SplitData objects
-        metadata: Optional dict with scaling/run metadata
+        metadata: Optional dict with run metadata
 
     Example:
-        >>> container = TimeSeriesDataContainer.from_parquet_dir(
-        ...     path="data/splits/scaled",
-        ...     horizon=20
+        >>> container = TimeSeriesDataContainer.from_dataframes(
+        ...     train_df=train_df, horizon=20
         ... )
         >>> X, y, w = container.get_sklearn_arrays("train")
         >>> print(X.shape, y.shape)
@@ -296,140 +248,13 @@ class TimeSeriesDataContainer:
         Args:
             config: Container configuration
             splits: Dict of split name to SplitData
-            metadata: Optional metadata dict (from scaling_metadata.json)
+            metadata: Optional metadata dict
         """
         if not splits:
             raise ValueError("At least one split must be provided")
         self.config = config
         self.splits = splits
         self.metadata = metadata or {}
-
-    @classmethod
-    def from_parquet_dir(
-        cls,
-        path: str | Path,
-        horizon: int,
-        feature_columns: list[str] | None = None,
-        exclude_invalid_labels: bool = True,
-    ) -> TimeSeriesDataContainer:
-        """
-        Load container from Phase 1 scaled parquet directory.
-
-        Expected directory structure:
-            path/
-                train_scaled.parquet
-                val_scaled.parquet
-                test_scaled.parquet
-                scaling_metadata.json (optional)
-
-        Args:
-            path: Path to scaled splits directory
-            horizon: Label horizon (e.g., 5, 10, 20)
-            feature_columns: Explicit feature list, or None for auto-detect
-            exclude_invalid_labels: Whether to filter out rows with label=-99
-
-        Returns:
-            TimeSeriesDataContainer instance
-
-        Raises:
-            FileNotFoundError: If parquet files don't exist
-            ValueError: If horizon is invalid or data is empty
-        """
-        path = Path(path)
-        if not path.is_dir():
-            raise NotADirectoryError(f"Not a directory: {path}")
-
-        # Load metadata if available
-        metadata_path = path / "scaling_metadata.json"
-        metadata = {}
-        if metadata_path.exists():
-            with open(metadata_path) as f:
-                metadata = json.load(f)
-
-        # Create config
-        config = DataContainerConfig(
-            horizon=horizon,
-            feature_columns=feature_columns or [],
-            exclude_invalid_labels=exclude_invalid_labels,
-        )
-
-        # Load splits
-        splits: dict[str, SplitData] = {}
-        split_files = {
-            "train": path / "train_scaled.parquet",
-            "val": path / "val_scaled.parquet",
-            "test": path / "test_scaled.parquet",
-        }
-
-        for split_name, split_path in split_files.items():
-            if not split_path.exists():
-                logger.warning(f"Split file not found, skipping: {split_path}")
-                continue
-
-            df = _load_parquet_with_validation(split_path, split_name)
-
-            # Validate label column exists
-            label_col = config.label_column
-            if label_col not in df.columns:
-                raise ValueError(
-                    f"Label column '{label_col}' not found in {split_name}. "
-                    f"Available label columns: {[c for c in df.columns if _is_label_column(c)]}"
-                )
-
-            # Validate weight column exists
-            weight_col = config.weight_column
-            if weight_col not in df.columns:
-                logger.warning(f"Weight column '{weight_col}' not found, using uniform weights")
-
-            # Filter invalid labels if requested
-            if exclude_invalid_labels:
-                invalid_mask = df[label_col] == INVALID_LABEL
-                n_invalid = invalid_mask.sum()
-                if n_invalid > 0:
-                    logger.info(
-                        f"{split_name}: Filtering {n_invalid} rows with "
-                        f"invalid label ({INVALID_LABEL})"
-                    )
-                    df = df[~invalid_mask].reset_index(drop=True)
-
-            # Extract feature columns (auto-detect if not provided)
-            features = _extract_feature_columns(df, horizon, config.feature_columns or None)
-
-            # Update config with detected features (on first split)
-            if not config.feature_columns:
-                config.feature_columns = features
-
-            splits[split_name] = SplitData(
-                df=df,
-                feature_columns=features,
-                label_column=label_col,
-                weight_column=weight_col,
-                symbol_column=config.symbol_column,
-                datetime_column=config.datetime_column,
-            )
-
-        if not splits:
-            raise ValueError(f"No valid split files found in {path}")
-
-        # DATA-003: Validate metadata columns schema
-        if splits:
-            first_split = next(iter(splits.values()))
-            metadata_validation = validate_metadata_columns(first_split.df.columns)
-            metadata["metadata_schema_version"] = METADATA_COLUMNS_VERSION
-            metadata["metadata_validation"] = metadata_validation
-
-            if not metadata_validation["is_valid"]:
-                logger.warning(
-                    f"Metadata column validation found unexpected columns: "
-                    f"{metadata_validation['unexpected_columns']}"
-                )
-
-        logger.info(
-            f"Loaded TimeSeriesDataContainer: horizon={horizon}, "
-            f"splits={list(splits.keys())}, features={len(config.feature_columns)}"
-        )
-
-        return cls(config, splits, metadata)
 
     @classmethod
     def from_dataframes(
@@ -466,7 +291,7 @@ class TimeSeriesDataContainer:
                 raise ValueError(f"Label column '{label_col}' not found in {split_name}")
 
             if exclude_invalid_labels:
-                df = df[df[label_col] != INVALID_LABEL].reset_index(drop=True)
+                df = _drop_invalid_labels(df, label_col)
 
             features = _extract_feature_columns(df, horizon, config.feature_columns or None)
             if not config.feature_columns:
@@ -513,86 +338,30 @@ class TimeSeriesDataContainer:
         return self.config.horizon
 
     # =========================================================================
-    # LABEL END TIMES (FOR PURGED CV)
+    # LABEL SPANS (FOR PURGED CV)
     # =========================================================================
-
-    def get_label_end_times(self, split: str) -> pd.Series | None:
-        """
-        Get label end times for purged cross-validation.
-
-        Label end times mark when each sample's label outcome is known.
-        This enables proper purging of overlapping labels in PurgedKFold.
-
-        Args:
-            split: Split name ("train", "val", "test")
-
-        Returns:
-            Series of datetime when each label is resolved, or None if not available
-        """
-        split_data = self.get_split(split)
-        label_end_time_col = f"label_end_time_h{self.config.horizon}"
-
-        if label_end_time_col not in split_data.df.columns:
-            logger.debug(
-                f"Label end time column '{label_end_time_col}' not found in {split}. "
-                "Overlapping label purging will be skipped."
-            )
-            return None
-
-        return pd.to_datetime(split_data.df[label_end_time_col])
 
     def get_label_spans(self, split: str) -> LabelSpans | None:
         """
         Label spans (integer row positions) for purged cross-validation.
 
-        Converts the split's ``label_end_time_h{horizon}`` column into
-        ``LabelSpans`` using the split's datetime column, so purging works on
-        the container's RangeIndex frames (``label_end_times`` alone needs a
-        DatetimeIndex on X). A label ending at time t covers every row of the
-        same symbol stamped at or before t.
+        Built from the split's ``label_end_h{horizon}`` column (see
+        ``src.core.label_spans.label_end_column``), whose values are row
+        positions of the split itself: the row at which each sample's
+        triple-barrier label resolves.
 
         Args:
             split: Split name ("train", "val", "test")
 
         Returns:
             LabelSpans aligned with the rows of ``get_sklearn_arrays(split)``,
-            or None when the split has no label end time column.
-
-        Raises:
-            ValueError: If label end times exist but cannot be located (no
-                datetime column, or datetimes unsorted within a symbol).
+            or None when the split has no label-end column.
         """
-        end_times = self.get_label_end_times(split)
-        if end_times is None:
-            return None
         split_data = self.get_split(split)
-        df = split_data.df
-        if split_data.datetime_column not in df.columns:
-            raise ValueError(
-                f"Split '{split}' has label end times but no "
-                f"'{split_data.datetime_column}' column to locate them"
-            )
-        times = pd.DatetimeIndex(pd.to_datetime(df[split_data.datetime_column]))
-        if times.is_monotonic_increasing:
-            return LabelSpans.from_end_times(times, end_times)
-
-        # Stacked multi-symbol frame: locate label ends within each symbol's rows
-        if split_data.symbol_column not in df.columns:
-            raise ValueError(
-                f"Split '{split}': datetime column is not sorted and there is no "
-                f"'{split_data.symbol_column}' column to group by"
-            )
-        starts = np.arange(len(df), dtype=np.int64)
-        ends = np.full(len(df), NO_LABEL_END, dtype=np.int64)
-        symbols = df[split_data.symbol_column].to_numpy()
-        for symbol in pd.unique(symbols):
-            rows = np.flatnonzero(symbols == symbol)
-            local = LabelSpans.from_end_times(
-                times[rows], end_times.iloc[rows].reset_index(drop=True)
-            )
-            known = local.ends >= 0
-            ends[rows[known]] = rows[local.ends[known]]
-        return LabelSpans(starts=starts, ends=ends)
+        ends = frame_label_ends(split_data.df, split_data.label_column)
+        if ends is None:
+            return None
+        return LabelSpans(starts=np.arange(len(ends), dtype=np.int64), ends=ends)
 
     # =========================================================================
     # SKLEARN FORMAT
@@ -745,8 +514,8 @@ class TimeSeriesDataContainer:
             ValueError: If seq_len <= 0, stride <= 0, or no MTF features found
 
         Example:
-            >>> container = TimeSeriesDataContainer.from_parquet_dir(
-            ...     "data/splits/scaled", horizon=20
+            >>> container = TimeSeriesDataContainer.from_dataframes(
+            ...     train_df=train_df, horizon=20
             ... )
             >>> dataset = container.get_multi_resolution_4d("train", seq_len=60)
             >>> X_4d, y, w = dataset[0]
@@ -809,8 +578,8 @@ class TimeSeriesDataContainer:
             TimeframeNotFoundError: If requested timeframe data doesn't exist
 
         Example:
-            >>> container = TimeSeriesDataContainer.from_parquet_dir(
-            ...     "data/splits/scaled", horizon=20
+            >>> container = TimeSeriesDataContainer.from_dataframes(
+            ...     train_df=train_df, horizon=20
             ... )
             >>> X_4d = container.get_multi_stream_4d(
             ...     symbol="MES",

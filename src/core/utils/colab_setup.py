@@ -12,15 +12,15 @@ Usage in Colab:
     !pip install -r requirements-colab.txt
 
     # Cell 2: Initialize Colab environment
-    from src.core.utils.colab_setup import setup_colab_environment, get_trainer_for_colab
+    from src.core.utils.colab_setup import setup_colab_environment
     setup_colab_environment()
 
-    # Cell 3: Run training
-    trainer, results = get_trainer_for_colab(
-        model_name="xgboost",
-        horizon=20,
-        data_path="/content/drive/MyDrive/data/splits/scaled"
-    )
+    # Cell 3: Run the pipeline on raw OHLCV bars
+    from src.config.experiment import ExperimentConfig, DataSection
+    from src.factory import MLFactory
+
+    config = ExperimentConfig(data=DataSection(data_path="/content/drive/MyDrive/data/mes.parquet"))
+    result = MLFactory(config).run()
     ```
 """
 
@@ -202,121 +202,6 @@ def setup_colab_environment(
     }
 
 
-def get_trainer_for_colab(
-    model_name: str,
-    horizon: int = 20,
-    data_path: str = "/content/drive/MyDrive/data/splits/scaled",
-    feature_set: str | None = None,
-    output_dir: str | None = None,
-    **trainer_kwargs,
-):
-    """
-    Create and run a trainer with Colab-compatible settings.
-
-    This is the Python API alternative to the CLI scripts.
-
-    Args:
-        model_name: Model to train (e.g., "xgboost", "lstm", "stacking")
-        horizon: Label horizon (default 20)
-        data_path: Path to scaled splits directory
-        feature_set: Optional feature set name
-        output_dir: Output directory (defaults to /content/experiments)
-        **trainer_kwargs: Additional TrainerConfig parameters
-
-    Returns:
-        Tuple of (trainer, results_dict)
-
-    Example:
-        ```python
-        trainer, results = get_trainer_for_colab(
-            model_name="xgboost",
-            horizon=20,
-            data_path="/content/drive/MyDrive/data/splits/scaled",
-            feature_set="boosting_optimal",
-        )
-        print(f"Val F1: {results['evaluation_metrics']['macro_f1']:.4f}")
-        ```
-    """
-    from src.core.container import TimeSeriesDataContainer
-    from src.models.config import TrainerConfig
-    from src.models.trainer import Trainer
-
-    # Set Colab-friendly defaults
-    output_dir_path: Path
-    if output_dir is None:
-        output_dir_path = Path("/content/experiments") if is_colab() else Path("experiments/runs")
-    else:
-        output_dir_path = Path(output_dir)
-
-    # Create config with Colab settings
-    config = TrainerConfig(
-        model_name=model_name,
-        horizon=horizon,
-        output_dir=output_dir_path,
-        feature_set=feature_set if feature_set is not None else "",
-        evaluate_test_set=True,
-        use_calibration=True,
-        **trainer_kwargs,
-    )
-
-    # Load data
-    print(f"Loading data from {data_path}...")
-    container = TimeSeriesDataContainer.from_parquet_dir(
-        data_path,
-        horizon=horizon,
-        exclude_invalid_labels=True,  # Critical for preventing leakage
-    )
-
-    # Create and run trainer
-    print(f"Training {model_name}...")
-    trainer = Trainer(config)
-    results = trainer.run(container)
-
-    print("\nTraining complete!")
-    print(f"  Val F1: {results['evaluation_metrics']['macro_f1']:.4f}")
-    print(f"  Val Accuracy: {results['evaluation_metrics']['accuracy']:.4f}")
-    print(f"  Output: {results['output_path']}")
-
-    return trainer, results
-
-
-def train_ensemble_colab(
-    base_models: list[str],
-    meta_learner: str = "ridge_meta",
-    horizon: int = 20,
-    data_path: str = "/content/drive/MyDrive/data/splits/scaled",
-    **kwargs,
-):
-    """
-    Train a stacking ensemble with Colab-compatible settings.
-
-    Args:
-        base_models: List of base model names (e.g., ["xgboost", "lightgbm"])
-        meta_learner: Meta-learner name (e.g., "ridge_meta", "mlp_meta")
-        horizon: Label horizon
-        data_path: Path to data
-        **kwargs: Additional trainer parameters
-
-    Returns:
-        Tuple of (trainer, results_dict)
-    """
-    model_config = {
-        "base_model_names": base_models,
-        "meta_learner_name": meta_learner,
-        "n_folds": 5,
-        "use_probabilities": True,
-        "use_default_configs_for_oof": True,  # Critical for preventing leakage
-    }
-
-    return get_trainer_for_colab(
-        model_name="stacking",
-        horizon=horizon,
-        data_path=data_path,
-        model_config=model_config,
-        **kwargs,
-    )
-
-
 # Colab-specific DataLoader wrapper
 def get_colab_dataloader_kwargs() -> dict[str, Any]:
     """
@@ -369,8 +254,6 @@ __all__ = [
     "is_colab",
     "setup_environment",
     "setup_colab_environment",
-    "get_trainer_for_colab",
-    "train_ensemble_colab",
     "get_colab_dataloader_kwargs",
     "ensure_data_in_workspace",
 ]

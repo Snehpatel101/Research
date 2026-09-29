@@ -2,7 +2,7 @@
 Regression tests for label/backtest barrier parity.
 
 MLFactory._resolve_barrier_params() is the single source of truth for
-triple-barrier parameters, shared by labeling (_run_data_pipeline) and the
+triple-barrier parameters, shared by labeling (prepare_data) and the
 backtester (_run_evaluation). These tests pin down:
 
 1. Default LabelingConfig (all None) resolves to the per-symbol/per-horizon
@@ -163,7 +163,7 @@ def test_labeling_and_backtest_use_same_resolved_params(tmp_path):
     first_horizon = factory.config.training.horizons[0]
     assert factory._resolve_barrier_params(first_horizon) == first
 
-    # Build TripleBarrierConfig exactly like _run_data_pipeline does
+    # Build TripleBarrierConfig exactly like prepare_data does
     k_up, k_down, max_bars, _src = first
     labeling = factory.config.data.labeling
     label_config = TripleBarrierConfig(

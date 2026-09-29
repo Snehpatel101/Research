@@ -1,10 +1,6 @@
 """
-Model Configuration - YAML config loading and CLI arg merging.
-
-Precedence: CLI args > YAML file > Environment overrides > Model defaults
-
-This package also contains the canonical MODEL_DATA_REQUIREMENTS for model
-data preparation. Import from here:
+Model Configuration - TrainerConfig and the canonical MODEL_DATA_REQUIREMENTS for
+model data preparation. Import from here:
     from src.models.config import MODEL_DATA_REQUIREMENTS, ModelFamily
 """
 
@@ -26,20 +22,6 @@ from .data_requirements import (
 )
 from .environment import Environment, detect_environment, is_colab, resolve_device
 from .exceptions import ConfigError, ConfigValidationError
-from .loaders import (
-    find_model_config,
-    flatten_model_config,
-    load_model_config,
-    load_yaml_config,
-)
-from .merging import (
-    AppliedOverrides,
-    ConfigBuildResult,
-    build_config,
-    create_trainer_config,
-    get_applied_overrides,
-    merge_configs,
-)
 from .paths import CONFIG_DIR, CONFIG_ROOT
 from .serialization import save_config, save_config_json
 from .trainer_config import TrainerConfig
@@ -75,18 +57,6 @@ __all__ = [
     "get_all_ensemble_names",
     # Validation
     "validate_config",
-    # Loaders
-    "load_yaml_config",
-    "load_model_config",
-    "flatten_model_config",
-    "find_model_config",
-    # Merging
-    "merge_configs",
-    "build_config",
-    "create_trainer_config",
-    "get_applied_overrides",
-    "AppliedOverrides",
-    "ConfigBuildResult",
     # Serialization
     "save_config",
     "save_config_json",
