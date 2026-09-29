@@ -578,19 +578,69 @@ def run_walk_forward(
 # =============================================================================
 
 
-def _compute_sharpe(returns: np.ndarray) -> float:
-    """Compute annualized Sharpe ratio."""
-    if len(returns) < 2:
-        return 0.0
-    mean_ret = np.nanmean(returns)
-    std_ret = np.nanstd(returns, ddof=1)
-    if std_ret < 1e-10:
-        return 0.0
-    return float(mean_ret / std_ret * np.sqrt(252))
+def _forward_returns_and_costs(
+    split_df: pd.DataFrame,
+    symbol_column: str,
+    include_costs: bool,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """
+    Next-bar returns, per-bar cost per unit turnover, and symbol ids.
+
+    forward_return_t = close_{t+1} / close_t - 1 within each symbol (NaN on the
+    last bar of a symbol, treated as flat). The cost of one side of a trade is
+    half the symbol's round-trip cost (commission + slippage, in ticks) times
+    its tick size, expressed as a fraction of close_t.
+    """
+    from src.config.symbol import SymbolConfig
+    from src.data.pipeline.config.barriers_config import get_total_trade_cost
+
+    logger = logging.getLogger(__name__)
+
+    if "close" not in split_df.columns:
+        raise ValueError(
+            "cpcv-pbo needs a 'close' column in the data to compute per-bar strategy returns"
+        )
+    close = split_df["close"].astype(float)
+    symbols = split_df[symbol_column] if symbol_column in split_df.columns else None
+
+    next_close = close.groupby(symbols).shift(-1) if symbols is not None else close.shift(-1)
+    forward_returns = (next_close / close - 1.0).to_numpy()
+
+    cost = np.zeros(len(split_df))
+    if include_costs:
+        if symbols is None:
+            logger.warning("No symbol column; strategy returns are computed without costs")
+        else:
+            close_values = close.to_numpy()
+            for symbol in symbols.unique():
+                try:
+                    tick_size = SymbolConfig.from_symbol(str(symbol)).tick_size
+                except ValueError:
+                    logger.warning(f"Unknown symbol {symbol!r}; no costs applied to it")
+                    continue
+                per_side_price = get_total_trade_cost(str(symbol)) / 2.0 * tick_size
+                rows = (symbols == symbol).to_numpy()
+                cost[rows] = per_side_price / close_values[rows]
+
+    groups = symbols.to_numpy() if symbols is not None else None
+    return forward_returns, cost, groups
 
 
-def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times=None):
-    """Run CPCV evaluation for a single model."""
+def _run_cpcv_for_model(
+    container,
+    model_name: str,
+    cpcv_config,
+    forward_returns: np.ndarray,
+    cost_per_turnover: np.ndarray,
+    groups: np.ndarray | None,
+    label_end_times=None,
+):
+    """
+    CPCV one model and backtest every assembled path.
+
+    Returns:
+        (CPCVResult with one entry per path, path-averaged per-bar returns)
+    """
     from sklearn.metrics import accuracy_score, f1_score
 
     from src.models.base import PredictionResult
@@ -598,130 +648,83 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
     from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVPathResult, CPCVResult
     from src.validation.cv.early_stopping_split import carve_early_stopping_split
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+    from src.validation.cv.pbo import directional_strategy_returns
+    from src.validation.deflated_sharpe import sharpe_ratio_per_period
 
     logger = logging.getLogger(__name__)
 
-    # Get training data
     X, y, weights = container.get_sklearn_arrays("train", return_df=True)
+    n_samples = len(X)
 
     cpcv = CombinatorialPurgedCV(cpcv_config)
-    path_results: list = []
-    # CPCV purges a fraction of the data; use the same gap for early stopping
-    purge_bars = int(len(X) * cpcv_config.purge_pct)
-
-    # Get scaling method for model
+    # Early stopping selects on a purged tail of each split's train rows,
+    # never on the test groups being evaluated
+    purge_bars = cpcv_config.purge_bars
     scaling_method = get_scaling_method_for_model(model_name)
 
-    logger.info(f"Running CPCV for {model_name} ({cpcv.get_n_splits()} paths)")
+    logger.info(
+        f"Running CPCV for {model_name} ({cpcv.get_n_splits()} splits, {cpcv.n_paths} paths)"
+    )
 
-    for train_idx, test_idx, path_id in cpcv.split(X, y, label_end_times=label_end_times):
-        logger.debug(f"  Path {path_id}: train={len(train_idx)}, test={len(test_idx)}")
+    split_preds: dict[int, np.ndarray] = {}
+    for train_idx, test_idx, split_id in cpcv.split(X, y, label_end_times=label_end_times):
+        logger.debug(f"  Split {split_id}: train={len(train_idx)}, test={len(test_idx)}")
 
-        # Early stopping selects on a purged tail of the path's train rows,
-        # never on the test groups being evaluated
         es_split = carve_early_stopping_split(train_idx, purge_bars)
-        train_idx, es_idx = es_split.fit_idx, es_split.es_idx
-
-        # Extract path data
-        X_train_raw = X.iloc[train_idx]
-        X_test_raw = X.iloc[test_idx]
-        y_train = y.iloc[train_idx]
-        y_test = y.iloc[test_idx]
-        w_train = weights.iloc[train_idx].values
+        fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
 
         # Fold-aware scaling (fit on the fit rows only)
         scaler = FoldAwareScaler(method=scaling_method)
         scaling_result = scaler.fit_transform_fold(
-            X_train_raw.values, np.vstack([X.iloc[es_idx].values, X_test_raw.values])
+            X.iloc[fit_idx].values, np.vstack([X.iloc[es_idx].values, X.iloc[test_idx].values])
         )
+        X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
         X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
-        # Create and train model
         model = ModelRegistry.create(model_name)
         model.fit(
             X_train=scaling_result.X_train_scaled,
-            y_train=y_train.values,
-            X_val=scaling_result.X_val_scaled[: len(es_idx)],
+            y_train=y.iloc[fit_idx].values,
+            X_val=X_es_scaled,
             y_val=y.iloc[es_idx].values,
-            sample_weights=w_train,
+            sample_weights=weights.iloc[fit_idx].values,
         )
-
-        # Generate predictions
         prediction_output: PredictionResult = model.predict(X_test_scaled)
+        split_preds[split_id] = np.asarray(prediction_output.class_predictions, dtype=np.float64)
 
-        # Compute metrics
-        accuracy = float(accuracy_score(y_test.values, prediction_output.class_predictions))
-        f1 = float(
-            f1_score(
-                y_test.values,
-                prediction_output.class_predictions,
-                average="weighted",
-                zero_division=0,
+    pred_paths = cpcv.assemble_paths(split_preds, n_samples)
+    assignments = cpcv.get_path_assignments()
+    y_true = y.to_numpy()
+
+    path_results = []
+    path_returns = []
+    for p in range(cpcv.n_paths):
+        preds = pred_paths[p]
+        returns = directional_strategy_returns(preds, forward_returns, cost_per_turnover, groups)
+        path_returns.append(returns)
+        path_results.append(
+            CPCVPathResult(
+                path_id=p,
+                split_ids=tuple(int(s) for s in assignments[p]),
+                n_samples=n_samples,
+                accuracy=float(accuracy_score(y_true, preds)),
+                f1=float(f1_score(y_true, preds, average="weighted", zero_division=0)),
+                sharpe=sharpe_ratio_per_period(returns),
+                returns=returns,
             )
         )
-
-        # Compute simulated returns for PBO
-        correct = (prediction_output.class_predictions == y_test.values).astype(float)
-        returns = np.where(correct, 0.01, -0.01)
-        sharpe = _compute_sharpe(returns)
-
-        path_result = CPCVPathResult(
-            path_id=path_id,
-            test_groups=(),
-            train_size=len(train_idx),
-            test_size=len(test_idx),
-            train_groups=(),
-            accuracy=accuracy,
-            f1=f1,
-            sharpe=sharpe,
-            returns=returns,
+        logger.debug(
+            f"    Path {p}: acc={path_results[-1].accuracy:.3f}, "
+            f"sharpe/bar={path_results[-1].sharpe:.4f}"
         )
-        path_results.append(path_result)
 
-        logger.debug(f"    Path {path_id}: acc={accuracy:.3f}, f1={f1:.3f}, sharpe={sharpe:.2f}")
-
-    return CPCVResult(
+    result = CPCVResult(
         config=cpcv_config,
         path_results=path_results,
         model_name=model_name,
         horizon=container.horizon,
     )
-
-
-def _compute_model_pbo(cpcv_results: dict, pbo_config):
-    """Compute PBO from multiple model CPCV results."""
-    from src.validation.cv.pbo import PBOResult, compute_pbo
-
-    model_names = list(cpcv_results.keys())
-    n_models = len(model_names)
-
-    if n_models < 2:
-        logging.getLogger(__name__).warning("PBO requires at least 2 models for comparison")
-        return PBOResult(
-            pbo=0.0,
-            logit_distribution=np.array([]),
-            performance_degradation=1.0,
-            rank_correlation=1.0,
-            is_overfit=False,
-            should_block=False,
-            n_paths_evaluated=0,
-            best_is_strategy_idx=0,
-            best_is_oos_rank=0.5,
-            config=pbo_config,
-        )
-
-    # Build performance matrix (n_models x n_paths)
-    first_result = cpcv_results[model_names[0]]
-    n_paths = first_result.n_paths
-
-    perf_matrix = np.zeros((n_models, n_paths))
-    for i, model_name in enumerate(model_names):
-        result = cpcv_results[model_name]
-        for j, path_result in enumerate(result.path_results):
-            if j < n_paths:
-                perf_matrix[i, j] = path_result.sharpe
-
-    return compute_pbo(perf_matrix, pbo_config)
+    return result, np.mean(path_returns, axis=0)
 
 
 @evaluate_app.command("cpcv-pbo")
@@ -731,12 +734,19 @@ def run_cpcv_pbo(
     # CPCV configuration
     n_groups: int = typer.Option(6, "--n-groups", help="Number of time groups"),
     n_test_groups: int = typer.Option(2, "--n-test-groups", help="Groups held out as test"),
-    max_combinations: int = typer.Option(
-        15, "--max-combinations", help="Maximum combinations to evaluate"
+    purge_bars: int = typer.Option(
+        60, "--purge-bars", help="Label span in bars purged around each test group"
     ),
-    # PBO thresholds
+    embargo_bars: int = typer.Option(
+        1440, "--embargo-bars", help="Bars embargoed after each test group"
+    ),
+    # PBO configuration
+    n_partitions: int = typer.Option(16, "--n-partitions", help="CSCV row blocks S for PBO (even)"),
     pbo_warn: float = typer.Option(0.5, "--pbo-warn", help="PBO warning threshold"),
     pbo_block: float = typer.Option(0.8, "--pbo-block", help="PBO blocking threshold"),
+    no_costs: bool = typer.Option(
+        False, "--no-costs", help="Compute strategy returns without transaction costs"
+    ),
     # Paths
     data_dir: Path = typer.Option(
         DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"
@@ -750,8 +760,11 @@ def run_cpcv_pbo(
     """
     Run CPCV and PBO evaluation for model selection gating.
 
-    Computes Combinatorially Purged Cross-Validation (CPCV) and
-    Probability of Backtest Overfitting (PBO) metrics.
+    Each model is evaluated with Combinatorial Purged Cross-Validation; its
+    out-of-sample predictions are assembled into the CPCV backtest paths and
+    traded as position = sign(prediction) on the next-bar return (minus
+    per-symbol costs). PBO is estimated with CSCV over the T x N matrix of
+    path-averaged per-bar returns of the N models.
 
     Examples:
 
@@ -759,35 +772,31 @@ def run_cpcv_pbo(
 
         ml cpcv-pbo --models all --n-groups 8 --n-test-groups 2
 
-        ml cpcv-pbo --models xgboost --pbo-warn 0.4 --pbo-block 0.7
+        ml cpcv-pbo --models xgboost,catboost --pbo-warn 0.4 --pbo-block 0.7
     """
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
 
-    # Parse arguments
     model_list = parse_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
-    # Validate data directory
     if not validate_data_dir(data_dir):
         raise typer.Exit(1) from None
 
-    # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Import modules
     from src.core.container import TimeSeriesDataContainer
     from src.validation.cv.cpcv import CPCVConfig, CPCVResult
-    from src.validation.cv.pbo import PBOConfig, pbo_gate
+    from src.validation.cv.pbo import PBOConfig, compute_pbo, pbo_gate
 
-    # Build configs
     cpcv_config = CPCVConfig(
         n_groups=n_groups,
         n_test_groups=n_test_groups,
-        max_combinations=max_combinations,
+        purge_bars=purge_bars,
+        embargo_bars=embargo_bars,
     )
-
     pbo_config = PBOConfig(
+        n_partitions=n_partitions,
         warn_threshold=pbo_warn,
         block_threshold=pbo_block,
     )
@@ -797,8 +806,12 @@ def run_cpcv_pbo(
     console.print("=" * 60)
     console.print(f"Models: {model_list}")
     console.print(f"Horizons: {horizon_list}")
-    console.print(f"CPCV: {cpcv_config.n_groups} groups, {cpcv_config.n_test_groups} test")
-    console.print(f"PBO thresholds: warn={pbo_warn}, block={pbo_block}")
+    console.print(
+        f"CPCV: {n_groups} groups, {n_test_groups} test -> "
+        f"{cpcv_config.total_combinations} splits, {cpcv_config.n_paths} paths "
+        f"(purge={purge_bars}, embargo={embargo_bars})"
+    )
+    console.print(f"PBO: S={n_partitions}, thresholds warn={pbo_warn}, block={pbo_block}")
 
     all_results = []
 
@@ -813,28 +826,36 @@ def run_cpcv_pbo(
                 horizon=horizon,
             )
             logger.info(f"Loaded container: {container}")
+            split = container.get_split("train")
+            forward_returns, costs, groups = _forward_returns_and_costs(
+                split.df, split.symbol_column, include_costs=not no_costs
+            )
         except Exception as e:
             show_error(f"Failed to load data for H{horizon}: {e}")
             continue
 
-        # Get label end times if available
         label_end_times = container.get_label_end_times("train")
 
-        # Run CPCV for each model
         cpcv_results: dict[str, CPCVResult] = {}
+        model_returns: dict[str, np.ndarray] = {}
         for model_name in model_list:
             try:
-                result = _run_cpcv_for_model(
+                result, mean_returns = _run_cpcv_for_model(
                     container=container,
                     model_name=model_name,
                     cpcv_config=cpcv_config,
+                    forward_returns=forward_returns,
+                    cost_per_turnover=costs,
+                    groups=groups,
                     label_end_times=label_end_times,
                 )
                 cpcv_results[model_name] = result
+                model_returns[model_name] = mean_returns
 
                 console.print(
                     f"  {model_name}: mean_acc={result.mean_accuracy:.3f}, "
-                    f"std={result.std_accuracy:.3f}, mean_sharpe={result.mean_sharpe:.2f}"
+                    f"std={result.std_accuracy:.3f}, "
+                    f"mean_sharpe_per_bar={result.mean_sharpe:.4f}"
                 )
 
             except Exception as e:
@@ -845,18 +866,19 @@ def run_cpcv_pbo(
                     traceback.print_exc()
                 continue
 
-        # Compute PBO across models
-        if len(cpcv_results) >= 2:
-            pbo_result = _compute_model_pbo(cpcv_results, pbo_config)
+        if len(model_returns) >= 2:
+            names = list(model_returns)
+            returns_matrix = np.column_stack([model_returns[n] for n in names])
+            pbo_result = compute_pbo(returns_matrix, pbo_config)
 
             console.print("-" * 40)
             console.print(f"[bold]PBO Analysis for H{horizon}:[/bold]")
-            console.print(f"  PBO: {pbo_result.pbo:.3f}")
+            console.print(f"  PBO: {pbo_result.pbo:.3f} ({pbo_result.n_combinations} CSCV splits)")
             console.print(f"  Risk Level: {pbo_result.get_risk_level()}")
-            console.print(f"  Performance Degradation: {pbo_result.performance_degradation:.2f}")
+            console.print(f"  Degradation slope (OOS~IS): {pbo_result.performance_degradation:.3f}")
+            console.print(f"  P(OOS loss): {pbo_result.prob_oos_loss:.3f}")
             console.print(f"  Rank Correlation: {pbo_result.rank_correlation:.3f}")
 
-            # Gate check
             should_proceed, reason = pbo_gate(pbo_result, strict=False)
             console.print(
                 f"  Gate Decision: {'[green]PASS[/green]' if should_proceed else '[red]FAIL[/red]'}"
@@ -866,7 +888,7 @@ def run_cpcv_pbo(
             all_results.append(
                 {
                     "horizon": horizon,
-                    "n_models": len(cpcv_results),
+                    "n_models": len(names),
                     "pbo": pbo_result.pbo,
                     "is_overfit": pbo_result.is_overfit,
                     "should_block": pbo_result.should_block,
@@ -875,18 +897,18 @@ def run_cpcv_pbo(
                 }
             )
 
-            # Save PBO result
-            pbo_path = output_dir / f"pbo_h{horizon}.json"
-            with open(pbo_path, "w") as f:
-                json.dump(pbo_result.to_dict(), f, indent=2)
+            pbo_payload = pbo_result.to_dict()
+            pbo_payload["strategies"] = names
+            with open(output_dir / f"pbo_h{horizon}.json", "w") as f:
+                json.dump(pbo_payload, f, indent=2)
+        elif model_returns:
+            show_warning("PBO needs at least 2 successfully evaluated models; skipped")
 
-        # Save CPCV results
         for model_name, result in cpcv_results.items():
             result_path = output_dir / f"cpcv_{model_name}_h{horizon}.json"
             with open(result_path, "w") as f:
                 json.dump(result.to_dict(), f, indent=2, default=str)
 
-    # Summary
     console.print("=" * 60)
     console.print("[bold green]SUMMARY[/bold green]")
     console.print("=" * 60)
@@ -895,14 +917,11 @@ def run_cpcv_pbo(
         summary_df = pd.DataFrame(all_results)
         console.print(summary_df.to_string(index=False))
 
-        # Save summary
         summary_path = output_dir / "cpcv_pbo_summary.csv"
         summary_df.to_csv(summary_path, index=False)
         console.print(f"\nSummary saved to: {summary_path}")
 
-        # Check for any failures
-        any_blocked = any(r["should_block"] for r in all_results)
-        if any_blocked:
+        if any(r["should_block"] for r in all_results):
             show_warning("Some horizons have PBO > block threshold!")
             raise typer.Exit(1) from None
     else:

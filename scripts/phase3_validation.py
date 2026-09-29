@@ -411,7 +411,6 @@ def run_phase3_validation() -> Phase3ValidationReport:
         pbo_components.append("PBOConfig")
         pbo_components.append("PBOResult")
         pbo_components.append("compute_pbo")
-        pbo_components.append("compute_pbo_from_returns")
         pbo_components.append("pbo_gate")
         pbo_components.append("analyze_overfitting_risk")
 
@@ -526,7 +525,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
         )
         y = pd.Series(np.random.randint(0, 3, n_samples), index=X.index)
 
-        config = CPCVConfig(n_groups=6, n_test_groups=2, max_combinations=10)
+        config = CPCVConfig(n_groups=6, n_test_groups=2, purge_bars=5, embargo_bars=5)
         cpcv = CombinatorialPurgedCV(config)
 
         path_count = 0
@@ -582,14 +581,14 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         np.random.seed(42)
         n_strategies = 10
-        n_paths = 15
-        performance_matrix = np.random.randn(n_strategies, n_paths) * 0.5 + 0.1
+        n_periods = 800
+        returns_matrix = np.random.randn(n_periods, n_strategies) * 0.01
 
         config = PBOConfig(n_partitions=8)
-        result = compute_pbo(performance_matrix, config)
+        result = compute_pbo(returns_matrix, config)
 
         analyze_overfitting_risk(
-            performance_matrix,
+            returns_matrix,
             strategy_names=[f"strategy_{i}" for i in range(n_strategies)],
         )
 
@@ -597,7 +596,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
             "pbo": round(result.pbo, 3),
             "performance_degradation": round(result.performance_degradation, 3),
             "rank_correlation": round(result.rank_correlation, 3),
-            "n_paths_evaluated": result.n_paths_evaluated,
+            "n_combinations": result.n_combinations,
         }
 
     test_results.append(test_component("PBO Functional", "pbo", test_pbo_functional))

@@ -115,7 +115,6 @@ from src.validation.cv.pbo import (
     PBOResult,
     analyze_overfitting_risk,
     compute_pbo,
-    compute_pbo_from_returns,
     pbo_gate,
 )
 from src.validation.cv.walk_forward import (
@@ -126,13 +125,16 @@ from src.validation.cv.walk_forward import (
     create_walk_forward_evaluator,
 )
 from src.validation.deflated_sharpe import (
-    DSRConfig,
+    DSRComputeConfig,
     DSRResult,
     analyze_selection_bias,
     compute_deflated_sharpe,
+    compute_deflated_sharpe_from_returns,
     compute_dsr_from_optuna_study,
     dsr_gate,
+    expected_max_sharpe,
     is_sharpe_like_metric,
+    probabilistic_sharpe_ratio,
 )
 from src.validation.leakage_detection import (
     LeakageCheckResult,
@@ -181,13 +183,16 @@ __all__ = [
     "ResamplingParityResult",
     "verify_resampling_parity",
     # Deflated Sharpe Ratio
-    "DSRConfig",
+    "DSRComputeConfig",
     "DSRResult",
     "compute_deflated_sharpe",
+    "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",
     "dsr_gate",
     "analyze_selection_bias",
+    "expected_max_sharpe",
     "is_sharpe_like_metric",
+    "probabilistic_sharpe_ratio",
     # Statistical tests
     "LossFunction",
     "StatisticalTestResult",
@@ -277,7 +282,6 @@ __all__ = [
     "PBOConfig",
     "PBOResult",
     "compute_pbo",
-    "compute_pbo_from_returns",
     "pbo_gate",
     "analyze_overfitting_risk",
     # Feature Store (Phase 5)

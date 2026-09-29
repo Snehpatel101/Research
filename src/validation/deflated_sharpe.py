@@ -1,9 +1,11 @@
 """
-Deflated Sharpe Ratio (DSR) for Multiple Testing Bias Correction.
+Probabilistic and Deflated Sharpe Ratio (PSR / DSR).
 
-When evaluating N strategies or hyperparameter configurations and selecting the best,
-the observed Sharpe ratio is inflated due to selection bias. DSR corrects for this
-by deflating the Sharpe to account for the number of trials evaluated.
+When N strategy configurations are tried and the best one is kept, its Sharpe
+ratio is inflated by selection bias. The Deflated Sharpe Ratio answers: *what
+is the probability that the true Sharpe ratio of the selected strategy is
+positive, after accounting for the number of trials, the sample length and the
+non-normality of returns?*
 
 Academic Reference:
     Bailey, D.H., and Lopez de Prado, M. (2014)
@@ -12,31 +14,40 @@ Academic Reference:
     Journal of Portfolio Management, 40(5), 94-107
     https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551
 
-Key Concepts:
-    - Selection Bias: Choosing the best of N trials inflates expected Sharpe
-    - Gamma Correction: Adjusts for non-normality (skewness/kurtosis) of returns
-    - DSR Threshold: DSR > 0.0 suggests true skill; DSR > 0.5 reasonable for deployment
+Formulas (all Sharpe ratios are NON-annualized, per-period):
 
-Formula:
-    DSR = SR - gamma * sqrt(Var(SR) * (n-1) / n)
+    PSR(SR*) = Phi( (SR_hat - SR*) * sqrt(T - 1)
+                    / sqrt(1 - g3 * SR_hat + ((g4 - 1) / 4) * SR_hat^2) )
 
-    where gamma accounts for higher moments:
-        gamma = (1 - skew*SR + (kurt-3)/4*SR^2)^(-1)
+        SR_hat  per-period Sharpe of the selected strategy's returns
+        T       number of returns
+        g3      skewness of the returns
+        g4      kurtosis of the returns (NON-excess: normal = 3)
+
+    SR0 = sqrt(V[{SR_n}]) * ((1 - gamma) * Phi^-1(1 - 1/N)
+                             + gamma * Phi^-1(1 - 1/(N * e)))
+
+        V[{SR_n}]  variance of the N trial Sharpe ratios (per-period)
+        N          number of independent trials
+        gamma      Euler-Mascheroni constant (~0.5772)
+
+    DSR = PSR(SR0)            -- a probability in [0, 1]
+
+Gate: deploy only when DSR >= 0.95 (configurable).
 
 Example:
-    >>> from src.validation.deflated_sharpe import compute_deflated_sharpe
-    >>> sharpes = np.array([0.8, 1.2, 0.9, 1.5, 0.7])  # 5 trials
-    >>> result = compute_deflated_sharpe(
-    ...     sharpe_ratio=1.5,  # Best trial
-    ...     trial_sharpes=sharpes,
-    ...     n_trials=5
+    >>> from src.validation.deflated_sharpe import compute_deflated_sharpe_from_returns
+    >>> result = compute_deflated_sharpe_from_returns(
+    ...     returns=best_strategy_returns,        # per-period returns, length T
+    ...     trial_sharpes=all_trial_sharpes,      # per-period Sharpe of every trial
     ... )
-    >>> print(f"DSR: {result.deflated_sharpe:.3f}, Deploy: {result.should_deploy}")
+    >>> print(f"DSR: {result.dsr:.3f}, Deploy: {result.should_deploy}")
 """
 
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +59,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+EULER_MASCHERONI = 0.5772156649015329
+"""Euler-Mascheroni constant used in the expected-maximum approximation."""
+
+NORMAL_KURTOSIS = 3.0
+"""Kurtosis (non-excess) of the normal distribution."""
+
 
 # =============================================================================
 # CONFIGURATION
@@ -57,51 +74,32 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DSRComputeConfig:
     """
-    Configuration for DSR computation thresholds and numerical controls.
+    Gate thresholds for the Deflated Sharpe Ratio.
 
-    For statistical inputs (n_trials, variance, skewness, kurtosis),
-    see src.config.cv.DSRConfig which is the CANONICAL DSRConfig.
-
-    This class controls HOW the DSR is computed (thresholds, clipping),
-    not WHAT statistical inputs are used.
+    Both thresholds are probabilities (DSR and PSR live in [0, 1]).
 
     Attributes:
-        significance_threshold: DSR threshold for statistical significance (default 0.0)
-        deployment_threshold: DSR threshold for deployment recommendation (default 0.5)
-        gamma_clip_min: Minimum value for gamma to prevent numerical instability
-        gamma_clip_max: Maximum value for gamma to prevent numerical instability
-        min_trials_for_kurtosis: Minimum trials needed to compute kurtosis (default 4)
+        deployment_threshold: Minimum DSR required to recommend deployment
+            (default 0.95, i.e. 95% confidence that the selected strategy's true
+            Sharpe is positive after deflating for selection bias).
+        strict_threshold: Minimum DSR used by ``dsr_gate(strict=True)``
+            (default 0.99).
     """
 
-    significance_threshold: float = 0.0
-    deployment_threshold: float = 0.5
-    gamma_clip_min: float = 0.1
-    gamma_clip_max: float = 10.0
-    min_trials_for_kurtosis: int = 4
+    deployment_threshold: float = 0.95
+    strict_threshold: float = 0.99
 
     def __post_init__(self) -> None:
         """Validate configuration."""
-        if self.significance_threshold >= self.deployment_threshold:
+        for name in ("deployment_threshold", "strict_threshold"):
+            value = getattr(self, name)
+            if not 0.0 < value < 1.0:
+                raise ValueError(f"{name} must be in (0, 1), got {value}")
+        if self.strict_threshold < self.deployment_threshold:
             raise ValueError(
-                f"significance_threshold ({self.significance_threshold}) must be < "
+                f"strict_threshold ({self.strict_threshold}) must be >= "
                 f"deployment_threshold ({self.deployment_threshold})"
             )
-        if self.gamma_clip_min <= 0:
-            raise ValueError(f"gamma_clip_min must be > 0, got {self.gamma_clip_min}")
-        if self.gamma_clip_min >= self.gamma_clip_max:
-            raise ValueError(
-                f"gamma_clip_min ({self.gamma_clip_min}) must be < "
-                f"gamma_clip_max ({self.gamma_clip_max})"
-            )
-        if self.min_trials_for_kurtosis < 4:
-            raise ValueError(
-                f"min_trials_for_kurtosis must be >= 4 for valid kurtosis, "
-                f"got {self.min_trials_for_kurtosis}"
-            )
-
-
-# Backward compatibility alias - use DSRComputeConfig for new code
-DSRConfig = DSRComputeConfig
 
 
 # =============================================================================
@@ -112,246 +110,174 @@ DSRConfig = DSRComputeConfig
 @dataclass
 class DSRResult:
     """
-    Result from Deflated Sharpe Ratio computation.
+    Result of a Deflated Sharpe Ratio computation.
 
     Attributes:
-        sharpe_ratio: Original (inflated) Sharpe ratio from best trial
-        deflated_sharpe: Corrected Sharpe ratio accounting for selection bias
-        n_trials: Number of trials/strategies evaluated
-        variance_sharpe: Variance of Sharpe estimates across trials
-        skewness_sharpe: Skewness of Sharpe estimates (0 = normal)
-        kurtosis_sharpe: Excess kurtosis of Sharpe estimates (0 = normal)
-        gamma_correction: Gamma factor accounting for non-normality
-        is_significant: True if DSR > significance_threshold (default 0.0)
-        should_deploy: True if DSR > deployment_threshold (default 0.5)
-        config: Configuration used for computation
+        sharpe_ratio: Observed per-period (non-annualized) Sharpe of the
+            selected strategy (SR_hat).
+        dsr: Deflated Sharpe Ratio = PSR(SR0), a probability in [0, 1].
+        psr: PSR(0) -- probability that the true Sharpe is > 0 ignoring
+            selection bias (useful as a reference; always >= dsr when SR0 >= 0).
+        expected_max_sharpe: SR0, the expected maximum per-period Sharpe of
+            N independent zero-skill trials.
+        n_trials: Number of independent trials N.
+        n_observations: Number of returns T behind ``sharpe_ratio``.
+        skewness: Skewness g3 of the selected strategy's returns.
+        kurtosis: Kurtosis g4 (non-excess) of the selected strategy's returns.
+        variance_trial_sharpes: V[{SR_n}], variance of the per-period trial Sharpes.
+        is_significant: True if PSR(0) >= deployment_threshold.
+        should_deploy: True if DSR >= deployment_threshold.
+        config: Thresholds used.
     """
 
     sharpe_ratio: float
-    deflated_sharpe: float
+    dsr: float
+    psr: float
+    expected_max_sharpe: float
     n_trials: int
-    variance_sharpe: float
-    skewness_sharpe: float
-    kurtosis_sharpe: float
-    gamma_correction: float
+    n_observations: int
+    skewness: float
+    kurtosis: float
+    variance_trial_sharpes: float
     is_significant: bool
     should_deploy: bool
-    config: DSRConfig
+    config: DSRComputeConfig
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "sharpe_ratio": self.sharpe_ratio,
-            "deflated_sharpe": self.deflated_sharpe,
+            "dsr": self.dsr,
+            "psr": self.psr,
+            "expected_max_sharpe": self.expected_max_sharpe,
             "n_trials": self.n_trials,
-            "variance_sharpe": self.variance_sharpe,
-            "skewness_sharpe": self.skewness_sharpe,
-            "kurtosis_sharpe": self.kurtosis_sharpe,
-            "gamma_correction": self.gamma_correction,
+            "n_observations": self.n_observations,
+            "skewness": self.skewness,
+            "kurtosis": self.kurtosis,
+            "variance_trial_sharpes": self.variance_trial_sharpes,
             "is_significant": self.is_significant,
             "should_deploy": self.should_deploy,
-            "significance_threshold": self.config.significance_threshold,
             "deployment_threshold": self.config.deployment_threshold,
         }
 
     def get_risk_level(self) -> str:
         """Get human-readable risk assessment."""
+        if self.dsr >= self.config.strict_threshold:
+            return "STRONG: Sharpe survives deflation with high confidence"
         if self.should_deploy:
-            if self.deflated_sharpe > 1.0:
-                return "STRONG: High confidence in true skill"
-            return "OK: Reasonable confidence for deployment"
-        elif self.is_significant:
-            return "CAUTION: Statistically significant but below deployment threshold"
-        else:
-            return "WARNING: Observed Sharpe likely due to selection bias"
-
-    def get_deflation_pct(self) -> float:
-        """Get percentage reduction from raw to deflated Sharpe."""
-        if abs(self.sharpe_ratio) < 1e-10:
-            return 0.0
-        return float((self.sharpe_ratio - self.deflated_sharpe) / self.sharpe_ratio * 100)
+            return "OK: Sharpe survives deflation for selection bias"
+        if self.is_significant:
+            return "CAUTION: Significant on its own, but not after deflating for trials"
+        return "WARNING: Observed Sharpe is consistent with selection bias / noise"
 
 
 # =============================================================================
-# HELPER FUNCTIONS
+# CORE FORMULAS
 # =============================================================================
 
 
-def _validate_inputs(
+def _finite(values: np.ndarray) -> np.ndarray:
+    """Return the finite entries of a 1D array."""
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    return arr[np.isfinite(arr)]
+
+
+def sharpe_ratio_per_period(returns: np.ndarray) -> float:
+    """
+    Per-period (non-annualized) Sharpe ratio: mean / sample std (ddof=1).
+
+    Returns 0.0 for fewer than 2 finite returns or zero dispersion.
+    """
+    r = _finite(returns)
+    if len(r) < 2:
+        return 0.0
+    std = float(np.std(r, ddof=1))
+    if std < 1e-15:
+        return 0.0
+    return float(np.mean(r) / std)
+
+
+def return_moments(returns: np.ndarray) -> tuple[float, float]:
+    """
+    Skewness g3 and NON-excess kurtosis g4 of a return series.
+
+    Uses bias-corrected sample estimators when at least 4 finite returns are
+    available; otherwise returns the normal values (0, 3).
+    """
+    r = _finite(returns)
+    if len(r) < 4 or float(np.std(r)) < 1e-15:
+        return 0.0, NORMAL_KURTOSIS
+    skew = float(stats.skew(r, bias=False))
+    kurt = float(stats.kurtosis(r, fisher=False, bias=False))
+    if not np.isfinite(skew) or not np.isfinite(kurt):
+        return 0.0, NORMAL_KURTOSIS
+    return skew, kurt
+
+
+def probabilistic_sharpe_ratio(
     sharpe_ratio: float,
-    trial_sharpes: np.ndarray,
-    n_trials: int,
-) -> None:
-    """
-    Validate inputs for DSR computation.
-
-    Args:
-        sharpe_ratio: Best observed Sharpe ratio
-        trial_sharpes: Array of all trial Sharpe values
-        n_trials: Number of trials evaluated
-
-    Raises:
-        ValueError: If inputs are invalid
-    """
-    if np.isnan(sharpe_ratio) or np.isinf(sharpe_ratio):
-        raise ValueError(f"sharpe_ratio must be finite, got {sharpe_ratio}")
-
-    if n_trials < 1:
-        raise ValueError(f"n_trials must be >= 1, got {n_trials}")
-
-    if not isinstance(trial_sharpes, np.ndarray):
-        raise TypeError(f"trial_sharpes must be numpy array, got {type(trial_sharpes)}")
-
-    if len(trial_sharpes) == 0:
-        raise ValueError("trial_sharpes cannot be empty")
-
-    if len(trial_sharpes) != n_trials:
-        raise ValueError(
-            f"trial_sharpes length ({len(trial_sharpes)}) must equal n_trials ({n_trials})"
-        )
-
-    # Check for all NaN
-    valid_sharpes = trial_sharpes[~np.isnan(trial_sharpes)]
-    if len(valid_sharpes) == 0:
-        raise ValueError("trial_sharpes contains all NaN values")
-
-
-def _compute_trial_variance(trial_sharpes: np.ndarray) -> float:
-    """
-    Compute variance of Sharpe estimates across trials.
-
-    Args:
-        trial_sharpes: Array of Sharpe values from all trials
-
-    Returns:
-        Variance of Sharpe estimates (uses ddof=1 for unbiased estimate)
-    """
-    valid_sharpes = trial_sharpes[~np.isnan(trial_sharpes)]
-
-    if len(valid_sharpes) < 2:
-        return 0.0
-
-    return float(np.var(valid_sharpes, ddof=1))
-
-
-def _compute_trial_skewness(trial_sharpes: np.ndarray) -> float:
-    """
-    Compute skewness of Sharpe estimates across trials.
-
-    Args:
-        trial_sharpes: Array of Sharpe values from all trials
-
-    Returns:
-        Sample skewness (Fisher's definition)
-        Returns 0.0 if insufficient data
-    """
-    valid_sharpes = trial_sharpes[~np.isnan(trial_sharpes)]
-
-    if len(valid_sharpes) < 3:
-        logger.debug("Insufficient data for skewness (n < 3), returning 0.0")
-        return 0.0
-
-    # Use scipy for Fisher's skewness (bias-corrected)
-    skew = stats.skew(valid_sharpes, bias=False)
-    return float(skew) if not np.isnan(skew) else 0.0
-
-
-def _compute_trial_kurtosis(trial_sharpes: np.ndarray, min_trials: int = 4) -> float:
-    """
-    Compute excess kurtosis of Sharpe estimates across trials.
-
-    Args:
-        trial_sharpes: Array of Sharpe values from all trials
-        min_trials: Minimum number of valid trials for kurtosis computation
-
-    Returns:
-        Excess kurtosis (Fisher's definition, normal = 0)
-        Returns 0.0 if insufficient data
-    """
-    valid_sharpes = trial_sharpes[~np.isnan(trial_sharpes)]
-
-    if len(valid_sharpes) < min_trials:
-        logger.debug(
-            f"Insufficient data for kurtosis (n={len(valid_sharpes)} < {min_trials}), "
-            "returning 0.0"
-        )
-        return 0.0
-
-    # Use scipy for Fisher's kurtosis (excess, bias-corrected)
-    kurt = stats.kurtosis(valid_sharpes, fisher=True, bias=False)
-    return float(kurt) if not np.isnan(kurt) else 0.0
-
-
-def _compute_gamma_correction(
-    sharpe: float,
-    trial_sharpes: np.ndarray,
-    config: DSRConfig,
+    benchmark_sharpe: float,
+    n_observations: int,
+    skewness: float = 0.0,
+    kurtosis: float = NORMAL_KURTOSIS,
 ) -> float:
     """
-    Compute gamma skewness/kurtosis correction factor.
-
-    The gamma factor adjusts for non-normality in the distribution of Sharpe
-    ratios. Higher skewness or kurtosis increases gamma, leading to more
-    aggressive deflation.
-
-    Formula from Bailey & Lopez de Prado (2014):
-        gamma = (1 - skew*SR + (kurt-3)/4*SR^2)^(-1)
-
-    Note: We use excess kurtosis (kurt - 3 already subtracted in scipy's
-    fisher=True mode), so our formula becomes:
-        gamma = (1 - skew*SR + kurt/4*SR^2)^(-1)
+    Probabilistic Sharpe Ratio PSR(SR*).
 
     Args:
-        sharpe: Best observed Sharpe ratio
-        trial_sharpes: Array of all trial Sharpe values
-        config: DSRConfig with gamma clipping bounds
+        sharpe_ratio: Observed per-period Sharpe SR_hat (NOT annualized).
+        benchmark_sharpe: Benchmark per-period Sharpe SR*.
+        n_observations: Number of returns T (>= 2).
+        skewness: Skewness g3 of the returns.
+        kurtosis: Kurtosis g4 of the returns, NON-excess (normal = 3).
 
     Returns:
-        Gamma correction factor, clipped to [gamma_clip_min, gamma_clip_max]
+        Probability that the true Sharpe exceeds ``benchmark_sharpe``.
+
+    Raises:
+        ValueError: On non-finite inputs, T < 2, or a non-positive variance term
+            (impossible for a real distribution since g4 >= 1 + g3^2).
     """
-    skew = _compute_trial_skewness(trial_sharpes)
-    kurt = _compute_trial_kurtosis(trial_sharpes, config.min_trials_for_kurtosis)
+    if not (np.isfinite(sharpe_ratio) and np.isfinite(benchmark_sharpe)):
+        raise ValueError(
+            f"Sharpe ratios must be finite, got SR={sharpe_ratio}, SR*={benchmark_sharpe}"
+        )
+    if n_observations < 2:
+        raise ValueError(f"n_observations must be >= 2, got {n_observations}")
 
-    # Formula: gamma = 1 / (1 - skew*SR + (excess_kurt)/4*SR^2)
-    # Note: scipy's kurtosis with fisher=True already returns excess kurtosis
-    denominator = 1.0 - skew * sharpe + (kurt / 4.0) * (sharpe**2)
+    variance_term = 1.0 - skewness * sharpe_ratio + ((kurtosis - 1.0) / 4.0) * sharpe_ratio**2
+    if variance_term <= 0:
+        raise ValueError(
+            f"Non-positive PSR variance term ({variance_term:.4g}) for "
+            f"skewness={skewness}, kurtosis={kurtosis}. Kurtosis must be the "
+            "non-excess kurtosis (normal = 3) and satisfy kurtosis >= 1 + skewness^2."
+        )
 
-    # Prevent division by zero or very small values
-    gamma = config.gamma_clip_max if abs(denominator) < 1e-10 else 1.0 / denominator
-
-    # Clip for numerical stability
-    gamma = np.clip(gamma, config.gamma_clip_min, config.gamma_clip_max)
-
-    return float(gamma)
+    z = (sharpe_ratio - benchmark_sharpe) * math.sqrt(n_observations - 1) / math.sqrt(variance_term)
+    return float(stats.norm.cdf(z))
 
 
-def _compute_expected_max_sharpe(n_trials: int, variance: float) -> float:
+def expected_max_sharpe(n_trials: int, variance_trial_sharpes: float) -> float:
     """
-    Compute expected maximum Sharpe from N trials under null hypothesis.
+    Expected maximum Sharpe SR0 of N independent zero-skill trials.
 
-    Under the null hypothesis (no true skill), the expected maximum Sharpe
-    from N independent trials with variance sigma^2 follows approximately:
-        E[max(SR_1, ..., SR_N)] ~ sigma * sqrt(2 * ln(N))
-
-    This represents the selection bias - even with no skill, picking the
-    best of N trials gives an inflated Sharpe.
+        SR0 = sqrt(V) * ((1 - gamma) * Phi^-1(1 - 1/N) + gamma * Phi^-1(1 - 1/(N e)))
 
     Args:
-        n_trials: Number of trials evaluated
-        variance: Variance of Sharpe estimates
+        n_trials: Number of independent trials N (>= 1). N = 1 gives SR0 = 0.
+        variance_trial_sharpes: Variance of the per-period trial Sharpes.
 
     Returns:
-        Expected maximum Sharpe due to selection bias
+        SR0 in the same (per-period) units as the trial Sharpes.
     """
-    if n_trials <= 1:
+    if n_trials < 1:
+        raise ValueError(f"n_trials must be >= 1, got {n_trials}")
+    if n_trials == 1 or variance_trial_sharpes <= 0:
         return 0.0
-
-    if variance <= 0:
-        return 0.0
-
-    sigma = np.sqrt(variance)
-    expected_max = sigma * np.sqrt(2.0 * np.log(n_trials))
-    return float(expected_max)
+    z1 = stats.norm.ppf(1.0 - 1.0 / n_trials)
+    z2 = stats.norm.ppf(1.0 - 1.0 / (n_trials * math.e))
+    factor = (1.0 - EULER_MASCHERONI) * z1 + EULER_MASCHERONI * z2
+    return float(math.sqrt(variance_trial_sharpes) * factor)
 
 
 # =============================================================================
@@ -362,140 +288,102 @@ def _compute_expected_max_sharpe(n_trials: int, variance: float) -> float:
 def compute_deflated_sharpe(
     sharpe_ratio: float,
     trial_sharpes: np.ndarray,
-    n_trials: int,
-    deployment_threshold: float = 0.5,
-    config: DSRConfig | None = None,
-    num_tests: int = 1,
+    *,
+    n_observations: int,
+    n_trials: int | None = None,
+    skewness: float = 0.0,
+    kurtosis: float = NORMAL_KURTOSIS,
+    config: DSRComputeConfig | None = None,
 ) -> DSRResult:
     """
-    Compute Deflated Sharpe Ratio correcting for multiple testing bias.
-
-    When evaluating N strategies/hyperparameters and selecting the best,
-    the observed Sharpe is inflated due to selection bias. DSR deflates
-    it to account for the number of trials.
-
-    Academic Reference:
-        Bailey, D.H., and Lopez de Prado, M. (2014)
-        "The Deflated Sharpe Ratio: Correcting for Selection Bias,
-        Backtest Overfitting, and Non-Normality"
-        Journal of Portfolio Management, 40(5), 94-107
-
-    The deflation formula accounts for:
-        1. Number of trials (more trials = more selection bias)
-        2. Variance of Sharpe estimates across trials
-        3. Non-normality via gamma correction (skewness, kurtosis)
-
-    Bonferroni correction (num_tests > 1):
-        When running multiple independent experiments (e.g. Optuna studies),
-        the significance/deployment thresholds are raised to control
-        family-wise error rate. The thresholds are shifted upward by
-        ``scipy.stats.norm.ppf(1 - alpha / (2 * num_tests)) - z_base``
-        which is equivalent to dividing alpha by num_tests.
+    Deflated Sharpe Ratio of a selected strategy (Bailey & Lopez de Prado, 2014).
 
     Args:
-        sharpe_ratio: Best observed Sharpe from trials
-        trial_sharpes: Array of all trial Sharpe values
-        n_trials: Number of trials evaluated
-        deployment_threshold: Min DSR for deployment (default: 0.5)
-        config: DSRConfig for advanced settings (optional)
-        num_tests: Number of independent experiment-level tests for
-            Bonferroni correction (default: 1, no correction). When > 1,
-            raises significance/deployment thresholds to control
-            family-wise error rate across multiple experiments.
+        sharpe_ratio: Per-period (non-annualized) Sharpe SR_hat of the selected
+            strategy.
+        trial_sharpes: Per-period Sharpe ratios of ALL trials (including the
+            selected one). Their variance feeds SR0. Non-finite values
+            (failed trials) are ignored.
+        n_observations: Number of returns T behind ``sharpe_ratio``.
+        n_trials: Number of independent trials N. Defaults to the number of
+            finite ``trial_sharpes``; pass a smaller effective N when trials
+            are strongly correlated.
+        skewness: Skewness g3 of the selected strategy's returns.
+        kurtosis: NON-excess kurtosis g4 of the selected strategy's returns.
+        config: Gate thresholds (default: deploy at DSR >= 0.95).
 
     Returns:
-        DSRResult with deflated Sharpe and deployment recommendation
+        DSRResult with DSR = PSR(SR0) and gate flags.
 
     Raises:
-        ValueError: If inputs are invalid (n_trials < 1, NaN sharpe, etc.)
-
-    Example:
-        >>> sharpes = np.array([0.8, 1.2, 0.9, 1.5, 0.7, 1.1, 0.6, 0.95, 1.3, 1.0])
-        >>> result = compute_deflated_sharpe(
-        ...     sharpe_ratio=1.5,
-        ...     trial_sharpes=sharpes,
-        ...     n_trials=10
-        ... )
-        >>> print(f"Raw SR: {result.sharpe_ratio:.2f}")
-        >>> print(f"Deflated SR: {result.deflated_sharpe:.2f}")
-        >>> print(f"Deflation: {result.get_deflation_pct():.1f}%")
-        >>> if result.should_deploy:
-        ...     print("Recommendation: Deploy")
+        ValueError: If inputs are invalid (non-finite Sharpe, T < 2, no finite
+            trial Sharpes, N < 1).
     """
-    # Handle configuration
     if config is None:
-        config = DSRConfig(deployment_threshold=deployment_threshold)
-    else:
-        # Override deployment threshold if explicitly provided and different
-        if deployment_threshold != 0.5 and deployment_threshold != config.deployment_threshold:
-            config = DSRConfig(
-                significance_threshold=config.significance_threshold,
-                deployment_threshold=deployment_threshold,
-                gamma_clip_min=config.gamma_clip_min,
-                gamma_clip_max=config.gamma_clip_max,
-                min_trials_for_kurtosis=config.min_trials_for_kurtosis,
-            )
+        config = DSRComputeConfig()
 
-    # Validate num_tests
-    if num_tests < 1:
-        raise ValueError(f"num_tests must be >= 1, got {num_tests}")
+    valid = _finite(np.asarray(trial_sharpes))
+    if len(valid) == 0:
+        raise ValueError("trial_sharpes contains no finite values")
 
-    # Validate inputs
-    _validate_inputs(sharpe_ratio, trial_sharpes, n_trials)
+    n_eff = len(valid) if n_trials is None else int(n_trials)
+    if n_eff < 1:
+        raise ValueError(f"n_trials must be >= 1, got {n_eff}")
 
-    # Compute statistics
-    variance = _compute_trial_variance(trial_sharpes)
-    skewness = _compute_trial_skewness(trial_sharpes)
-    kurtosis = _compute_trial_kurtosis(trial_sharpes, config.min_trials_for_kurtosis)
-    gamma = _compute_gamma_correction(sharpe_ratio, trial_sharpes, config)
+    variance = float(np.var(valid, ddof=1)) if len(valid) >= 2 else 0.0
+    sr0 = expected_max_sharpe(n_eff, variance)
 
-    # Compute expected maximum Sharpe from selection bias
-    expected_max_sr = _compute_expected_max_sharpe(n_trials, variance)
-
-    # Deflate the Sharpe ratio
-    # DSR = SR - gamma * E[max(SR)]
-    # This subtracts the expected inflation from selection bias,
-    # adjusted by gamma for non-normality
-    deflated = sharpe_ratio - gamma * expected_max_sr
-
-    # Bonferroni correction: raise thresholds when running multiple experiments.
-    # Dividing alpha by num_tests is equivalent to raising the z-score threshold.
-    # For num_tests=1, bonferroni_shift=0 (no correction).
-    bonferroni_shift = 0.0
-    if num_tests > 1:
-        # Base alpha ~ 0.05 (two-sided), z_base ~ 1.96
-        _alpha = 0.05
-        z_base = stats.norm.ppf(1.0 - _alpha / 2.0)
-        z_corrected = stats.norm.ppf(1.0 - _alpha / (2.0 * num_tests))
-        bonferroni_shift = z_corrected - z_base
-        logger.info(
-            f"Bonferroni correction: num_tests={num_tests}, "
-            f"threshold shift=+{bonferroni_shift:.3f}"
-        )
-
-    sig_threshold = config.significance_threshold + bonferroni_shift
-    dep_threshold = config.deployment_threshold + bonferroni_shift
-
-    # Determine significance and deployment flags
-    is_significant = deflated > sig_threshold
-    should_deploy = deflated > dep_threshold
+    dsr = probabilistic_sharpe_ratio(sharpe_ratio, sr0, n_observations, skewness, kurtosis)
+    psr = probabilistic_sharpe_ratio(sharpe_ratio, 0.0, n_observations, skewness, kurtosis)
 
     logger.info(
-        f"DSR computed: SR={sharpe_ratio:.3f} -> DSR={deflated:.3f} "
-        f"(n={n_trials}, gamma={gamma:.3f}, deflation={expected_max_sr:.3f}"
-        f"{f', bonferroni_shift={bonferroni_shift:.3f}' if num_tests > 1 else ''})"
+        f"DSR computed: SR={sharpe_ratio:.4f} (per-period), SR0={sr0:.4f}, "
+        f"T={n_observations}, N={n_eff}, skew={skewness:.3f}, kurt={kurtosis:.3f} "
+        f"-> DSR={dsr:.4f}, PSR(0)={psr:.4f}"
     )
 
     return DSRResult(
-        sharpe_ratio=sharpe_ratio,
-        deflated_sharpe=deflated,
+        sharpe_ratio=float(sharpe_ratio),
+        dsr=dsr,
+        psr=psr,
+        expected_max_sharpe=sr0,
+        n_trials=n_eff,
+        n_observations=int(n_observations),
+        skewness=float(skewness),
+        kurtosis=float(kurtosis),
+        variance_trial_sharpes=variance,
+        is_significant=psr >= config.deployment_threshold,
+        should_deploy=dsr >= config.deployment_threshold,
+        config=config,
+    )
+
+
+def compute_deflated_sharpe_from_returns(
+    returns: np.ndarray,
+    trial_sharpes: np.ndarray,
+    n_trials: int | None = None,
+    config: DSRComputeConfig | None = None,
+) -> DSRResult:
+    """
+    DSR of a selected strategy given its per-period returns.
+
+    Derives SR_hat, T, skewness and (non-excess) kurtosis from ``returns``.
+
+    Args:
+        returns: Per-period returns of the selected strategy (NaNs dropped).
+        trial_sharpes: Per-period Sharpe ratios of all trials.
+        n_trials: Number of independent trials (default: finite trial count).
+        config: Gate thresholds.
+    """
+    r = _finite(np.asarray(returns))
+    skew, kurt = return_moments(r)
+    return compute_deflated_sharpe(
+        sharpe_ratio=sharpe_ratio_per_period(r),
+        trial_sharpes=trial_sharpes,
+        n_observations=len(r),
         n_trials=n_trials,
-        variance_sharpe=variance,
-        skewness_sharpe=skewness,
-        kurtosis_sharpe=kurtosis,
-        gamma_correction=gamma,
-        is_significant=is_significant,
-        should_deploy=should_deploy,
+        skewness=skew,
+        kurtosis=kurt,
         config=config,
     )
 
@@ -509,15 +397,14 @@ def is_sharpe_like_metric(metric_name: str) -> bool:
     """
     Check whether a metric name corresponds to a Sharpe-like ratio.
 
-    DSR deflation math uses skewness/kurtosis assumptions specific to
-    unbounded Sharpe-like distributions. Applying DSR to bounded metrics
+    DSR is derived for Sharpe ratios. Applying it to bounded metrics
     (F1 in [0,1], accuracy in [0,1]) is statistically invalid.
 
     Args:
         metric_name: The optimization metric name (e.g., "sharpe_ratio", "f1_weighted").
 
     Returns:
-        True if the metric is Sharpe-like and DSR deflation is valid.
+        True if the metric is Sharpe-like and DSR deflation is meaningful.
     """
     _SHARPE_LIKE_METRICS = {
         "sharpe_ratio",
@@ -532,104 +419,81 @@ def is_sharpe_like_metric(metric_name: str) -> bool:
 
 def compute_dsr_from_optuna_study(
     study: optuna.Study,
-    deployment_threshold: float = 0.5,
-    config: DSRConfig | None = None,
+    n_observations: int,
+    *,
+    periods_per_year: float = 1.0,
+    skewness: float = 0.0,
+    kurtosis: float = NORMAL_KURTOSIS,
+    n_trials: int | None = None,
+    config: DSRComputeConfig | None = None,
     metric_name: str | None = None,
-    num_tests: int = 1,
 ) -> DSRResult:
     """
-    Compute DSR from Optuna study.
+    DSR of the best trial of an Optuna study whose objective is a Sharpe ratio.
 
-    Extracts trial history from Optuna study and computes DSR to assess
-    whether the best hyperparameters are genuinely good or just selected
-    due to optimization bias.
+    Trial values are converted to per-period Sharpe by dividing by
+    ``sqrt(periods_per_year)`` (pass 1.0 if the objective is already
+    per-period). Failed / pruned / non-finite trials are ignored.
+
+    Optuna does not keep the best trial's return series, so its moments must
+    be supplied (``skewness``/``kurtosis``); the defaults assume normal returns.
 
     Args:
-        study: Completed Optuna study
-        deployment_threshold: Min DSR for deployment (default: 0.5)
-        config: DSRConfig for advanced settings (optional)
-        metric_name: Name of the metric being optimized. When provided and not
-            a Sharpe-like metric (e.g., "f1_weighted", "accuracy"), DSR deflation
-            is skipped because the math is only valid for unbounded Sharpe-like
-            distributions. Pass None to assume the metric is Sharpe-like (backward
-            compatible).
-        num_tests: Number of independent experiment-level tests for
-            Bonferroni correction (default: 1, no correction). Pass the
-            number of completed Optuna trials to apply experiment-level
-            multiple-testing correction.
-
-    Returns:
-        DSRResult with deflated Sharpe based on optimization history
+        study: Completed Optuna study.
+        n_observations: Number of returns T behind each trial's Sharpe
+            (e.g. total out-of-sample bars across CV folds).
+        periods_per_year: Annualization used by the objective (bars per year).
+        skewness: Skewness of the best trial's returns.
+        kurtosis: NON-excess kurtosis of the best trial's returns.
+        n_trials: Effective number of independent trials (default: all finite
+            completed trials).
+        config: Gate thresholds.
+        metric_name: If given and not Sharpe-like, raises ValueError.
 
     Raises:
-        ValueError: If study is None or has no completed trials or all trials failed
-            or metric is not Sharpe-like (when metric_name is provided)
-
-    Example:
-        >>> import optuna
-        >>> study = optuna.create_study(direction='maximize')
-        >>> # ... run optimization targeting Sharpe ratio ...
-        >>> dsr_result = compute_dsr_from_optuna_study(study)
-        >>> if dsr_result.should_deploy:
-        ...     print("Low overfitting risk - deploy model")
-        >>> else:
-        ...     print(f"WARNING: DSR={dsr_result.deflated_sharpe:.2f}, likely overfit")
+        ValueError: For non-Sharpe metrics, a missing study, or no finite trials.
     """
-    # Guard: skip DSR for non-Sharpe metrics
     if metric_name is not None and not is_sharpe_like_metric(metric_name):
         raise ValueError(
             f"DSR deflation skipped: metric '{metric_name}' is not a Sharpe-like ratio. "
-            f"DSR math (skewness/kurtosis correction) is only valid for unbounded "
-            f"Sharpe-like distributions, not bounded metrics like F1 or accuracy."
+            "DSR is only defined for Sharpe ratios, not bounded metrics like F1 or accuracy."
         )
-    # Validate input
     if study is None:
         raise ValueError("Optuna study cannot be None")
+    if periods_per_year <= 0:
+        raise ValueError(f"periods_per_year must be > 0, got {periods_per_year}")
 
-    # Get completed trials only
-    completed_trials = [t for t in study.trials if t.state.is_finished() and t.value is not None]
+    values = np.array(
+        [t.value for t in study.trials if t.state.is_finished() and t.value is not None],
+        dtype=np.float64,
+    )
+    values = values[np.isfinite(values)]
+    if len(values) == 0:
+        raise ValueError("Optuna study has no completed trials with finite values")
 
-    if not completed_trials:
-        raise ValueError(
-            "Optuna study has no completed trials with values. "
-            "Ensure trials completed successfully and returned a value."
-        )
-
-    # Extract trial values (assumed to be Sharpe ratios or similar metric)
-    trial_values = np.array([t.value for t in completed_trials])
-
-    # Handle case where all values are NaN
-    valid_values = trial_values[~np.isnan(trial_values)]
-    if len(valid_values) == 0:
-        raise ValueError("All trial values are NaN, cannot compute DSR")
-
-    # Get best value (depends on study direction)
     if study.direction.name == "MINIMIZE":
-        # For minimization, lower is better, but DSR expects higher = better
-        # So we negate the values for DSR computation
         logger.warning(
             "Study direction is MINIMIZE. Negating values for DSR computation. "
-            "Ensure the metric being optimized is appropriate (e.g., negative Sharpe)."
+            "Ensure the metric being optimized is a negative Sharpe."
         )
-        trial_values = -trial_values
-        best_value = -study.best_value
-    else:
-        best_value = study.best_value
+        values = -values
 
-    n_trials = len(trial_values)
+    per_period = values / math.sqrt(periods_per_year)
+    best = float(np.max(per_period))
 
     logger.info(
-        f"Computing DSR from Optuna study: {n_trials} completed trials, "
-        f"best value: {best_value:.4f}"
+        f"Computing DSR from Optuna study: {len(per_period)} finite trials, "
+        f"best per-period Sharpe {best:.4f}, T={n_observations}"
     )
 
     return compute_deflated_sharpe(
-        sharpe_ratio=best_value,
-        trial_sharpes=trial_values,
+        sharpe_ratio=best,
+        trial_sharpes=per_period,
+        n_observations=n_observations,
         n_trials=n_trials,
-        deployment_threshold=deployment_threshold,
+        skewness=skewness,
+        kurtosis=kurtosis,
         config=config,
-        num_tests=num_tests,
     )
 
 
@@ -643,125 +507,100 @@ def dsr_gate(
     strict: bool = False,
 ) -> tuple[bool, str]:
     """
-    Gate function for deployment decisions based on DSR.
+    Deployment gate based on DSR.
 
     Args:
-        dsr_result: DSRResult from compute_deflated_sharpe
-        strict: If True, require higher confidence for deployment
+        dsr_result: DSRResult from compute_deflated_sharpe.
+        strict: Use ``config.strict_threshold`` instead of ``deployment_threshold``.
 
     Returns:
-        Tuple of (should_proceed, reason)
-
-    Example:
-        >>> result = compute_deflated_sharpe(...)
-        >>> proceed, reason = dsr_gate(result)
-        >>> if not proceed:
-        ...     raise ValueError(f"Deployment blocked: {reason}")
+        Tuple of (should_proceed, reason).
     """
-    if strict:
-        # In strict mode, require DSR > 1.0 for strong confidence
-        threshold = max(1.0, dsr_result.config.deployment_threshold)
-    else:
-        threshold = dsr_result.config.deployment_threshold
+    cfg = dsr_result.config
+    threshold = cfg.strict_threshold if strict else cfg.deployment_threshold
 
-    if dsr_result.deflated_sharpe < threshold:
+    if dsr_result.dsr < threshold:
         return False, (
-            f"DSR ({dsr_result.deflated_sharpe:.3f}) below threshold ({threshold:.2f}). "
-            f"Raw Sharpe {dsr_result.sharpe_ratio:.3f} deflated by "
-            f"{dsr_result.get_deflation_pct():.1f}% due to {dsr_result.n_trials} trials. "
+            f"DSR ({dsr_result.dsr:.3f}) below threshold ({threshold:.2f}). "
+            f"Per-period Sharpe {dsr_result.sharpe_ratio:.4f} vs expected max under "
+            f"the null SR0={dsr_result.expected_max_sharpe:.4f} "
+            f"(N={dsr_result.n_trials}, T={dsr_result.n_observations}). "
             f"Risk: {dsr_result.get_risk_level()}"
         )
 
     return True, (
-        f"DSR ({dsr_result.deflated_sharpe:.3f}) exceeds threshold ({threshold:.2f}). "
+        f"DSR ({dsr_result.dsr:.3f}) meets threshold ({threshold:.2f}). "
         f"Risk: {dsr_result.get_risk_level()}"
     )
 
 
 def analyze_selection_bias(
-    trial_sharpes: np.ndarray,
+    returns_matrix: np.ndarray,
     strategy_names: list[str] | None = None,
-    config: DSRConfig | None = None,
+    config: DSRComputeConfig | None = None,
 ) -> dict[str, Any]:
     """
-    Comprehensive selection bias analysis for multiple strategies.
-
-    Computes DSR for the best strategy and provides detailed breakdown
-    of the selection bias correction.
+    Selection-bias analysis for N strategies with per-period returns.
 
     Args:
-        trial_sharpes: Array of Sharpe ratios from all trials/strategies
-        strategy_names: Optional names for each strategy
-        config: DSRConfig for advanced settings
+        returns_matrix: Array of shape (T, N) -- per-period returns of each
+            strategy configuration (NaNs are ignored per column).
+        strategy_names: Optional names for the N strategies.
+        config: Gate thresholds.
 
     Returns:
-        Dict with analysis results including DSR, statistics, and recommendations
-
-    Example:
-        >>> sharpes = np.array([0.8, 1.2, 1.5, 0.9, 1.1])
-        >>> names = ["model_a", "model_b", "model_c", "model_d", "model_e"]
-        >>> analysis = analyze_selection_bias(sharpes, strategy_names=names)
-        >>> print(f"Best model: {analysis['best_strategy_name']}")
-        >>> print(f"DSR: {analysis['deflated_sharpe']:.3f}")
+        Dict with the best strategy, its DSR and per-strategy Sharpe ratios.
     """
-    if config is None:
-        config = DSRConfig()
-
-    n_trials = len(trial_sharpes)
+    matrix = np.asarray(returns_matrix, dtype=np.float64)
+    if matrix.ndim != 2:
+        raise ValueError(f"returns_matrix must be 2D (T, N), got shape {matrix.shape}")
+    n_strategies = matrix.shape[1]
 
     if strategy_names is None:
-        strategy_names = [f"strategy_{i}" for i in range(n_trials)]
-
-    if len(strategy_names) != n_trials:
+        strategy_names = [f"strategy_{i}" for i in range(n_strategies)]
+    if len(strategy_names) != n_strategies:
         raise ValueError(
             f"strategy_names length ({len(strategy_names)}) must match "
-            f"trial_sharpes length ({n_trials})"
+            f"number of strategies ({n_strategies})"
         )
 
-    # Find best strategy
-    valid_mask = ~np.isnan(trial_sharpes)
-    if not valid_mask.any():
-        raise ValueError("All trial Sharpe values are NaN")
+    sharpes = np.array([sharpe_ratio_per_period(matrix[:, j]) for j in range(n_strategies)])
+    best_idx = int(np.argmax(sharpes))
 
-    best_idx = int(np.nanargmax(trial_sharpes))
-    best_sharpe = float(trial_sharpes[best_idx])
-    best_name = strategy_names[best_idx]
-
-    # Compute DSR
-    dsr_result = compute_deflated_sharpe(
-        sharpe_ratio=best_sharpe,
-        trial_sharpes=trial_sharpes,
-        n_trials=n_trials,
+    dsr_result = compute_deflated_sharpe_from_returns(
+        returns=matrix[:, best_idx],
+        trial_sharpes=sharpes,
         config=config,
     )
 
-    # Per-strategy analysis
-    strategy_analysis = []
-    for i, (name, sharpe) in enumerate(zip(strategy_names, trial_sharpes, strict=False)):
-        strategy_analysis.append(
-            {
-                "name": name,
-                "sharpe_ratio": float(sharpe) if not np.isnan(sharpe) else None,
-                "rank": int(np.sum(trial_sharpes >= sharpe)) if not np.isnan(sharpe) else None,
-                "is_best": i == best_idx,
-            }
-        )
+    order = np.argsort(-sharpes)
+    ranks = np.empty(n_strategies, dtype=int)
+    ranks[order] = np.arange(1, n_strategies + 1)
 
     return {
-        "n_trials": n_trials,
+        "n_trials": n_strategies,
         "best_strategy_idx": best_idx,
-        "best_strategy_name": best_name,
+        "best_strategy_name": strategy_names[best_idx],
         "raw_sharpe": dsr_result.sharpe_ratio,
-        "deflated_sharpe": dsr_result.deflated_sharpe,
-        "deflation_pct": dsr_result.get_deflation_pct(),
-        "variance_sharpe": dsr_result.variance_sharpe,
-        "skewness_sharpe": dsr_result.skewness_sharpe,
-        "kurtosis_sharpe": dsr_result.kurtosis_sharpe,
-        "gamma_correction": dsr_result.gamma_correction,
+        "dsr": dsr_result.dsr,
+        "psr": dsr_result.psr,
+        "expected_max_sharpe": dsr_result.expected_max_sharpe,
+        "n_observations": dsr_result.n_observations,
+        "skewness": dsr_result.skewness,
+        "kurtosis": dsr_result.kurtosis,
+        "variance_trial_sharpes": dsr_result.variance_trial_sharpes,
         "is_significant": dsr_result.is_significant,
         "should_deploy": dsr_result.should_deploy,
         "risk_level": dsr_result.get_risk_level(),
-        "strategy_analysis": strategy_analysis,
+        "strategy_analysis": [
+            {
+                "name": name,
+                "sharpe_ratio": float(sharpes[i]),
+                "rank": int(ranks[i]),
+                "is_best": i == best_idx,
+            }
+            for i, name in enumerate(strategy_names)
+        ],
     }
 
 
@@ -771,12 +610,17 @@ def analyze_selection_bias(
 
 
 __all__ = [
+    "EULER_MASCHERONI",
     "DSRComputeConfig",
-    "DSRConfig",  # Backward compat alias for DSRComputeConfig
     "DSRResult",
+    "analyze_selection_bias",
     "compute_deflated_sharpe",
+    "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",
     "dsr_gate",
-    "analyze_selection_bias",
+    "expected_max_sharpe",
     "is_sharpe_like_metric",
+    "probabilistic_sharpe_ratio",
+    "return_moments",
+    "sharpe_ratio_per_period",
 ]

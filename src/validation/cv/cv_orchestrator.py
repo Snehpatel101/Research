@@ -189,7 +189,6 @@ class CVOrchestrator:
         # CPCV-specific
         n_groups: int = 6,
         n_test_groups: int = 2,
-        max_combinations: int = 20,
         # Walk-forward specific
         n_windows: int = 5,
         window_type: str = "expanding",
@@ -206,8 +205,9 @@ class CVOrchestrator:
             purge_bars: Bars to purge before test set (default: 60)
             embargo_bars: Bars to embargo after test set (default: 1440)
             n_groups: Number of groups for CPCV (default: 6)
-            n_test_groups: Number of test groups per CPCV combination (default: 2)
-            max_combinations: Maximum CPCV combinations to evaluate (default: 20)
+            n_test_groups: Number of test groups per CPCV split (default: 2); all
+                C(n_groups, n_test_groups) splits are run so that the
+                C(n_groups - 1, n_test_groups - 1) backtest paths can be assembled
             n_windows: Number of windows for walk-forward (default: 5)
             window_type: "expanding" or "rolling" for walk-forward (default: "expanding")
             min_train_size: Minimum train size for walk-forward (optional, uses min_train_pct if None)
@@ -222,7 +222,6 @@ class CVOrchestrator:
         # CPCV params
         self.n_groups = n_groups
         self.n_test_groups = n_test_groups
-        self.max_combinations = max_combinations
 
         # Walk-forward params
         self.n_windows = n_windows
@@ -289,14 +288,11 @@ class CVOrchestrator:
             return PurgedKFold(pkf_config)
 
         elif self.cv_method == CVMethod.CPCV:
-            # Convert bars to percentages for CPCV
-            # CPCV uses percentage-based purge/embargo
             cpcv_config = CPCVConfig(
                 n_groups=self.n_groups,
                 n_test_groups=self.n_test_groups,
-                max_combinations=self.max_combinations,
-                purge_pct=0.01,  # 1% default, will be adjusted in split()
-                embargo_pct=0.01,  # 1% default, will be adjusted in split()
+                purge_bars=self.purge_bars,
+                embargo_bars=self.embargo_bars,
             )
             return CombinatorialPurgedCV(cpcv_config)
 
@@ -312,13 +308,12 @@ class CVOrchestrator:
             return WalkForwardEvaluator(wf_config)
 
         elif self.cv_method == CVMethod.PBO:
-            # PBO uses CPCV underneath for generating paths
+            # PBO uses CPCV underneath for generating backtest paths
             pbo_config = CPCVConfig(
                 n_groups=self.n_groups,
                 n_test_groups=self.n_test_groups,
-                max_combinations=self.max_combinations,
-                purge_pct=0.01,
-                embargo_pct=0.01,
+                purge_bars=self.purge_bars,
+                embargo_bars=self.embargo_bars,
             )
             return CombinatorialPurgedCV(pbo_config)
 
@@ -361,7 +356,7 @@ class CVOrchestrator:
             yield from self._cv.split(X, y, groups, label_end_times)
 
         elif self.cv_method in (CVMethod.CPCV, CVMethod.PBO):
-            # CPCV/PBO split yields (train_idx, test_idx, path_id)
+            # CPCV/PBO split yields (train_idx, test_idx, split_id)
             for train_idx, test_idx, _ in self._cv.split(X, y, groups, label_end_times):
                 yield train_idx, test_idx
 
@@ -447,41 +442,32 @@ class CVOrchestrator:
 
     def compute_pbo(
         self,
-        strategy_returns: np.ndarray,
+        returns_matrix: np.ndarray,
         n_partitions: int = 16,
     ) -> PBOResult:
         """
-        Compute Probability of Backtest Overfitting.
-
-        PBO quantifies the probability that a backtest-optimal strategy
-        will underperform out-of-sample. High PBO indicates overfitting.
+        Compute Probability of Backtest Overfitting via CSCV.
 
         Only valid when cv_method is PBO or CPCV.
 
         Args:
-            strategy_returns: Matrix of returns (n_strategies, n_paths)
-                Each row is a strategy, each column is a path/period
-            n_partitions: Number of partitions for CSCV (default: 16)
+            returns_matrix: (T, N) matrix of per-period returns, one column per
+                strategy configuration (e.g. CPCV path-averaged OOS returns
+                of each candidate model)
+            n_partitions: Number of CSCV row blocks S (even, default 16)
 
         Returns:
-            PBOResult with overfitting probability and related metrics
+            PBOResult with overfitting probability and logit distribution
 
         Raises:
             ValueError: If cv_method is not CPCV or PBO
-
-        Example:
-            # strategy_returns shape: (n_strategies, n_paths)
-            pbo_result = cv_orch.compute_pbo(strategy_returns)
-            if pbo_result.is_overfit:
-                print(f"Warning: PBO = {pbo_result.pbo:.3f}")
         """
         if self.cv_method not in (CVMethod.PBO, CVMethod.CPCV):
             raise ValueError(
                 f"PBO computation requires CPCV or PBO cv_method, got {self.cv_method.value}"
             )
 
-        pbo_config = PBOConfig(n_partitions=n_partitions)
-        return compute_pbo(strategy_returns, pbo_config)
+        return compute_pbo(returns_matrix, PBOConfig(n_partitions=n_partitions))
 
     def validate_coverage(
         self,

@@ -22,13 +22,16 @@ from src.validation.bootstrap import (
     bootstrap_win_rate,
 )
 from src.validation.deflated_sharpe import (
-    DSRConfig,
+    DSRComputeConfig,
     DSRResult,
     analyze_selection_bias,
     compute_deflated_sharpe,
+    compute_deflated_sharpe_from_returns,
     compute_dsr_from_optuna_study,
     dsr_gate,
+    expected_max_sharpe,
     is_sharpe_like_metric,
+    probabilistic_sharpe_ratio,
 )
 from src.validation.leakage_detection import (
     LeakageCheckResult,
@@ -80,13 +83,16 @@ __all__ = [
     "bootstrap_win_rate",
     "bootstrap_multiple_metrics",
     # Deflated Sharpe Ratio
-    "DSRConfig",
+    "DSRComputeConfig",
     "DSRResult",
     "compute_deflated_sharpe",
+    "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",
     "dsr_gate",
     "analyze_selection_bias",
+    "expected_max_sharpe",
     "is_sharpe_like_metric",
+    "probabilistic_sharpe_ratio",
     # Statistical tests
     "LossFunction",
     "StatisticalTestResult",

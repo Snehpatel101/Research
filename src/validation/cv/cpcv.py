@@ -1,30 +1,44 @@
 """
-Combinatorially Purged Cross-Validation (CPCV).
+Combinatorial Purged Cross-Validation (CPCV).
 
-CPCV generates multiple train/test paths by combining different fold combinations,
-providing robust validation through combinatorial splitting with purging.
+The T observations are partitioned into N contiguous groups. Every one of the
+C(N, k) combinations of k test groups defines one split (train on the other
+N - k groups, purged and embargoed around each test group). The out-of-sample
+predictions of the splits are then re-assembled into
 
-Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning", Chapter 12
+    phi = (k / N) * C(N, k) = C(N - 1, k - 1)
 
-Key benefits:
-- Tests model robustness across many different train/test configurations
-- Generates paths for PBO (Probability of Backtest Overfitting) computation
-- More thorough validation than standard k-fold
+complete backtest paths, each of which covers every group exactly once.
+
+Path assembly (Lopez de Prado 2018, AFML Sec. 12.4): splits are enumerated in
+lexicographic order of their test-group tuples. Group g is a test group in
+exactly phi splits; the j-th of those splits (in that order) supplies the
+predictions of group g on path j.
+
+Purging (AFML Sec. 7.4): a training observation i whose label spans
+[i, i + purge_bars] overlaps a test group [s, e) when
+i in [s - purge_bars, e + purge_bars). Those rows are dropped, and an embargo
+of ``embargo_bars`` further rows after each test group is applied on top.
+When ``label_end_times`` is given (DatetimeIndex data) any training row whose
+actual label interval overlaps a test group's label interval is also dropped.
 
 Example:
-    >>> config = CPCVConfig(n_groups=6, n_test_groups=2)
+    >>> config = CPCVConfig(n_groups=6, n_test_groups=2, purge_bars=20, embargo_bars=10)
     >>> cpcv = CombinatorialPurgedCV(config)
-    >>> for train_idx, test_idx, path_id in cpcv.split(X, y):
+    >>> preds = {}
+    >>> for train_idx, test_idx, split_id in cpcv.split(X):
     ...     model.fit(X.iloc[train_idx], y.iloc[train_idx])
-    ...     predictions = model.predict(X.iloc[test_idx])
+    ...     preds[split_id] = model.predict(X.iloc[test_idx])
+    >>> paths = cpcv.assemble_paths(preds, n_samples=len(X))   # (phi, T)
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations
+from math import comb
 from typing import Any
 
 import numpy as np
@@ -41,59 +55,56 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CPCVConfig:
     """
-    Configuration for Combinatorially Purged Cross-Validation.
+    Configuration for Combinatorial Purged Cross-Validation.
 
     Attributes:
-        n_groups: Number of sequential time groups to partition data into
-        n_test_groups: Number of groups to hold out as test in each combination
-        max_combinations: Maximum number of combinations to evaluate (limits compute)
-        purge_pct: Percentage of each group to purge (prevents label leakage)
-        embargo_pct: Percentage of data to embargo after test (serial correlation)
+        n_groups: Number of contiguous time groups N.
+        n_test_groups: Test groups per split k (1 <= k < N).
+        purge_bars: Label span in bars. Training rows whose labels could
+            overlap a test group (within ``purge_bars`` before it or after it)
+            are removed.
+        embargo_bars: Additional rows removed after each test group (on top of
+            the purge) to break serial correlation.
 
     Example:
-        n_groups=6, n_test_groups=2 → C(6,2) = 15 combinations
-        n_groups=10, n_test_groups=2 → C(10,2) = 45 combinations
+        n_groups=6, n_test_groups=2 -> C(6,2) = 15 splits, phi = 5 paths
+        n_groups=10, n_test_groups=2 -> 45 splits, phi = 9 paths
     """
 
     n_groups: int = 6
     n_test_groups: int = 2
-    max_combinations: int = 20
-    purge_pct: float = 0.01  # 1% of total data
-    embargo_pct: float = 0.01  # 1% of total data
+    purge_bars: int = 60
+    embargo_bars: int = 0
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
         if self.n_groups < 2:
             raise ValueError(f"n_groups must be >= 2, got {self.n_groups}")
-
         if self.n_test_groups < 1:
             raise ValueError(f"n_test_groups must be >= 1, got {self.n_test_groups}")
-
         if self.n_test_groups >= self.n_groups:
             raise ValueError(
                 f"n_test_groups ({self.n_test_groups}) must be < n_groups ({self.n_groups})"
             )
-
-        if self.max_combinations < 1:
-            raise ValueError(f"max_combinations must be >= 1, got {self.max_combinations}")
-
-        if not 0 <= self.purge_pct < 0.5:
-            raise ValueError(f"purge_pct must be in [0, 0.5), got {self.purge_pct}")
-
-        if not 0 <= self.embargo_pct < 0.5:
-            raise ValueError(f"embargo_pct must be in [0, 0.5), got {self.embargo_pct}")
+        if self.purge_bars < 0:
+            raise ValueError(f"purge_bars must be >= 0, got {self.purge_bars}")
+        if self.embargo_bars < 0:
+            raise ValueError(f"embargo_bars must be >= 0, got {self.embargo_bars}")
 
     @property
     def n_train_groups(self) -> int:
-        """Number of groups used for training in each combination."""
+        """Number of groups used for training in each split."""
         return self.n_groups - self.n_test_groups
 
     @property
     def total_combinations(self) -> int:
-        """Total possible combinations C(n_groups, n_test_groups)."""
-        from math import comb
-
+        """Number of splits C(N, k)."""
         return comb(self.n_groups, self.n_test_groups)
+
+    @property
+    def n_paths(self) -> int:
+        """Number of backtest paths phi = (k / N) * C(N, k) = C(N-1, k-1)."""
+        return comb(self.n_groups - 1, self.n_test_groups - 1)
 
 
 # =============================================================================
@@ -103,13 +114,23 @@ class CPCVConfig:
 
 @dataclass
 class CPCVPathResult:
-    """Results from a single CPCV path (combination)."""
+    """
+    Metrics of one assembled CPCV backtest path.
+
+    Attributes:
+        path_id: Path index in [0, phi).
+        split_ids: For each group g, the split whose test predictions fill
+            group g on this path.
+        n_samples: Number of observations on the path (= T).
+        accuracy: Classification accuracy over the path.
+        f1: Weighted F1 over the path.
+        sharpe: Per-period (non-annualized) Sharpe of the path's returns.
+        returns: Per-period strategy returns along the path (length T).
+    """
 
     path_id: int
-    test_groups: tuple[int, ...]
-    train_size: int
-    test_size: int
-    train_groups: tuple[int, ...]
+    split_ids: tuple[int, ...]
+    n_samples: int
     accuracy: float = 0.0
     f1: float = 0.0
     sharpe: float = 0.0
@@ -119,11 +140,11 @@ class CPCVPathResult:
 @dataclass
 class CPCVResult:
     """
-    Aggregated results from CPCV evaluation.
+    Aggregated results from a CPCV evaluation.
 
     Attributes:
         config: CPCVConfig used
-        path_results: Results from each combination path
+        path_results: One entry per assembled backtest path (phi entries)
         model_name: Name of evaluated model
         horizon: Label horizon
     """
@@ -154,36 +175,26 @@ class CPCVResult:
 
     @property
     def mean_sharpe(self) -> float:
-        """Mean Sharpe ratio across all paths."""
+        """Mean per-period Sharpe ratio across all paths."""
         if not self.path_results:
             return 0.0
         return float(np.mean([p.sharpe for p in self.path_results]))
 
     def get_oos_matrix(self) -> np.ndarray:
         """
-        Get out-of-sample returns matrix for PBO computation.
+        Out-of-sample returns of every path.
 
         Returns:
-            Matrix of shape (n_samples, n_paths) with OOS returns
+            Array of shape (T, phi); every path covers all T observations.
+            Empty array if returns were not recorded.
         """
-        if not self.path_results or self.path_results[0].returns is None:
-            return np.array([])
-
-        # Stack returns from all paths
         returns_list = [p.returns for p in self.path_results if p.returns is not None]
         if not returns_list:
             return np.array([])
-
-        # Pad to same length if needed
-        max_len = max(len(r) for r in returns_list)
-        padded = []
-        for r in returns_list:
-            if len(r) < max_len:
-                padded.append(np.pad(r, (0, max_len - len(r)), constant_values=np.nan))
-            else:
-                padded.append(r)
-
-        return np.column_stack(padded)
+        lengths = {len(r) for r in returns_list}
+        if len(lengths) != 1:
+            raise ValueError(f"CPCV paths have inconsistent lengths {sorted(lengths)}")
+        return np.column_stack(returns_list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -193,15 +204,16 @@ class CPCVResult:
             "n_paths": self.n_paths,
             "n_groups": self.config.n_groups,
             "n_test_groups": self.config.n_test_groups,
+            "purge_bars": self.config.purge_bars,
+            "embargo_bars": self.config.embargo_bars,
             "mean_accuracy": self.mean_accuracy,
             "std_accuracy": self.std_accuracy,
             "mean_sharpe": self.mean_sharpe,
             "paths": [
                 {
                     "path_id": p.path_id,
-                    "test_groups": p.test_groups,
-                    "train_size": p.train_size,
-                    "test_size": p.test_size,
+                    "split_ids": list(p.split_ids),
+                    "n_samples": p.n_samples,
                     "accuracy": p.accuracy,
                     "f1": p.f1,
                     "sharpe": p.sharpe,
@@ -218,24 +230,11 @@ class CPCVResult:
 
 class CombinatorialPurgedCV:
     """
-    Combinatorially Purged Cross-Validation (CPCV).
+    Combinatorial Purged Cross-Validation (CPCV).
 
-    Generates multiple train/test paths by:
-    1. Dividing data into N sequential time groups
-    2. Creating all combinations of k test groups
-    3. Applying purging and embargo for each combination
-
-    This enables:
-    - Robust model validation across many configurations
-    - PBO (Probability of Backtest Overfitting) computation
-    - Better estimation of generalization error
-
-    Example:
-        >>> config = CPCVConfig(n_groups=6, n_test_groups=2)
-        >>> cpcv = CombinatorialPurgedCV(config)
-        >>> for train_idx, test_idx, path_id in cpcv.split(X, y):
-        ...     # Train and evaluate model
-        ...     pass
+    ``split`` yields every one of the C(N, k) splits as
+    ``(train_indices, test_indices, split_id)``; ``assemble_paths`` turns the
+    per-split test predictions into phi complete backtest paths.
     """
 
     def __init__(self, config: CPCVConfig) -> None:
@@ -246,165 +245,216 @@ class CombinatorialPurgedCV:
             config: CPCVConfig with CPCV parameters
         """
         self.config = config
-        self._group_boundaries: list[tuple[int, int]] | None = None
+        self._test_combinations: list[tuple[int, ...]] = list(
+            combinations(range(config.n_groups), config.n_test_groups)
+        )
 
-    def _compute_group_boundaries(self, n_samples: int) -> list[tuple[int, int]]:
-        """Compute start/end indices for each group."""
-        group_size = n_samples // self.config.n_groups
-        boundaries = []
+    # ------------------------------------------------------------------
+    # Structure
+    # ------------------------------------------------------------------
 
-        for i in range(self.config.n_groups):
-            start = i * group_size
-            end = n_samples if i == self.config.n_groups - 1 else (i + 1) * group_size
-            boundaries.append((start, end))
+    @property
+    def test_combinations(self) -> list[tuple[int, ...]]:
+        """Test-group tuple of each split, indexed by split_id (lexicographic order)."""
+        return list(self._test_combinations)
 
-        return boundaries
+    @property
+    def n_paths(self) -> int:
+        """Number of backtest paths phi."""
+        return self.config.n_paths
 
-    def _get_purge_embargo_sizes(self, n_samples: int) -> tuple[int, int]:
-        """Compute purge and embargo sizes in bars."""
-        purge_size = max(1, int(n_samples * self.config.purge_pct))
-        embargo_size = max(1, int(n_samples * self.config.embargo_pct))
-        return purge_size, embargo_size
+    def group_boundaries(self, n_samples: int) -> list[tuple[int, int]]:
+        """Half-open [start, end) row range of each group (sizes differ by at most 1)."""
+        if n_samples < self.config.n_groups:
+            raise ValueError(
+                f"n_samples ({n_samples}) must be >= n_groups ({self.config.n_groups})"
+            )
+        edges = np.linspace(0, n_samples, self.config.n_groups + 1).astype(int)
+        return [(int(edges[g]), int(edges[g + 1])) for g in range(self.config.n_groups)]
+
+    def get_path_assignments(self) -> np.ndarray:
+        """
+        Split assignment of every (path, group) cell.
+
+        Returns:
+            Integer array of shape (phi, N); entry [p, g] is the split_id whose
+            test predictions fill group g on path p. Each group g appears as a
+            test group in exactly phi splits, taken in split_id order.
+        """
+        n_groups = self.config.n_groups
+        assignments = np.full((self.n_paths, n_groups), -1, dtype=int)
+        filled = np.zeros(n_groups, dtype=int)
+        for split_id, test_groups in enumerate(self._test_combinations):
+            for g in test_groups:
+                assignments[filled[g], g] = split_id
+                filled[g] += 1
+        if not np.all(filled == self.n_paths):
+            raise RuntimeError(f"CPCV path assembly inconsistent: group counts {filled}")
+        return assignments
+
+    # ------------------------------------------------------------------
+    # Splitting
+    # ------------------------------------------------------------------
+
+    def _train_mask(
+        self,
+        n_samples: int,
+        test_groups: tuple[int, ...],
+        boundaries: list[tuple[int, int]],
+        label_ends_ns: np.ndarray | None,
+        index_ns: np.ndarray | None,
+    ) -> np.ndarray:
+        """Boolean training mask for one split (test groups, purge and embargo removed)."""
+        purge = self.config.purge_bars
+        after = purge + self.config.embargo_bars
+        mask = np.ones(n_samples, dtype=bool)
+        for g in test_groups:
+            start, end = boundaries[g]
+            mask[max(0, start - purge) : min(n_samples, end + after)] = False
+            if label_ends_ns is not None and index_ns is not None:
+                # Train label interval [t_i, end_i] overlaps the test span
+                # [t_start, max test label end]
+                test_label_end = np.nanmax(label_ends_ns[start:end])
+                overlap = (label_ends_ns >= index_ns[start]) & (index_ns <= test_label_end)
+                mask &= ~overlap
+        return mask
 
     def split(
         self,
-        X: pd.DataFrame,
-        y: pd.Series | None = None,
-        groups: pd.Series | None = None,
+        X: pd.DataFrame | np.ndarray,
+        y: pd.Series | np.ndarray | None = None,
+        groups: pd.Series | np.ndarray | None = None,
         label_end_times: pd.Series | None = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray, int]]:
         """
-        Generate train/test indices for each CPCV combination.
+        Generate train/test indices for every CPCV split.
 
         Args:
-            X: Features DataFrame
-            y: Labels (optional)
-            groups: Groups (optional, unused)
-            label_end_times: Label end times for overlap purging (optional)
+            X: Features (only its length and, for label-aware purging, its
+                DatetimeIndex are used)
+            y: Unused (sklearn API compatibility)
+            groups: Unused (sklearn API compatibility)
+            label_end_times: Optional per-row label resolution time. Used for
+                additional label-overlap purging when X has a DatetimeIndex.
 
         Yields:
-            Tuple of (train_indices, test_indices, path_id) for each combination
-
-        Example:
-            >>> for train_idx, test_idx, path_id in cpcv.split(X, y):
-            ...     print(f"Path {path_id}: train={len(train_idx)}, test={len(test_idx)}")
+            (train_indices, test_indices, split_id). Every split in
+            ``test_combinations`` is yielded, so ``assemble_paths`` can build
+            all phi paths. Raises instead of skipping if a split has no
+            training rows left.
         """
         n_samples = len(X)
+        boundaries = self.group_boundaries(n_samples)
         indices = np.arange(n_samples)
 
-        # Compute group boundaries
-        self._group_boundaries = self._compute_group_boundaries(n_samples)
-        purge_size, embargo_size = self._get_purge_embargo_sizes(n_samples)
+        label_ends_ns: np.ndarray | None = None
+        index_ns: np.ndarray | None = None
+        if (
+            label_end_times is not None
+            and isinstance(X, pd.DataFrame)
+            and isinstance(X.index, pd.DatetimeIndex)
+        ):
+            ends = pd.to_datetime(pd.Series(label_end_times).reset_index(drop=True))
+            label_ends_ns = ends.to_numpy(dtype="datetime64[ns]").astype(np.float64)
+            label_ends_ns[ends.isna().to_numpy()] = np.nan
+            index_ns = X.index.to_numpy(dtype="datetime64[ns]").astype(np.float64)
 
-        # Get datetime index if available
-        has_datetime_index = isinstance(X.index, pd.DatetimeIndex)
-
-        # Generate all test group combinations
-        all_test_combos = list(combinations(range(self.config.n_groups), self.config.n_test_groups))
-
-        # Limit combinations if needed
-        if len(all_test_combos) > self.config.max_combinations:
-            logger.info(
-                f"Limiting combinations from {len(all_test_combos)} to {self.config.max_combinations}"
+        for split_id, test_groups in enumerate(self._test_combinations):
+            train_mask = self._train_mask(
+                n_samples, test_groups, boundaries, label_ends_ns, index_ns
             )
-            # Sample evenly across combinations
-            step = len(all_test_combos) / self.config.max_combinations
-            selected_indices = [int(i * step) for i in range(self.config.max_combinations)]
-            all_test_combos = [all_test_combos[i] for i in selected_indices]
-
-        for path_id, test_groups in enumerate(all_test_combos):
-            train_groups = tuple(g for g in range(self.config.n_groups) if g not in test_groups)
-
-            # Build test mask
-            test_mask = np.zeros(n_samples, dtype=bool)
-            for g in test_groups:
-                start, end = self._group_boundaries[g]
-                test_mask[start:end] = True
-
-            # Build train mask (exclude test groups + purge + embargo)
-            train_mask = np.zeros(n_samples, dtype=bool)
-            for g in train_groups:
-                start, end = self._group_boundaries[g]
-                train_mask[start:end] = True
-
-            # Apply purging: remove samples near test boundaries
-            for g in test_groups:
-                test_start, test_end = self._group_boundaries[g]
-
-                # Purge before test
-                purge_start = max(0, test_start - purge_size)
-                train_mask[purge_start:test_start] = False
-
-                # Embargo after test
-                embargo_end = min(n_samples, test_end + embargo_size)
-                train_mask[test_end:embargo_end] = False
-
-            # Apply label-aware purging if label_end_times provided
-            if label_end_times is not None and has_datetime_index:
-                for g in test_groups:
-                    test_start, _ = self._group_boundaries[g]
-                    test_start_time = X.index[test_start]
-
-                    # Remove training samples whose labels extend into test
-                    for i in np.where(train_mask)[0]:
-                        if i < test_start:
-                            # Validate and convert label_end_time
-                            label_end = label_end_times.iloc[i]
-                            if pd.isna(label_end):
-                                continue
-                            # Ensure timestamp comparison
-                            label_end = pd.Timestamp(label_end)
-                            if label_end >= test_start_time:
-                                train_mask[i] = False
-
+            test_indices = np.concatenate([indices[slice(*boundaries[g])] for g in test_groups])
             train_indices = indices[train_mask]
-            test_indices = indices[test_mask]
-
             if len(train_indices) == 0:
-                logger.warning(f"Path {path_id}: Empty training set, skipping")
-                continue
+                raise ValueError(
+                    f"CPCV split {split_id} (test groups {test_groups}) has no training rows "
+                    f"after purge={self.config.purge_bars} / embargo={self.config.embargo_bars}"
+                )
+            yield train_indices, test_indices, split_id
 
-            if len(test_indices) == 0:
-                logger.warning(f"Path {path_id}: Empty test set, skipping")
-                continue
+    def assemble_paths(
+        self,
+        split_values: Mapping[int, np.ndarray] | Sequence[np.ndarray],
+        n_samples: int,
+    ) -> np.ndarray:
+        """
+        Assemble per-split out-of-sample values into phi full backtest paths.
 
-            yield train_indices, test_indices, path_id
+        Args:
+            split_values: For each split_id, the values (e.g. predictions)
+                aligned with that split's ``test_indices`` as yielded by
+                ``split`` (test groups concatenated in ascending order).
+            n_samples: T, the length of the data passed to ``split``.
+
+        Returns:
+            Array of shape (phi, T) (plus any trailing dims of the values);
+            row p is backtest path p.
+        """
+        boundaries = self.group_boundaries(n_samples)
+        assignments = self.get_path_assignments()
+
+        # Offset of every group within each split's concatenated test block
+        group_slices: dict[int, dict[int, slice]] = {}
+        for split_id, test_groups in enumerate(self._test_combinations):
+            offset = 0
+            slices: dict[int, slice] = {}
+            for g in test_groups:
+                size = boundaries[g][1] - boundaries[g][0]
+                slices[g] = slice(offset, offset + size)
+                offset += size
+            group_slices[split_id] = slices
+
+        first = np.asarray(split_values[0])
+        paths = np.empty((self.n_paths, n_samples) + first.shape[1:], dtype=np.result_type(first))
+        for p in range(self.n_paths):
+            for g, (start, end) in enumerate(boundaries):
+                split_id = int(assignments[p, g])
+                values = np.asarray(split_values[split_id])
+                expected = sum(
+                    boundaries[h][1] - boundaries[h][0] for h in self._test_combinations[split_id]
+                )
+                if len(values) != expected:
+                    raise ValueError(
+                        f"split {split_id}: expected {expected} test values, got {len(values)}"
+                    )
+                paths[p, start:end] = values[group_slices[split_id][g]]
+        return paths
 
     def get_n_splits(
         self,
-        X: pd.DataFrame | None = None,
-        y: pd.Series | None = None,
-        groups: pd.Series | None = None,
+        X: pd.DataFrame | np.ndarray | None = None,
+        y: pd.Series | np.ndarray | None = None,
+        groups: pd.Series | np.ndarray | None = None,
     ) -> int:
-        """Return number of splits (combinations)."""
-        return min(self.config.total_combinations, self.config.max_combinations)
+        """Return number of splits C(N, k)."""
+        return self.config.total_combinations
 
     def get_path_info(self, X: pd.DataFrame) -> list[dict[str, Any]]:
         """
-        Get detailed information about each CPCV path.
+        Train/test sizes and boundaries of every split.
 
         Args:
             X: Features DataFrame
 
         Returns:
-            List of dicts with path information
+            List of dicts with split information
         """
         info = []
         has_datetime = isinstance(X.index, pd.DatetimeIndex)
 
-        for train_idx, test_idx, path_id in self.split(X):
-            path_info = {
-                "path_id": path_id,
+        for train_idx, test_idx, split_id in self.split(X):
+            split_info: dict[str, Any] = {
+                "split_id": split_id,
+                "test_groups": self._test_combinations[split_id],
                 "train_size": len(train_idx),
                 "test_size": len(test_idx),
-                "train_start_idx": int(train_idx[0]) if len(train_idx) > 0 else None,
-                "train_end_idx": int(train_idx[-1]) if len(train_idx) > 0 else None,
-                "test_start_idx": int(test_idx[0]) if len(test_idx) > 0 else None,
-                "test_end_idx": int(test_idx[-1]) if len(test_idx) > 0 else None,
+                "train_start_idx": int(train_idx[0]),
+                "train_end_idx": int(train_idx[-1]),
+                "test_start_idx": int(test_idx[0]),
+                "test_end_idx": int(test_idx[-1]),
             }
-
-            if has_datetime and len(train_idx) > 0:
-                path_info.update(
+            if has_datetime:
+                split_info.update(
                     {
                         "train_start_time": X.index[train_idx[0]],
                         "train_end_time": X.index[train_idx[-1]],
@@ -412,17 +462,16 @@ class CombinatorialPurgedCV:
                         "test_end_time": X.index[test_idx[-1]],
                     }
                 )
-
-            info.append(path_info)
+            info.append(split_info)
 
         return info
 
-    def validate_coverage(self, X: pd.DataFrame) -> dict[str, Any]:
+    def validate_coverage(self, X: pd.DataFrame | np.ndarray) -> dict[str, Any]:
         """
-        Validate CPCV coverage statistics.
+        CPCV coverage statistics.
 
         Args:
-            X: Features DataFrame
+            X: Features
 
         Returns:
             Dict with coverage statistics
@@ -431,15 +480,16 @@ class CombinatorialPurgedCV:
         test_coverage = np.zeros(n_samples, dtype=int)
         train_coverage = np.zeros(n_samples, dtype=int)
 
-        path_count = 0
+        n_splits = 0
         for train_idx, test_idx, _ in self.split(X):
             test_coverage[test_idx] += 1
             train_coverage[train_idx] += 1
-            path_count += 1
+            n_splits += 1
 
         return {
             "total_samples": n_samples,
-            "n_paths": path_count,
+            "n_splits": n_splits,
+            "n_paths": self.n_paths,
             "n_groups": self.config.n_groups,
             "n_test_groups": self.config.n_test_groups,
             "samples_never_in_test": int((test_coverage == 0).sum()),
@@ -453,7 +503,8 @@ class CombinatorialPurgedCV:
         return (
             f"CombinatorialPurgedCV(n_groups={self.config.n_groups}, "
             f"n_test_groups={self.config.n_test_groups}, "
-            f"paths={self.get_n_splits()})"
+            f"splits={self.get_n_splits()}, paths={self.n_paths}, "
+            f"purge={self.config.purge_bars}, embargo={self.config.embargo_bars})"
         )
 
 
@@ -465,31 +516,29 @@ class CombinatorialPurgedCV:
 def create_cpcv(
     n_groups: int = 6,
     n_test_groups: int = 2,
-    max_combinations: int = 20,
-    purge_pct: float = 0.01,
-    embargo_pct: float = 0.01,
+    purge_bars: int = 60,
+    embargo_bars: int = 0,
 ) -> CombinatorialPurgedCV:
     """
     Factory function to create CombinatorialPurgedCV.
 
     Args:
-        n_groups: Number of sequential time groups
-        n_test_groups: Groups held out as test per combination
-        max_combinations: Maximum combinations to evaluate
-        purge_pct: Percentage to purge before test
-        embargo_pct: Percentage to embargo after test
+        n_groups: Number of contiguous time groups N
+        n_test_groups: Test groups per split k
+        purge_bars: Label span in bars (purge window around each test group)
+        embargo_bars: Extra rows embargoed after each test group
 
     Returns:
         Configured CombinatorialPurgedCV instance
     """
-    config = CPCVConfig(
-        n_groups=n_groups,
-        n_test_groups=n_test_groups,
-        max_combinations=max_combinations,
-        purge_pct=purge_pct,
-        embargo_pct=embargo_pct,
+    return CombinatorialPurgedCV(
+        CPCVConfig(
+            n_groups=n_groups,
+            n_test_groups=n_test_groups,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
+        )
     )
-    return CombinatorialPurgedCV(config)
 
 
 __all__ = [

@@ -89,6 +89,7 @@ def get_score_fn(metric_name: str) -> Callable[[np.ndarray, np.ndarray], float]:
 # =============================================================================
 
 _DEFAULT_BARS_PER_YEAR = 252 * 78  # 5-min bars, 78 per 6.5h session (252 trading days)
+_bars_per_year = float(_DEFAULT_BARS_PER_YEAR)
 _annualization_factor = float(np.sqrt(_DEFAULT_BARS_PER_YEAR))
 
 
@@ -101,8 +102,14 @@ def set_annualization_factor(bars_per_year: float) -> None:
     Args:
         bars_per_year: Number of bars per year for annualization.
     """
-    global _annualization_factor
+    global _annualization_factor, _bars_per_year
+    _bars_per_year = float(bars_per_year)
     _annualization_factor = float(np.sqrt(bars_per_year))
+
+
+def get_bars_per_year() -> float:
+    """Bars per year currently used to annualize the proxy Sharpe/Sortino metrics."""
+    return _bars_per_year
 
 
 def _proxy_sharpe(y_true: np.ndarray, y_pred: np.ndarray) -> float:

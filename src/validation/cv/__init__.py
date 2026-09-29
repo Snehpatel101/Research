@@ -72,7 +72,6 @@ from .pbo import (
     PBOResult,
     analyze_overfitting_risk,
     compute_pbo,
-    compute_pbo_from_returns,
     pbo_gate,
 )
 from .purged_kfold import ModelAwareCV, PurgedKFold, PurgedKFoldConfig
@@ -132,7 +131,6 @@ __all__ = [
     "PBOConfig",
     "PBOResult",
     "compute_pbo",
-    "compute_pbo_from_returns",
     "pbo_gate",
     "analyze_overfitting_risk",
     # Sequence CV

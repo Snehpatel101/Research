@@ -268,16 +268,23 @@ class TimeSeriesOptunaTuner:
         # Compute Deflated Sharpe Ratio to correct for selection bias
         # DSR is only valid for Sharpe-like metrics (unbounded ratios).
         # For bounded metrics (F1, accuracy), DSR math is invalid — skip.
+        # Trial values are annualized proxy Sharpes (src.optimization.scoring);
+        # T is the number of distinct out-of-sample bars they were computed on.
         dsr_result = None
         if is_sharpe_like_metric(self.metric):
             try:
+                from src.optimization.scoring import get_bars_per_year
+
+                n_oos = len(np.unique(np.concatenate([v for _, v in self._precomputed_splits])))
                 dsr_result = compute_dsr_from_optuna_study(
-                    study, deployment_threshold=0.5, metric_name=self.metric
+                    study,
+                    n_observations=n_oos,
+                    periods_per_year=get_bars_per_year(),
+                    metric_name=self.metric,
                 )
                 logger.info(
-                    f"DSR computed: Raw={dsr_result.sharpe_ratio:.3f}, "
-                    f"Deflated={dsr_result.deflated_sharpe:.3f}, "
-                    f"Deploy={dsr_result.should_deploy}"
+                    f"DSR computed: per-bar Sharpe={dsr_result.sharpe_ratio:.4f}, "
+                    f"DSR={dsr_result.dsr:.3f}, Deploy={dsr_result.should_deploy}"
                 )
             except Exception as e:
                 logger.warning(f"Failed to compute DSR: {e}")
@@ -296,11 +303,7 @@ class TimeSeriesOptunaTuner:
         # Add DSR metrics if computed successfully
         if dsr_result is not None:
             result["dsr"] = {
-                "raw_sharpe": dsr_result.sharpe_ratio,
-                "deflated_sharpe": dsr_result.deflated_sharpe,
-                "deflation_pct": dsr_result.get_deflation_pct(),
-                "is_significant": dsr_result.is_significant,
-                "should_deploy": dsr_result.should_deploy,
+                **dsr_result.to_dict(),
                 "risk_level": dsr_result.get_risk_level(),
             }
 
