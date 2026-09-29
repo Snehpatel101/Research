@@ -419,6 +419,7 @@ class _Bars:
 
     timestamps: list[pd.Timestamp]  # boxed once; indexing a DatetimeIndex per bar is slow
     predictions: np.ndarray
+    has_signal: np.ndarray  # False on bars without a prediction (no new decision)
     confidences: np.ndarray
     labels: np.ndarray
     opens: np.ndarray
@@ -641,27 +642,40 @@ class Backtester:
         return df.reset_index(drop=True)
 
     def _align_data(self) -> pd.DataFrame:
-        """Align predictions with prices on timestamp."""
-        rows_before = len(self.predictions)
+        """Predictions laid onto the full bar series of their time span.
 
-        # Merge on timestamp
+        Prices are the base: every price bar from the first to the last
+        matched prediction is kept, so bars between prediction segments (e.g.
+        gaps between out-of-fold blocks) still count toward holding periods
+        and stop checks. A bar without a prediction carries no new decision
+        (``has_signal`` False, ``prediction`` 0). ATR is computed on the
+        complete price series before slicing, so the bars before the first
+        prediction serve as its warm-up.
+        """
+        rows_before = len(self.predictions)
+        prices = self.prices.sort_values("timestamp", kind="stable").reset_index(drop=True)
+        prices["atr"] = self._compute_atr(prices).to_numpy(dtype=float)
+
+        matched = self.predictions["timestamp"].isin(prices["timestamp"])
+        if not matched.any():
+            raise ValueError("No overlapping timestamps between predictions and prices")
+        predictions = self.predictions.loc[matched]
+        span = (prices["timestamp"] >= predictions["timestamp"].min()) & (
+            prices["timestamp"] <= predictions["timestamp"].max()
+        )
         merged = pd.merge(
-            self.predictions,
-            self.prices,
+            predictions,
+            prices.loc[span],
             on="timestamp",
-            how="inner",
+            how="right",
             suffixes=("_pred", "_price"),
         )
+        merged = merged.sort_values("timestamp", kind="stable").reset_index(drop=True)
+        merged["has_signal"] = merged["prediction"].notna().to_numpy()
+        merged["prediction"] = merged["prediction"].fillna(0).astype(int)
 
-        if len(merged) == 0:
-            raise ValueError("No overlapping timestamps between predictions and prices")
-
-        # Sort by timestamp
-        merged = merged.sort_values("timestamp").reset_index(drop=True)
-
-        # Log alignment data loss
-        rows_after = len(merged)
-        rows_dropped = rows_before - rows_after
+        # Log alignment data loss (predictions without a price bar)
+        rows_dropped = int((~matched).sum())
         if rows_dropped > 0:
             drop_pct = rows_dropped / rows_before * 100
             logger.info(f"Alignment dropped {rows_dropped} rows ({drop_pct:.1f}%)")
@@ -1036,13 +1050,24 @@ class Backtester:
         return _Bars(
             timestamps=list(timestamps),
             predictions=data["prediction"].to_numpy().astype(int),
+            has_signal=(
+                data["has_signal"].to_numpy(dtype=bool)
+                if "has_signal" in data.columns
+                else np.ones(n, dtype=bool)
+            ),
             confidences=data["confidence"].to_numpy(dtype=float),
             labels=data["label"].to_numpy(),
             opens=opens,
             highs=highs,
             lows=lows,
             closes=closes,
-            atr=self._compute_atr(data).to_numpy(dtype=float),
+            # Full-series ATR from _align_data (bars before the first
+            # prediction included); computed here only for frames without it
+            atr=(
+                data["atr"].to_numpy(dtype=float)
+                if "atr" in data.columns
+                else self._compute_atr(data).to_numpy(dtype=float)
+            ),
             fills=fills,
             can_enter=can_enter,
             session_end=session_end,
@@ -1122,8 +1147,8 @@ class Backtester:
             self._close_position(fill, ts, bar_atr, reason=ExitReason.CIRCUIT_BREAKER)
 
         s = j - delay
-        if s < 0:
-            return
+        if s < 0 or not bars.has_signal[s]:
+            return  # no decision at bar s: positions are held, nothing opens
         signal = int(bars.predictions[s])
 
         pos = self._current_position
@@ -1346,13 +1371,13 @@ class Backtester:
         metrics = equity_curve.get_metrics(periods_per_year=periods_per_year)
 
         # Additional statistics
-        preds = bars.predictions
+        preds = bars.predictions[bars.has_signal]
         signals_long = int(np.sum(preds == 1))
         signals_short = int(np.sum(preds == -1))
         signals_count = {
             "long": signals_long,
             "short": signals_short,
-            "neutral": int(n_bars - signals_long - signals_short),
+            "neutral": int(len(preds) - signals_long - signals_short),
         }
         halts_by_reason: dict[str, int] = {}
         for event in self._halts:

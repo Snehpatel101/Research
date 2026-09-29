@@ -16,6 +16,16 @@ import numpy as np
 import pandas as pd
 
 
+def selection_score(metrics: dict[str, Any]) -> float:
+    """Validation score that picks a horizon's primary (deployed) model.
+
+    ``macro_f1`` when reported, else ``val_f1`` (0.0 when neither is). One
+    definition shared by the deploy manifest, ``TrainingRunResult.best_model``
+    and the factory backtest, so all three pick the same model.
+    """
+    return float(metrics.get("macro_f1", metrics.get("val_f1", 0.0)) or 0.0)
+
+
 def compute_classification_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -648,6 +658,7 @@ def compute_metrics_with_regime_breakdown(
 
 
 __all__ = [
+    "selection_score",
     "compute_classification_metrics",
     "compute_probability_metrics",
     "compute_trading_metrics",

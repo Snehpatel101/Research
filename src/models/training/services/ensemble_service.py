@@ -93,6 +93,10 @@ class EnsembleServiceResult:
     # Each base model scored on the meta-learner's holdout rows, from its
     # OOF probabilities with the same metric code (model name -> metrics)
     base_model_holdout_metrics: dict[str, dict[str, float]] = field(default_factory=dict)
+    # Out-of-sample signals of the stacking system on its purged holdout:
+    # columns row (source bar position), prediction (trading label),
+    # confidence — what the backtest of the deployed ensemble replays
+    holdout_predictions: pd.DataFrame | None = None
 
 
 class EnsembleService:
@@ -254,8 +258,8 @@ class EnsembleService:
         logger.info(f"Stacking dataset: {stacking_dataset.n_samples} samples")
 
         # Train meta-learner
-        meta_learner, ensemble_metrics, base_metrics = self._train_meta_learner(
-            stacking_dataset, config
+        meta_learner, ensemble_metrics, base_metrics, holdout_predictions = (
+            self._train_meta_learner(stacking_dataset, config)
         )
 
         training_time = time.time() - start_time
@@ -268,6 +272,7 @@ class EnsembleService:
             training_time_seconds=training_time,
             diversity_metrics=diversity_metrics,
             base_model_holdout_metrics=base_metrics,
+            holdout_predictions=holdout_predictions,
         )
 
     def _convert_to_oof_results(
@@ -404,7 +409,7 @@ class EnsembleService:
         self,
         stacking_dataset: StackingDataset,
         config: PipelineConfig,
-    ) -> tuple[Any, dict[str, Any], dict[str, dict[str, float]]]:
+    ) -> tuple[Any, dict[str, Any], dict[str, dict[str, float]], pd.DataFrame | None]:
         """Evaluate the meta-learner on a purged temporal holdout, then refit it.
 
         1. The trailing ``META_HOLDOUT_FRACTION`` of the aligned OOF rows is
@@ -424,7 +429,11 @@ class EnsembleService:
         time-series data and incompatible with OOF stacking features.
 
         Returns:
-            (deployed meta-learner, ensemble metrics, base-model holdout metrics)
+            (deployed meta-learner, ensemble metrics, base-model holdout
+            metrics, holdout predictions). The holdout predictions are the
+            evaluation fit's signals on the holdout rows (``row`` = source bar,
+            ``prediction`` = trading label, ``confidence``): out-of-sample
+            for the meta-learner and built from out-of-fold base predictions.
         """
         try:
             from src.models.ensemble import get_meta_learner
@@ -485,8 +494,16 @@ class EnsembleService:
 
             # 3. Uniform holdout metrics: meta-learner and every base model
             X_hold, y_hold = X[holdout_pos], y[holdout_pos]
+            holdout_output = meta_learner.predict(X_hold)
             holdout_metrics = compute_probability_metrics(
-                y_hold, meta_learner.predict(X_hold).class_probabilities, n_classes
+                y_hold, holdout_output.class_probabilities, n_classes
+            )
+            holdout_predictions = pd.DataFrame(
+                {
+                    "row": rows[holdout_pos],
+                    "prediction": np.asarray(holdout_output.class_predictions).astype(int),
+                    "confidence": np.asarray(holdout_output.class_probabilities).max(axis=1),
+                }
             )
             base_metrics = {
                 name: compute_probability_metrics(
@@ -528,11 +545,11 @@ class EnsembleService:
                     f"log_loss={bm['log_loss']:.4f}"
                 )
 
-            return deployed, metrics, base_metrics
+            return deployed, metrics, base_metrics, holdout_predictions
 
         except Exception as e:
             logger.error(f"Failed to train meta-learner: {e}")
-            return None, {"error": str(e)}, {}
+            return None, {"error": str(e)}, {}, None
 
     def _analyze_diversity(
         self,

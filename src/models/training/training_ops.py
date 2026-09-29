@@ -101,7 +101,7 @@ class TrainingOpsMixin:
         training_requests: list[ModelTrainingRequest] = []
 
         for model_name in boosting_models:
-            prepared = self._prepare_with_cache(df, model_name, additional_dfs)
+            prepared = self._prepare_with_cache(df, model_name, horizon, additional_dfs)
             prepared_map[model_name] = prepared
             logger.info(f"  {model_name} data prepared: {prepared.summary()}")
 
@@ -166,20 +166,8 @@ class TrainingOpsMixin:
 
         del prepared_map
         # Evict boosting PreparedData from cache (no longer needed after parallel training)
-        from src.core.contracts import get_model_contract
-
         for model_name in boosting_models:
-            contract = get_model_contract(model_name)
-            n_model_features = len(self._per_model_features.get(model_name, []))
-            cache_key = (
-                contract.input_rank.value,
-                contract.sequence_length,
-                contract.feature_mode.value,
-                contract.mtf_mode.value,
-                contract.scaler_type,
-                n_model_features,
-            )
-            self._prepared_cache.pop(cache_key, None)
+            self._prepared_cache.pop(self._prepared_cache_key(model_name, horizon), None)
         gc.collect()
 
     def _train_model_sequential(
@@ -191,7 +179,7 @@ class TrainingOpsMixin:
     ) -> None:
         """Train a single model sequentially with data preparation and OOF."""
         logger.info(f"\nTraining {model_name}...")
-        prepared = self._prepare_with_cache(df, model_name, additional_dfs)
+        prepared = self._prepare_with_cache(df, model_name, horizon, additional_dfs)
         logger.info(f"  Data prepared: {prepared.summary()}")
 
         result = self._train_single_model(model_name, prepared, horizon)
@@ -220,21 +208,7 @@ class TrainingOpsMixin:
         # Free PreparedData and evict from cache to prevent OOM
         # when training sequential models (TCN 3D ~60 GB, PatchTST 4D ~8 GB)
         del prepared
-        # Reconstruct cache key from contract properties (same as _prepare_with_cache)
-        from src.core.contracts import get_model_contract
-
-        contract = get_model_contract(model_name)
-        n_model_features = len(self._per_model_features.get(model_name, []))
-        cache_key = (
-            contract.input_rank.value,
-            contract.sequence_length,
-            contract.feature_mode.value,
-            contract.mtf_mode.value,
-            contract.scaler_type,
-            n_model_features,
-        )
-        if cache_key in self._prepared_cache:
-            del self._prepared_cache[cache_key]
+        self._prepared_cache.pop(self._prepared_cache_key(model_name, horizon), None)
         # GPU cleanup already done by _offload_trainer_to_cpu before OOF;
         # just collect Python garbage here for prepared data cache eviction.
         gc.collect()
@@ -478,22 +452,34 @@ class TrainingOpsMixin:
         df: pd.DataFrame,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> None:
-        """Walk-forward training: expanding/rolling windows for realistic backtesting."""
+        """Walk-forward training: expanding/rolling windows for realistic backtesting.
+
+        Every horizon runs its own windows on its own labels.
+        """
+        logger.info("Walk-forward training mode")
+        for horizon in self.config.horizons:
+            logger.info(f"\n--- Horizon {horizon} ---")
+            self._train_walk_forward_horizon(df, horizon, additional_dfs)
+
+    def _train_walk_forward_horizon(
+        self,
+        df: pd.DataFrame,
+        horizon: int,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> None:
+        """Walk-forward windows + deployable model for every model at one horizon."""
         from src.core.container import TimeSeriesDataContainer
 
         from .config import _ModeConfig
         from .modes import WalkForwardTrainer, WalkForwardTrainerConfig
         from .unified_orchestrator import ModelTrainingResult
 
-        logger.info("Walk-forward training mode")
-        horizon = self.config.horizons[0]
-
         exp_config = _ModeConfig(
             symbol=self.config.symbol,
-            horizons=self.config.horizons,
+            horizons=[horizon],
             models=list(self.config.models),
             data_dir=Path(self.config.data_path).parent,
-            output_dir=self.output_dir,
+            output_dir=self.output_dir / f"h{horizon}",
         )
         wf_config = WalkForwardTrainerConfig(
             n_windows=getattr(self.config, "wf_n_windows", self.config.n_splits),
@@ -510,15 +496,17 @@ class TrainingOpsMixin:
 
         for model_name in self.config.models:
             # Walk-forward windows select features on their own training data
-            # (B08 fix), so they see every feature column.
-            float64_cols = df.select_dtypes(include=["float64"]).columns
-            df_model = (
-                df.astype(dict.fromkeys(float64_cols, np.float32)) if len(float64_cols) else df
-            )
-            prepared = self._data_preparer.prepare(
-                df=df_model,
-                model_name=model_name,
-                additional_dfs=additional_dfs,
+            # (B08 fix), so they see every feature column. They also fit their
+            # own scalers, so the frame is left UNSCALED: a scaler fit on the
+            # whole train split would hand every window statistics (and clip
+            # thresholds) computed from rows after its training cutoff.
+            prepared = self._prepare_for_horizon(
+                df,
+                model_name,
+                horizon,
+                additional_dfs,
+                apply_scaling=False,
+                restrict_features=False,
             ).filter_invalid_labels()
 
             # Walk-forward is the evaluation protocol (honest OOS predictions for
@@ -527,10 +515,17 @@ class TrainingOpsMixin:
             # mode: train-split per-model features, same prepared-data path.
             deploy_result = self._train_single_model(
                 model_name,
-                self._prepare_with_cache(df, model_name, additional_dfs),
+                self._prepare_with_cache(df, model_name, horizon, additional_dfs),
                 horizon,
             )
             self._clear_prepared_cache()
+            # Window models use the deployed model's configuration (tuned
+            # hyperparameters, epochs, batch size, sequence length), so the
+            # walk-forward predictions stacking and the backtest consume come
+            # from the same model specification that is deployed.
+            deploy_model_config = getattr(
+                getattr(deploy_result.trainer, "model", None), "config", None
+            )
 
             # Row of the source DataFrame for every walk-forward sample
             # (train, val, test concatenated in that order below)
@@ -647,8 +642,12 @@ class TrainingOpsMixin:
                 data_dir=exp_config.data_dir,
                 output_dir=exp_config.output_dir,
             )
-            single_trainer = WalkForwardTrainer(single_model_config, wf_config)
-            single_trainer._pipeline_config = self.config
+            single_trainer = WalkForwardTrainer(
+                single_model_config,
+                wf_config,
+                pipeline_config=self.config,
+                model_config=deploy_model_config,
+            )
 
             results = single_trainer.run(container)
             del container, single_trainer  # Free after extracting results
@@ -771,28 +770,7 @@ class TrainingOpsMixin:
             logger.info(f"\n--- Horizon {horizon} ---")
             for model_name in self.config.models:
                 logger.info(f"\nTraining regime-aware: {model_name}...")
-                # Filter DataFrame to per-model feature subset before preparation
-                df_model = df
-                if self._per_model_features and model_name in self._per_model_features:
-                    model_features = set(self._per_model_features[model_name])
-                    all_features = set(self._all_feature_names)
-                    drop_cols = [
-                        c for c in df.columns if c in all_features and c not in model_features
-                    ]
-                    if drop_cols:
-                        df_model = df.drop(columns=drop_cols)
-                        logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
-
-                # Downcast float64 → float32 to halve memory during preparation
-                float64_cols = df_model.select_dtypes(include=["float64"]).columns
-                if len(float64_cols) > 0:
-                    df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
-
-                prepared = self._data_preparer.prepare(
-                    df=df_model,
-                    model_name=model_name,
-                    additional_dfs=additional_dfs,
-                )
+                prepared = self._prepare_for_horizon(df, model_name, horizon, additional_dfs)
                 logger.info(f"  Data prepared: {prepared.summary()}")
 
                 regime_result = regime_trainer.train(
@@ -844,7 +822,7 @@ class TrainingOpsMixin:
 
         train_regimes = regime_result.train_regimes.to_numpy()
         regime_oofs = []
-        for regime in members:
+        for regime, rr in members.items():
             mask = train_regimes == regime
             subset = replace(
                 prepared,
@@ -857,7 +835,13 @@ class TrainingOpsMixin:
                     prepared.train_indices[mask] if prepared.train_indices is not None else None
                 ),
             )
-            oof = self._generate_oof(model_name, subset, horizon)
+            # Fold models use the deployed regime model's configuration
+            oof = self._generate_oof(
+                model_name,
+                subset,
+                horizon,
+                model_config=getattr(getattr(rr.trainer, "model", None), "config", None),
+            )
             if oof is not None:
                 regime_oofs.append(oof)
         oof = merge_oof_predictions(regime_oofs) if regime_oofs else None
@@ -962,17 +946,8 @@ class TrainingOpsMixin:
 
         # Stage 1: Prepare primary data (per-model feature subset when selected)
         logger.info("\n  STAGE 1: Preparing data...")
-        df_model = df
-        if self._per_model_features and primary_model_name in self._per_model_features:
-            model_features = set(self._per_model_features[primary_model_name])
-            all_features = set(self._all_feature_names)
-            drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
-            df_model = df.drop(columns=drop_cols)
-        float64_cols = df_model.select_dtypes(include=["float64"]).columns
-        if len(float64_cols) > 0:
-            df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
-        prepared = self._data_preparer.prepare(
-            df=df_model, model_name=primary_model_name, additional_dfs=additional_dfs
+        prepared = self._prepare_for_horizon(
+            df, primary_model_name, horizon, additional_dfs
         ).filter_invalid_labels()
         logger.info(f"    Data: {prepared.n_train} train, {prepared.n_val} val samples")
 
@@ -980,7 +955,14 @@ class TrainingOpsMixin:
         logger.info("\n  STAGE 2: Training primary model (side)...")
         primary_result = self._train_single_model(primary_model_name, prepared, horizon)
         primary_trainer = primary_result.trainer
-        primary_oof = self._generate_oof(primary_model_name, prepared, horizon)
+        # OOF fold models share the deployed primary's configuration, so the
+        # meta-model learns from probabilities of the model it will filter
+        primary_oof = self._generate_oof(
+            primary_model_name,
+            prepared,
+            horizon,
+            model_config=getattr(primary_trainer.model, "config", None),
+        )
         if primary_oof is None:
             raise RuntimeError(f"Could not generate OOF predictions for {primary_model_name}")
 

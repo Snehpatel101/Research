@@ -284,7 +284,7 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
         ]
         prep = (
             UnifiedDataPreparation(tr.config)
-            .prepare(df=df[keep], model_name=mr.model_name)
+            .prepare(df=df[keep], model_name=mr.model_name, label_column=f"label_h{mr.horizon}")
             .filter_invalid_labels()
         )
         expected = trainer.model.predict(prep.X_val).class_probabilities
@@ -343,7 +343,9 @@ def _check_meta_labeling_parity(result, data_path: Path) -> list[str]:
         ]
         prep = (
             UnifiedDataPreparation(tr.config)
-            .prepare(df=df[keep], model_name=art["primary_model"])
+            .prepare(
+                df=df[keep], model_name=art["primary_model"], label_column=f"label_h{mr.horizon}"
+            )
             .filter_invalid_labels()
         )
         model_input = prep.X_val

@@ -34,9 +34,8 @@ from src.core.constants import (
 )
 from src.core.contracts import get_model_contract
 from src.core.label_spans import (
-    NO_LABEL_END,
     LabelSpans,
-    label_end_column,
+    frame_label_ends,
     uniqueness_sample_weights,
 )
 
@@ -596,7 +595,7 @@ class UnifiedDataPreparation:
         # 5. Label spans -> default sample weights (AFML average uniqueness,
         # concurrency counted over the training split's labels only)
         train_indices = train_result.original_indices
-        label_ends = self._label_end_positions(df, label_column)
+        label_ends = frame_label_ends(df, label_column)
         train_weights = train_result.weights
         if (
             train_weights is None
@@ -643,30 +642,15 @@ class UnifiedDataPreparation:
         logger.info(prepared.summary())
         return prepared
 
-    @staticmethod
-    def _label_end_positions(df: pd.DataFrame, label_column: str) -> np.ndarray | None:
-        """Per-row label-end positions from the column paired with ``label_column``."""
-        column = label_end_column(label_column)
-        if column not in df.columns:
-            return None
-        values = df[column].to_numpy()
-        if np.issubdtype(values.dtype, np.floating):
-            values = np.where(np.isnan(values), NO_LABEL_END, values)
-        ends = values.astype(np.int64)
-        known = ends >= 0
-        if np.any(ends[known] < np.flatnonzero(known)):
-            raise ValueError(
-                f"'{column}' holds positions before their own row; label ends must be "
-                "row positions of this DataFrame (re-map them after dropping rows)"
-            )
-        return ends
-
     def _split_bounds(self, n: int) -> tuple[int, int, int, int]:
         """(train_end, val_start, val_end, test_start) row positions for n rows."""
         train_end = int(n * self.config.train_ratio)
         val_start = train_end + self.config.purge_bars  # Gap after train
         val_end = int(n * (self.config.train_ratio + self.config.val_ratio))
-        test_start = val_end + self.config.embargo_bars  # Gap after val
+        # Gap after val: the purge covers the longest label span (validation
+        # labels resolving inside the test period), the embargo serial
+        # correlation — whichever is wider
+        test_start = val_end + max(self.config.purge_bars, self.config.embargo_bars)
         return train_end, val_start, val_end, test_start
 
     def _split_with_purge_embargo(
@@ -711,7 +695,8 @@ class UnifiedDataPreparation:
         else:
             test_df = None
             logger.warning(
-                f"No test samples: embargo ({embargo}) pushes test_start ({test_start}) "
+                f"No test samples: the val/test gap (max of purge {purge}, embargo "
+                f"{embargo}) pushes test_start ({test_start}) "
                 f"beyond data length ({n})"
             )
 

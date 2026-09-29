@@ -291,7 +291,9 @@ class BundleInfo:
     @property
     def score(self) -> float:
         """Validation score used to pick a horizon's primary model."""
-        return float(self.metrics.get("macro_f1", self.metrics.get("val_f1", 0.0)) or 0.0)
+        from src.models.metrics import selection_score
+
+        return selection_score(self.metrics)
 
 
 def describe_bundle(path: str | Path) -> BundleInfo | None:

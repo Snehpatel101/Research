@@ -60,6 +60,9 @@ from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
 logger = logging.getLogger(__name__)
 
+# Data-checkpoint file holding the labeler's barrier cost term per horizon
+LABEL_COSTS_FILE = "label_costs.json"
+
 
 # =============================================================================
 # RESULT DATACLASS
@@ -80,7 +83,8 @@ class ExperimentResult:
         best_model: Name of best-performing model
         metrics: Model performance metrics
         ensemble_metrics: Ensemble performance metrics (if built)
-        backtest_metrics: Backtest results (if run)
+        backtest_metrics: Backtest results (if run); ``strategy`` names the
+            signals replayed and ``horizon`` the horizon whose barriers were used
         bundle_path: Path to deployment bundle (if created)
         output_dir: Directory containing all artifacts
         error_message: Error message if failed
@@ -94,7 +98,7 @@ class ExperimentResult:
     best_model: str | None = None
     metrics: dict[str, dict[str, float]] = field(default_factory=dict)
     ensemble_metrics: dict[str, float] = field(default_factory=dict)
-    backtest_metrics: dict[str, float] = field(default_factory=dict)
+    backtest_metrics: dict[str, Any] = field(default_factory=dict)
     bundle_path: Path | None = None
     deploy_path: Path | None = None
     output_dir: Path | None = None
@@ -300,6 +304,10 @@ class MLFactory:
                 if pipeline_path.exists():
                     with open(pipeline_path) as f:
                         self._feature_pipeline = json.load(f)
+                costs_path = self.output_dir / "cache" / LABEL_COSTS_FILE
+                if costs_path.exists():
+                    with open(costs_path) as f:
+                        self._label_cost_in_atr = {int(h): c for h, c in json.load(f).items()}
 
             # Resolve purge/embargo for this data, then validate sufficiency
             self._pipeline_config(n_rows=len(df))
@@ -435,6 +443,9 @@ class MLFactory:
         if self._feature_pipeline is not None:
             with open(self.output_dir / "cache" / "feature_pipeline.json", "w") as f:
                 json.dump(self._feature_pipeline, f, indent=2)
+        # The labeler's barrier cost term per horizon, reused by the backtest
+        with open(self.output_dir / "cache" / LABEL_COSTS_FILE, "w") as f:
+            json.dump({str(h): c for h, c in self._label_cost_in_atr.items()}, f)
 
         # Save additional_dfs (multi-stream data for 4D models like PatchTST)
         if additional_dfs:
@@ -842,6 +853,10 @@ class MLFactory:
                 # a feature column, whose period and lag follow feature engineering
                 atr_column=None,
                 symbol=symbol,
+                # Price cost -> ATR units with the TRAINING split's median ATR
+                # (the split prepare() makes); val/test volatility must not
+                # shape the training labels. The backtest reuses this scalar.
+                cost_calibration_fraction=self.config.data.splits.train_ratio,
             )
             labeler = TripleBarrierLabeler(label_config)
             label_result = labeler.compute_labels(df_features, horizon=max_bars)
@@ -957,9 +972,14 @@ class MLFactory:
 
     def _run_evaluation(
         self, df: pd.DataFrame, training_result: TrainingRunResult
-    ) -> dict[str, float]:
+    ) -> dict[str, Any]:
         """
         Run evaluation (backtesting, metrics computation).
+
+        Backtests the deployed strategy of the first horizon with that
+        horizon's barriers (see ``_extract_predictions``); the metrics carry
+        ``strategy`` and ``horizon`` so the number is never mistaken for
+        another model's or horizon's.
 
         Args:
             df: Raw OHLCV data
@@ -980,8 +1000,8 @@ class MLFactory:
         try:
             from src.inference.backtesting import BacktestConfig, Backtester
 
-            # Extract predictions from training result
-            predictions_df = self._extract_predictions(df, training_result)
+            # Out-of-sample signals of the deployed strategy (primary horizon)
+            predictions_df, strategy = self._extract_predictions(df, training_result)
             if predictions_df is None or len(predictions_df) == 0:
                 self._log("  No predictions available for backtest")
                 return {}
@@ -1034,17 +1054,17 @@ class MLFactory:
 
             # Wire triple-barrier params from the SAME resolution the labeler
             # used (Phase 86 parity guarantee: labels and backtest play the
-            # same game — see _resolve_barrier_params).
-            if self.config.training.horizons:
-                first_horizon = self.config.training.horizons[0]
-                k_up, k_down, max_bars, _src = self._resolve_barrier_params(first_horizon)
-                bt_kwargs["barrier_k_up"] = k_up
-                bt_kwargs["barrier_k_down"] = k_down
-                bt_kwargs["max_holding_period"] = max_bars
-                # Same cost term the labeler added (None when labeling was
-                # restored from a checkpoint: the backtester then derives it
-                # with the labeler's own helper)
-                bt_kwargs["barrier_cost_in_atr"] = self._label_cost_in_atr.get(first_horizon)
+            # same game — see _resolve_barrier_params). The signals are the
+            # first horizon's, so are the barriers.
+            first_horizon = self.config.training.horizons[0]
+            k_up, k_down, max_bars, _src = self._resolve_barrier_params(first_horizon)
+            bt_kwargs["barrier_k_up"] = k_up
+            bt_kwargs["barrier_k_down"] = k_down
+            bt_kwargs["max_holding_period"] = max_bars
+            # Same cost term the labeler added (persisted with the data
+            # checkpoint; None only for checkpoints that predate it — the
+            # backtester then derives it with the labeler's own helper)
+            bt_kwargs["barrier_cost_in_atr"] = self._label_cost_in_atr.get(first_horizon)
 
             backtest_config = BacktestConfig.from_symbol_config(
                 sym_config,
@@ -1056,13 +1076,20 @@ class MLFactory:
 
             # Run backtest
             bt_result = backtester.run()
-            metrics = bt_result.summary()
+            metrics: dict[str, Any] = {
+                **bt_result.summary(),
+                "strategy": strategy,
+                "horizon": first_horizon,
+            }
 
             # Store equity curve and trades for notebook visualizations
             self._last_equity_curve = bt_result.equity_curve
             self._last_backtest_trades = list(bt_result.trades)
 
-            self._log(f"  Backtest complete: {metrics.get('total_trades', 0)} trades")
+            self._log(
+                f"  Backtest ({strategy}, h{first_horizon}) complete: "
+                f"{metrics.get('total_trades', 0)} trades"
+            )
             self._log(f"  Win rate: {metrics.get('win_rate_pct', 0):.1f}%")
             self._log(f"  Sharpe: {metrics.get('sharpe_ratio', 0):.2f}")
 
@@ -1208,76 +1235,72 @@ class MLFactory:
 
     def _extract_predictions(
         self, df: pd.DataFrame, training_result: TrainingRunResult
-    ) -> pd.DataFrame | None:
+    ) -> tuple[pd.DataFrame | None, str]:
         """
-        Extract predictions from training result for backtesting.
+        Out-of-sample signals of the DEPLOYED strategy at the primary horizon.
+
+        The backtest replays what ships for ``horizons[0]`` (the horizon whose
+        barriers it uses):
+
+        - Stacking ensemble (deployed whenever a meta-learner was trained):
+          the meta-learner's predictions on its purged holdout — built from
+          out-of-fold base predictions and never seen by the evaluation fit
+          (strategy ``"stacking_holdout"``).
+        - Otherwise the horizon's primary model (manifest rule,
+          ``TrainingRunResult.best_model``) and its out-of-fold predictions
+          (strategy ``"oof:<model key>"``).
 
         Args:
-            df: Raw OHLCV data (has 'datetime' column)
+            df: Labeled feature frame (DatetimeIndex)
             training_result: TrainingRunResult
 
         Returns:
-            DataFrame with datetime, prediction, confidence columns.
-            prediction values are in {-1, 0, 1}.
+            (DataFrame with datetime, prediction {-1, 0, 1}, confidence — or
+            None when there is nothing to backtest, strategy label)
         """
-        # Try aligned OOF from ensemble (majority vote across models)
-        if hasattr(training_result, "aligned_oof") and training_result.aligned_oof is not None:
-            oof = training_result.aligned_oof
-
-            # Majority vote across models per sample
-            ensemble_preds = np.zeros(oof.n_common, dtype=np.int64)
-            for i in range(oof.n_common):
-                row_preds = oof.predictions[i]
-                valid = row_preds[row_preds != oof.MISSING_PREDICTION]
-                if len(valid) > 0:
-                    unique, counts = np.unique(valid, return_counts=True)
-                    ensemble_preds[i] = unique[counts.argmax()]
-                else:
-                    ensemble_preds[i] = 0  # Neutral if no valid predictions
-
-            # Confidence from averaged probabilities across models
-            probs_3d = oof.probabilities.reshape(oof.n_common, oof.n_models, oof.n_classes)
-            avg_probs = np.nanmean(probs_3d, axis=1)  # (n_common, n_classes)
-            confidence = np.nanmax(avg_probs, axis=1)  # (n_common,)
-
-            return pd.DataFrame(
-                {
-                    "datetime": df.index[oof.common_indices].values,
-                    "prediction": ensemble_preds,
-                    "confidence": confidence,
-                }
-            )
-
-        # Try OOF from best model
-        best_model = training_result.best_model
-        if best_model and hasattr(training_result, "model_results"):
-            model_result = training_result.model_results.get(best_model)
-            if model_result and hasattr(model_result, "oof_prediction"):
-                oof = model_result.oof_prediction
-                if oof is not None:
-                    # Accessors return FULL-LENGTH arrays (NaN where no
-                    # prediction); original_indices marks the valid rows.
-                    preds = oof.get_class_predictions()  # 1D array of {-1, 0, 1}
-                    probs = oof.get_probabilities()  # (n_samples, n_classes)
-                    indices = oof.original_indices
-                    if indices is None:
-                        # Legacy producers leave original_indices unset —
-                        # derive the valid rows from non-NaN predictions so
-                        # NaN gaps don't become fabricated neutral signals.
-                        indices = np.where(~np.isnan(preds))[0]
-                    preds = preds[indices]
-                    # Subset BEFORE the row-max: covered rows only, not n_total
-                    confidence = probs[indices].max(axis=1)
-
-                    return pd.DataFrame(
+        ensemble = training_result.ensemble_result
+        if ensemble is not None and ensemble.trainer is not None:
+            holdout = ensemble.metadata.get("holdout_predictions")
+            if holdout is not None and len(holdout) > 0:
+                rows = holdout["row"].to_numpy(dtype=np.int64)
+                return (
+                    pd.DataFrame(
                         {
-                            "datetime": df.index[indices].values,
-                            "prediction": np.nan_to_num(preds, nan=0.0).astype(int),
-                            "confidence": confidence,
+                            "datetime": df.index[rows].values,
+                            "prediction": holdout["prediction"].to_numpy(dtype=np.int64),
+                            "confidence": holdout["confidence"].to_numpy(dtype=float),
                         }
-                    )
+                    ),
+                    "stacking_holdout",
+                )
+            logger.warning("Ensemble has no holdout predictions; backtesting the best single model")
 
-        return None
+        best_model = training_result.best_model
+        model_result = training_result.model_results.get(best_model) if best_model else None
+        oof = model_result.oof_prediction if model_result is not None else None
+        if oof is None:
+            return None, "none"
+        # Accessors return FULL-LENGTH arrays (NaN where no prediction);
+        # original_indices marks the valid rows.
+        preds = oof.get_class_predictions()  # 1D array of {-1, 0, 1}
+        probs = oof.get_probabilities()  # (n_samples, n_classes)
+        indices = oof.original_indices
+        if indices is None:
+            # Legacy producers leave original_indices unset — derive the valid
+            # rows from non-NaN predictions so NaN gaps don't become fabricated
+            # neutral signals.
+            indices = np.where(~np.isnan(preds))[0]
+        return (
+            pd.DataFrame(
+                {
+                    "datetime": df.index[indices].values,
+                    "prediction": np.nan_to_num(preds[indices], nan=0.0).astype(int),
+                    # Subset BEFORE the row-max: covered rows only
+                    "confidence": probs[indices].max(axis=1),
+                }
+            ),
+            f"oof:{best_model}",
+        )
 
     def _extract_ensemble_metrics(self, training_result: TrainingRunResult) -> dict[str, float]:
         """

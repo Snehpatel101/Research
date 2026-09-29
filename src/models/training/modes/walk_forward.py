@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -56,6 +57,26 @@ def _log_rss(label: str) -> None:
     if _HAS_PSUTIL:
         rss_mb = psutil.Process().memory_info().rss / (1024 * 1024)
         logger.info(f"  [memory] {label}: RSS = {rss_mb:.0f} MB")
+
+
+def _fill_non_finite(X_train: np.ndarray, X_heldout: np.ndarray) -> None:
+    """Replace non-finite values in place with the training rows' column medians.
+
+    Walk-forward windows receive unscaled features, which can hold NaN (e.g. a
+    higher-timeframe stream that has not started yet in a 4D window). The
+    medians come from the window's training rows only; a column with no finite
+    training value is filled with 0.
+    """
+    bad_train = ~np.isfinite(X_train)
+    bad_heldout = ~np.isfinite(X_heldout)
+    if not (bad_train.any() or bad_heldout.any()):
+        return
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns
+        medians = np.nanmedian(np.where(bad_train, np.nan, X_train), axis=0)
+    medians = np.where(np.isfinite(medians), medians, 0.0).astype(X_train.dtype)
+    X_train[bad_train] = np.broadcast_to(medians, X_train.shape)[bad_train]
+    X_heldout[bad_heldout] = np.broadcast_to(medians, X_heldout.shape)[bad_heldout]
 
 
 # =============================================================================
@@ -192,6 +213,8 @@ class WalkForwardTrainer:
         self,
         config: _ModeConfig,
         wf_config: WalkForwardTrainerConfig | None = None,
+        pipeline_config: Any | None = None,
+        model_config: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize walk-forward trainer.
@@ -199,9 +222,16 @@ class WalkForwardTrainer:
         Args:
             config: Experiment configuration
             wf_config: Walk-forward specific configuration (optional)
+            pipeline_config: Run PipelineConfig (class count, sample weighting,
+                and training defaults when ``model_config`` is not given)
+            model_config: Full configuration of the deployed model (tuned
+                hyperparameters included); every window model is built with
+                it so walk-forward predictions come from the deployed spec
         """
         self.config = config
         self.wf_config = wf_config or WalkForwardTrainerConfig()
+        self._pipeline_config = pipeline_config
+        self._model_config = dict(model_config) if model_config else None
         self.output_dir = config.output_dir / "walk_forward"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -419,6 +449,8 @@ class WalkForwardTrainer:
             y_es = y.iloc[es_idx]
             y_test = y.iloc[test_idx]
 
+            _fill_non_finite(X_train_raw, X_heldout_raw)
+
             # Fold-aware scaling (fit on the fit rows only)
             scaler = FoldAwareScaler(method=scaling_method)
             scaling_result = scaler.fit_transform_fold(X_train_raw, X_heldout_raw)
@@ -503,9 +535,12 @@ class WalkForwardTrainer:
             elif weights is not None:
                 w_train = weights.iloc[train_idx].values
 
-            # Create and train model with training config
-            _model_config = {}
-            if hasattr(self, "_pipeline_config") and self._pipeline_config is not None:
+            # Create and train model: the deployed model's configuration when
+            # known, else the run's training defaults
+            _model_config: dict[str, Any] = {}
+            if self._model_config is not None:
+                _model_config = dict(self._model_config)
+            elif self._pipeline_config is not None:
                 _model_config["max_epochs"] = getattr(
                     self._pipeline_config, "max_epochs", DEFAULT_MAX_EPOCHS
                 )
@@ -518,6 +553,7 @@ class WalkForwardTrainer:
                 _model_config["early_stopping_rounds"] = getattr(
                     self._pipeline_config, "early_stopping_patience", 10
                 )
+            _model_config["n_classes"] = n_classes
             if len(X_es_scaled) == 0:
                 # Windowing swallowed the early-stopping tail: fit fixed-length,
                 # validating on the fit rows themselves.

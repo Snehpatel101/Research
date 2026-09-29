@@ -542,7 +542,7 @@ def test_meta_labeling_trains_on_sided_bars_and_serves_identically(
 
     def spy_oof(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN001
         oof = original_oof(self, *args, **kwargs)
-        primary_oofs.append((oof, args[1]))  # (OOF, prepared)
+        primary_oofs.append((oof, args[1], kwargs.get("model_config")))  # (OOF, prepared, cfg)
         return oof
 
     def spy_meta(self, name: str) -> Any:  # noqa: ANN001
@@ -567,7 +567,11 @@ def test_meta_labeling_trains_on_sided_bars_and_serves_identically(
     mr = next(iter(result.training_result.model_results.values()))
 
     # The meta-model trains only on bars where the primary OOF takes a side
-    oof, prepared = primary_oofs[0]
+    oof, prepared, oof_model_config = primary_oofs[0]
+    # OOF fold models share the deployed primary's configuration (no
+    # train/serve skew between what the meta-model learns from and what ships)
+    assert mr.trainer is not None
+    assert oof_model_config == mr.trainer.model.config
     oof_classes = oof.get_class_predictions()[prepared.train_indices]
     sided = ~np.isnan(oof_classes) & (np.nan_to_num(oof_classes) != 0)
     n_sided = int(sided.sum())

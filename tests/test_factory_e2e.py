@@ -174,8 +174,10 @@ class TestFactoryRunCompletes:
         assert cached.exists(), "data pipeline checkpoint should exist"
         df = pd.read_parquet(cached)
 
-        preds = factory._extract_predictions(df, result.training_result)
+        preds, strategy = factory._extract_predictions(df, result.training_result)
         assert preds is not None and len(preds) > 0, "run should produce OOF predictions"
+        # Single model, no ensemble: the deployed model's out-of-fold signals
+        assert strategy == "oof:xgboost_h5"
         preds = preds.rename(columns={"datetime": "timestamp"})
 
         prices = df[["open", "high", "low", "close", "volume"]].copy()
@@ -211,6 +213,9 @@ class TestFactoryRunCompletes:
         assert result.backtest_metrics["barrier_cost_in_atr"] == pytest.approx(label_cost)
         assert result.backtest_metrics["signal_delay_bars"] == 1
         assert "n_halts" in result.backtest_metrics
+        # The metrics name what was replayed and whose barriers were used
+        assert result.backtest_metrics["strategy"] == "oof:xgboost_h5"
+        assert result.backtest_metrics["horizon"] == 5
 
     def test_output_artifacts_exist(
         self, first_run: tuple[ExperimentConfig, ExperimentResult, MLFactory]

@@ -20,6 +20,7 @@ from src.validation.deflated_sharpe import (
     is_sharpe_like_metric,
 )
 
+from .early_stopping_split import carve_early_stopping_split
 from .param_spaces import (
     PARAM_SPACES,
     get_max_leaves_for_depth,
@@ -55,9 +56,18 @@ class TimeSeriesOptunaTuner:
         variance_penalty: float = _DEFAULT_VARIANCE_PENALTY,
         max_samples: int = _DEFAULT_MAX_SAMPLES,
         timeout: int | None = None,
+        purge_bars: int | None = None,
     ) -> None:
+        """
+        Args:
+            purge_bars: Bars dropped between a fold's fit rows and its
+                early-stopping tail (default: ``cv.config.purge_bars``).
+        """
         self.model_name = model_name
         self.cv = cv
+        if purge_bars is None:
+            purge_bars = getattr(getattr(cv, "config", None), "purge_bars", 0)
+        self.purge_bars = int(purge_bars or 0)
         self.n_trials = n_trials
         self.direction = direction
         self.metric = metric
@@ -117,6 +127,7 @@ class TimeSeriesOptunaTuner:
         # purge/embargo becomes ~2 real bars on 1.6M rows.
         max_samples = self.max_samples
         original_n = X.shape[0] if isinstance(X, np.ndarray) else len(X)
+        stride = 1
         if original_n > max_samples:
             stride = max(1, original_n // max_samples)
             sub_indices = np.arange(0, original_n, stride)[:max_samples]
@@ -201,7 +212,18 @@ class TimeSeriesOptunaTuner:
         else:
             self._precomputed_splits = list(self.cv.split(X, y, label_spans=label_spans))
 
-        # A fold whose train or validation labels hold fewer than two classes
+        # Early stopping (boosting rounds, best-epoch restore) selects on a
+        # purged tail of each fold's TRAIN rows, never on the scored fold —
+        # a trial stopped on the rows it is scored on is optimistic. After
+        # strided subsampling one sample spans `stride` bars (ceil: never
+        # under-purge).
+        es_purge = -(-self.purge_bars // stride)
+        fold_plans = [
+            (carve_early_stopping_split(train_idx, es_purge), val_idx)
+            for train_idx, val_idx in self._precomputed_splits
+        ]
+
+        # A fold whose fit or scored labels hold fewer than two classes
         # carries no hyperparameter signal: a constant predictor scores a
         # perfect F1 on it, so the trial would look like the best one found.
         # Labels are fixed across trials, so the check runs once; every trial
@@ -209,15 +231,19 @@ class TimeSeriesOptunaTuner:
         y_arr = np.asarray(y)
         degenerate_folds = [
             fold_idx
-            for fold_idx, (train_idx, val_idx) in enumerate(self._precomputed_splits)
-            if np.unique(y_arr[train_idx]).size < 2 or np.unique(y_arr[val_idx]).size < 2
+            for fold_idx, (es_split, val_idx) in enumerate(fold_plans)
+            if np.unique(y_arr[es_split.fit_idx]).size < 2 or np.unique(y_arr[val_idx]).size < 2
         ]
         worst_value = float("-inf") if self.direction == "maximize" else float("inf")
         if degenerate_folds:
             logger.warning(
                 f"  Degenerate labels: folds {degenerate_folds} have fewer than 2 classes "
-                f"in train or validation — every trial scores {worst_value}"
+                f"in their fit or scored rows — every trial scores {worst_value}"
             )
+
+        # Rank-agnostic arrays, indexed by sample (axis 0)
+        X_arr = X if isinstance(X, np.ndarray) else X.to_numpy()
+        w_arr = np.asarray(sample_weights) if sample_weights is not None else None
 
         def objective(trial: optuna.Trial) -> float:
             params = self._sample_params(trial, param_space)
@@ -225,29 +251,12 @@ class TimeSeriesOptunaTuner:
                 return worst_value
 
             scores = []
-            for fold_idx, (train_idx, val_idx) in enumerate(self._precomputed_splits):
-                # Rank-aware data indexing
-                if data_rank >= 3 and isinstance(X, np.ndarray):
-                    # 3D/4D: X is ndarray, index by sample axis (axis 0)
-                    X_train = X[train_idx]
-                    X_val = X[val_idx]
-                    y_train = (
-                        y[train_idx] if isinstance(y, np.ndarray) else y.iloc[train_idx].values
-                    )
-                    y_val = y[val_idx] if isinstance(y, np.ndarray) else y.iloc[val_idx].values
-                else:
-                    # 2D: X is DataFrame
-                    X_train = X.iloc[train_idx].values
-                    X_val = X.iloc[val_idx].values
-                    y_train = y.iloc[train_idx].values
-                    y_val = y.iloc[val_idx].values
-
-                w_train = None
-                if sample_weights is not None:
-                    if isinstance(sample_weights, np.ndarray):
-                        w_train = sample_weights[train_idx]
-                    else:
-                        w_train = sample_weights.iloc[train_idx].values
+            for fold_idx, (es_split, val_idx) in enumerate(fold_plans):
+                fit_idx, es_idx = es_split.fit_idx, es_split.es_idx
+                X_train, y_train = X_arr[fit_idx], y_arr[fit_idx]
+                X_es, y_es = X_arr[es_idx], y_arr[es_idx]
+                X_val, y_val = X_arr[val_idx], y_arr[val_idx]
+                w_train = w_arr[fit_idx] if w_arr is not None else None
 
                 # Train and evaluate - inject max_epochs if configured
                 model_params = dict(params)
@@ -259,10 +268,10 @@ class TimeSeriesOptunaTuner:
                 if self.max_epochs is not None:
                     fit_config["max_epochs"] = self.max_epochs
                     fit_config["early_stopping_patience"] = max(1, self.max_epochs // 2)
-                model.fit(X_train, y_train, X_val, y_val, sample_weights=w_train, config=fit_config)
+                model.fit(X_train, y_train, X_es, y_es, sample_weights=w_train, config=fit_config)
 
-                # Use configured metric instead of hardcoded val_f1
-                # score_fn takes (y_true, y_pred) and returns a score
+                # Score on the untouched fold with the configured metric
+                # (score_fn takes (y_true, y_pred) and returns a score)
                 pred_result = model.predict(X_val)
                 y_pred = pred_result.class_predictions
                 fold_score = score_fn(y_val, y_pred)
@@ -315,7 +324,7 @@ class TimeSeriesOptunaTuner:
             try:
                 from src.optimization.scoring import get_bars_per_year
 
-                n_oos = len(np.unique(np.concatenate([v for _, v in self._precomputed_splits])))
+                n_oos = len(np.unique(np.concatenate([v for _, v in fold_plans])))
                 dsr_result = compute_dsr_from_optuna_study(
                     study,
                     n_observations=n_oos,

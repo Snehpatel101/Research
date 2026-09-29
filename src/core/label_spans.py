@@ -57,6 +57,29 @@ def label_end_positions(labels: np.ndarray, bars_to_hit: np.ndarray) -> np.ndarr
     return np.where(labels == INVALID_LABEL, NO_LABEL_END, ends).astype(np.int64)
 
 
+def frame_label_ends(df: pd.DataFrame, label_column: str) -> np.ndarray | None:
+    """Per-row label-end positions from the column paired with ``label_column``.
+
+    Returns None when ``df`` has no such column. Missing values become
+    ``NO_LABEL_END``. Raises when an end precedes its own row (positions of a
+    different frame, e.g. not re-mapped after rows were dropped).
+    """
+    column = label_end_column(label_column)
+    if column not in df.columns:
+        return None
+    values = df[column].to_numpy()
+    if np.issubdtype(values.dtype, np.floating):
+        values = np.where(np.isnan(values), NO_LABEL_END, values)
+    ends = values.astype(np.int64)
+    known = ends >= 0
+    if np.any(ends[known] < np.flatnonzero(known)):
+        raise ValueError(
+            f"'{column}' holds positions before their own row; label ends must be "
+            "row positions of this DataFrame (re-map them after dropping rows)"
+        )
+    return ends
+
+
 def remap_label_ends(ends: np.ndarray, kept_rows: np.ndarray) -> np.ndarray:
     """Re-express label-end positions after rows were dropped.
 
@@ -229,6 +252,7 @@ __all__ = [
     "NO_LABEL_END",
     "LabelSpans",
     "average_uniqueness",
+    "frame_label_ends",
     "label_end_column",
     "label_end_positions",
     "remap_label_ends",

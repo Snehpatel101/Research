@@ -52,6 +52,8 @@ class DataPreparer:
         df: pd.DataFrame,
         model_name: str,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
+        label_column: str = "label",
+        apply_scaling: bool = True,
     ) -> PreparedData:
         """
         Prepare data for a specific model.
@@ -60,16 +62,22 @@ class DataPreparer:
             df: Raw OHLCV DataFrame
             model_name: Name of the model to prepare data for
             additional_dfs: Optional additional timeframe DataFrames
+            label_column: Target column (``label_h{horizon}`` for a horizon's
+                model); its label-end column drives purging and weights
+            apply_scaling: Fit a scaler on the train split (False hands back
+                unscaled features for callers that scale per fold/window)
 
         Returns:
             PreparedData ready for training
         """
-        logger.debug(f"Preparing data for model: {model_name}")
+        logger.debug(f"Preparing data for model: {model_name} (target {label_column})")
 
         prepared = self._data_prep.prepare(
             df=df,
             model_name=model_name,
             additional_dfs=additional_dfs,
+            label_column=label_column,
+            apply_scaling=apply_scaling,
         )
 
         logger.debug(f"  Data prepared: {prepared.summary()}")

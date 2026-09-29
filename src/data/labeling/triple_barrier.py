@@ -78,6 +78,10 @@ class TripleBarrierConfig:
         apply_transaction_costs: If True, adjust upper barrier for costs.
         symbol: Trading symbol for cost lookup (e.g., 'MES').
         volatility_regime: 'low_vol' or 'high_vol' for slippage estimation.
+        cost_calibration_fraction: Leading share of the rows whose median ATR
+            converts the price cost into ATR units. Pass the training split's
+            share (``train_ratio``) so validation/test volatility never shapes
+            the training labels; 1.0 uses every row.
 
     Example:
         config = TripleBarrierConfig(
@@ -100,6 +104,7 @@ class TripleBarrierConfig:
     apply_transaction_costs: bool = True
     symbol: str = "MES"
     volatility_regime: str = "low_vol"
+    cost_calibration_fraction: float = 1.0
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -113,6 +118,11 @@ class TripleBarrierConfig:
             raise ValueError(f"atr_period must be at least 1, got {self.atr_period}")
         if self.vol_lookback < 1:
             raise ValueError(f"vol_lookback must be at least 1, got {self.vol_lookback}")
+        if not 0 < self.cost_calibration_fraction <= 1:
+            raise ValueError(
+                "cost_calibration_fraction must be in (0, 1], got "
+                f"{self.cost_calibration_fraction}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
@@ -127,6 +137,7 @@ class TripleBarrierConfig:
             "apply_transaction_costs": self.apply_transaction_costs,
             "symbol": self.symbol,
             "volatility_regime": self.volatility_regime,
+            "cost_calibration_fraction": self.cost_calibration_fraction,
         }
 
     @classmethod
@@ -490,7 +501,7 @@ else:
 #   distance_down = (k_down + cost_in_atr) * ATR
 #
 # cost_in_atr is the round-trip cost in PRICE units (ticks * tick_size, not
-# tick_value dollars) divided by the dataset's median ATR.
+# tick_value dollars) divided by the median ATR of the training rows.
 
 
 def transaction_cost_in_price(symbol: str, volatility_regime: str = "low_vol") -> float:
@@ -511,9 +522,11 @@ def transaction_cost_in_price(symbol: str, volatility_regime: str = "low_vol") -
 def cost_in_atr_units(cost_in_price: float, atr_values: np.ndarray) -> float:
     """Express a price-unit cost in ATR units using the median valid ATR.
 
-    The global median is intentional: a training-time calibration that turns a
-    fixed price cost into one ATR multiple for the whole dataset (an expanding
-    median would bias early samples with larger cost adjustments).
+    One median over the calibration rows is intentional: a training-time
+    calibration that turns a fixed price cost into one ATR multiple for the
+    whole dataset (an expanding median would bias early samples with larger
+    cost adjustments). Pass only training rows' ATR (the labeler does, via
+    ``cost_calibration_fraction``) so later volatility does not leak in.
     Returns 0.0 when no ATR value is valid.
     """
     atr = np.asarray(atr_values, dtype=float)
@@ -726,7 +739,9 @@ class TripleBarrierLabeler(LabelingStrategy):
         # Calculate transaction cost adjustment
         cost_in_atr = 0.0
         if self.config.apply_transaction_costs:
-            cost_in_atr = self._calculate_cost_in_atr(atr)
+            # Calibrated on the leading (training) rows only
+            n_calibration = max(1, int(len(atr) * self.config.cost_calibration_fraction))
+            cost_in_atr = self._calculate_cost_in_atr(atr[:n_calibration])
             logger.info(
                 f"  Transaction costs applied: symbol={self.config.symbol}, "
                 f"regime={self.config.volatility_regime}, cost_in_atr={cost_in_atr:.4f}"

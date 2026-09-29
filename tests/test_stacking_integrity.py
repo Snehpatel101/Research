@@ -418,7 +418,9 @@ class TestMetaLearnerHoldout:
             metadata={"row_indices": np.arange(n)},
         )
         config = SimpleNamespace(n_classes=3, purge_bars=12, meta_learner=meta)
-        deployed, metrics, base = EnsembleService()._train_meta_learner(dataset, config)  # type: ignore[arg-type]
+        deployed, metrics, base, holdout = EnsembleService()._train_meta_learner(
+            dataset, config  # type: ignore[arg-type]
+        )
 
         assert deployed is not None, metrics
         for key in ("val_f1", "val_accuracy", "macro_f1", "log_loss", "brier", "precision_long"):
@@ -431,3 +433,9 @@ class TestMetaLearnerHoldout:
         assert set(base) == {"good", "noise"}
         assert base["good"]["macro_f1"] > base["noise"]["macro_f1"]
         assert base["good"]["n_samples"] == 80
+        # Out-of-sample signals of the evaluation fit on the holdout rows (the
+        # backtest of the deployed ensemble replays these)
+        assert holdout is not None
+        np.testing.assert_array_equal(holdout["row"], np.arange(n - 80, n))
+        assert set(holdout["prediction"]) <= {-1, 0, 1}
+        assert ((holdout["confidence"] > 0) & (holdout["confidence"] <= 1)).all()

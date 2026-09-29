@@ -101,7 +101,7 @@ class ModelTrainingResult:
     #   regime: regime_trainers, detector_config, default_regime
     #   meta_labeling: primary_model, meta_model, meta_model_name, threshold
     mode_artifacts: dict[str, Any] = field(default_factory=dict)
-    # Non-metric context (ensemble: base_model_holdout_metrics)
+    # Non-metric context (ensemble: base_model_holdout_metrics, holdout_predictions)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -149,12 +149,24 @@ class TrainingRunResult:
 
     @property
     def best_model(self) -> str | None:
-        """Model with best validation F1 score."""
-        if not self.model_results:
+        """Best model of the primary horizon (``config.horizons[0]``).
+
+        Scores of different horizons are not comparable (different labels),
+        so the pick is made among the first horizon's models with the deploy
+        manifest's rule (``selection_score``); other horizons are ranked by
+        ``best_model_for``.
+        """
+        horizons = self.config.horizons
+        return self.best_model_for(horizons[0]) if horizons else None
+
+    def best_model_for(self, horizon: int) -> str | None:
+        """Key of the best-scoring model trained for ``horizon`` (None if none)."""
+        from src.models.metrics import selection_score
+
+        keys = [k for k, r in self.model_results.items() if r.horizon == horizon]
+        if not keys:
             return None
-        return max(
-            self.model_results.keys(), key=lambda k: self.model_results[k].metrics.get("val_f1", 0)
-        )
+        return max(keys, key=lambda k: selection_score(self.model_results[k].metrics))
 
     def get_metrics_summary(self) -> dict[str, dict[str, float]]:
         """Get summary of all model metrics."""
@@ -240,10 +252,10 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         self._oof_predictions: dict[str, OOFPrediction] = {}
         self._trained_models: dict[str, Any] = {}
 
-        # PreparedData cache: keyed by contract properties (rank, seq_len, feature_mode,
-        # mtf_mode, scaler, n_features) so models with identical data requirements
-        # share preparation. Biggest win: 3 boosting models (all rank 2) prepare once,
-        # reuse 3x.
+        # PreparedData cache: keyed by horizon + contract properties (rank, seq_len,
+        # feature_mode, mtf_mode, scaler, n_features) so models with identical data
+        # requirements share preparation within a horizon. Biggest win: 3 boosting
+        # models (all rank 2) prepare once, reuse 3x.
         self._prepared_cache: dict[tuple, PreparedData] = {}
 
         # Per-model feature subsets: each model gets features appropriate for its
@@ -291,53 +303,52 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
 
         return PurgedKFold(cv_config)
 
-    def _prepare_with_cache(
-        self,
-        df: pd.DataFrame,
-        model_name: str,
-        additional_dfs: dict[str, pd.DataFrame] | None = None,
-    ) -> PreparedData:
+    def _label_column(self, df: pd.DataFrame, horizon: int) -> str:
+        """Target column of ``horizon``'s models: ``label_h{horizon}``.
+
+        Every horizon trains on its own triple-barrier labels (and purges on
+        its own label-end column). A frame without per-horizon columns (a
+        caller that only built ``label``) is accepted for the first horizon
+        alone — the factory's ``label`` column is a copy of it — so a later
+        horizon can never silently train on another horizon's labels.
         """
-        Prepare data with caching by model contract properties.
+        column = f"label_h{horizon}"
+        if column in df.columns:
+            return column
+        if "label" in df.columns and horizon == self.config.horizons[0]:
+            return "label"
+        present = sorted(c for c in df.columns if c.startswith("label"))
+        raise ValueError(
+            f"No '{column}' column for horizon {horizon} (label columns: {present}); "
+            "every configured horizon needs its own label column"
+        )
 
-        Models sharing the same data rank, sequence length, feature mode,
-        MTF mode, and scaler type produce identical PreparedData, so we
-        prepare once and reuse. This mainly benefits boosting models
-        (all rank 2, identical contracts) — prepare once, reuse 3x.
+    def _prepared_cache_key(self, model_name: str, horizon: int) -> tuple:
+        """PreparedData cache key: the model's data contract plus the horizon.
 
-        Neural models with different sequence lengths or feature modes
-        get separate cache entries automatically.
-
-        Args:
-            df: Input DataFrame
-            model_name: Model name (determines contract/adapter)
-            additional_dfs: Optional additional timeframe DataFrames
-
-        Returns:
-            PreparedData (from cache if available)
+        The horizon is part of the key because each horizon prepares a
+        different target (``label_h{horizon}``) with its own label spans.
         """
         from src.core.contracts import get_model_contract
 
         contract = get_model_contract(model_name)
-        n_model_features = len(self._per_model_features.get(model_name, []))
-        cache_key = (
+        return (
+            horizon,
             contract.input_rank.value,
             contract.sequence_length,
             contract.feature_mode.value,
             contract.mtf_mode.value,
             contract.scaler_type,
-            n_model_features,
+            len(self._per_model_features.get(model_name, [])),
         )
 
-        if cache_key in self._prepared_cache:
-            logger.debug(
-                f"Cache hit for {model_name} (rank={contract.input_rank.value}, "
-                f"seq={contract.sequence_length})"
-            )
-            return self._prepared_cache[cache_key]
+    def _model_frame(self, df: pd.DataFrame, model_name: str | None) -> pd.DataFrame:
+        """``df`` restricted to ``model_name``'s selected features, as float32.
 
-        # Filter DataFrame to per-model feature subset (if computed)
-        if self._per_model_features and model_name in self._per_model_features:
+        Non-feature columns (OHLCV, labels, label ends) are kept; ``None``
+        keeps every feature column.
+        """
+        if model_name is not None and model_name in self._per_model_features:
             model_features = set(self._per_model_features[model_name])
             all_features = set(self._all_feature_names)
             drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
@@ -349,17 +360,65 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         float64_cols = df.select_dtypes(include=["float64"]).columns
         if len(float64_cols) > 0:
             df = df.astype(dict.fromkeys(float64_cols, np.float32))
+        return df
 
-        prepared = self._data_preparer.prepare(
-            df=df,
+    def _prepare_for_horizon(
+        self,
+        df: pd.DataFrame,
+        model_name: str,
+        horizon: int,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+        apply_scaling: bool = True,
+        restrict_features: bool = True,
+    ) -> PreparedData:
+        """Prepare ``model_name``'s data with ``horizon``'s labels (uncached).
+
+        ``restrict_features=False`` keeps every feature column (walk-forward
+        windows select their own features).
+        """
+        return self._data_preparer.prepare(
+            df=self._model_frame(df, model_name if restrict_features else None),
             model_name=model_name,
             additional_dfs=additional_dfs,
+            label_column=self._label_column(df, horizon),
+            apply_scaling=apply_scaling,
         )
+
+    def _prepare_with_cache(
+        self,
+        df: pd.DataFrame,
+        model_name: str,
+        horizon: int,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> PreparedData:
+        """
+        Prepare data with caching by model contract properties and horizon.
+
+        Models sharing the same data rank, sequence length, feature mode,
+        MTF mode, and scaler type produce identical PreparedData for one
+        horizon, so we prepare once and reuse. This mainly benefits boosting
+        models (all rank 2, identical contracts) — prepare once, reuse 3x.
+
+        Neural models with different sequence lengths or feature modes
+        get separate cache entries automatically.
+
+        Args:
+            df: Input DataFrame
+            model_name: Model name (determines contract/adapter)
+            horizon: Horizon whose labels (``label_h{horizon}``) are the target
+            additional_dfs: Optional additional timeframe DataFrames
+
+        Returns:
+            PreparedData (from cache if available)
+        """
+        cache_key = self._prepared_cache_key(model_name, horizon)
+        if cache_key in self._prepared_cache:
+            logger.debug(f"Cache hit for {model_name} h{horizon}")
+            return self._prepared_cache[cache_key]
+
+        prepared = self._prepare_for_horizon(df, model_name, horizon, additional_dfs)
         self._prepared_cache[cache_key] = prepared
-        logger.debug(
-            f"Cached PreparedData for {model_name} (rank={contract.input_rank.value}, "
-            f"seq={contract.sequence_length})"
-        )
+        logger.debug(f"Cached PreparedData for {model_name} h{horizon}")
         return prepared
 
     def _clear_prepared_cache(self) -> None:
@@ -548,7 +607,10 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
                 metrics=ensemble_metrics,
                 trainer=result.meta_learner,
                 training_time_seconds=result.training_time_seconds,
-                metadata={"base_model_holdout_metrics": result.base_model_holdout_metrics},
+                metadata={
+                    "base_model_holdout_metrics": result.base_model_holdout_metrics,
+                    "holdout_predictions": result.holdout_predictions,
+                },
             )
 
         return result.aligned_oof, result.stacking_dataset, ensemble_result

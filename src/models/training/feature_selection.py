@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.exceptions import PreTrainingValidationError
+from src.core.label_spans import INVALID_LABEL, LabelSpans, frame_label_ends
 from src.optimization.feature_selection.filtering import (
     filter_low_variance,
     select_decorrelated_by_rank,
@@ -60,7 +61,18 @@ class FeatureSelectionMixin:
         """Compute MDA (permutation importance) ranking for all features.
 
         Uses a lightweight RandomForest with 3-fold PurgedKFold to rank features
-        by predictive power. Returns pd.Series sorted descending, or None on failure.
+        by predictive power. Rows with an invalid label (-99) are dropped, and
+        the folds purge every training row whose label span overlaps the test
+        block (label-end column of the ranking label). Returns pd.Series sorted
+        descending, or None on failure.
+
+        ``df`` rows are positions of the labeled frame (the train-split prefix),
+        the coordinate system of its label-end columns.
+
+        The ranking label is the first configured horizon's; the resulting
+        per-model feature set is shared by every horizon of that model (one
+        selection on train-split rows only, so no horizon's evaluation data
+        is involved).
         """
         from src.optimization.feature_selection.walk_forward import (
             WalkForwardFeatureSelector,
@@ -79,7 +91,12 @@ class FeatureSelectionMixin:
                 return None
 
             cols_needed = list(feature_names) + [label_col]
-            clean_df = df[cols_needed].dropna()
+            # Complete rows with a real label (-99 = no barrier outcome, not a class)
+            usable = df[cols_needed].notna().all(axis=1).to_numpy() & (
+                df[label_col].to_numpy() != INVALID_LABEL
+            )
+            positions = np.flatnonzero(usable)
+            clean_df = df.iloc[positions][cols_needed]
 
             if len(clean_df) < 200:
                 logger.warning(
@@ -92,10 +109,15 @@ class FeatureSelectionMixin:
             # Strided (every-Nth) sampling keeps rows in temporal order; a shuffling
             # subsample would make PurgedKFold's positional purge/embargo meaningless.
             clean_df, stride = _temporal_stride_subsample(clean_df, MDA_MAX_ROWS)
+            positions = positions[::stride]
             if stride > 1:
                 logger.info(
                     f"  MDA subsampling: strided every {stride}th row → {len(clean_df):,} rows"
                 )
+            # Label spans in bar positions: exact purging after row filtering
+            # and striding (None when the frame has no label-end column)
+            label_ends = frame_label_ends(df, label_col)
+            spans = LabelSpans.from_rows(positions, label_ends) if label_ends is not None else None
 
             X = clean_df[feature_names]
             y = clean_df[label_col]
@@ -119,7 +141,7 @@ class FeatureSelectionMixin:
                 embargo_bars=mda_embargo,
             )
             mda_cv = PurgedKFold(mda_cv_config)
-            cv_splits = list(mda_cv.split(X, y))
+            cv_splits = list(mda_cv.split(X, y, label_spans=spans))
 
             selector = WalkForwardFeatureSelector(
                 n_features_to_select=len(feature_names),
@@ -587,7 +609,12 @@ class FeatureSelectionMixin:
             base_predictions: dict[str, np.ndarray] = {}
             base_probabilities: dict[str, np.ndarray] = {}
 
+            # Only the ensemble's own members (one horizon): other horizons'
+            # OOF predict different labels
+            members = set(getattr(aligned_oof, "model_names", None) or self._oof_predictions)
             for model_key, oof in self._oof_predictions.items():
+                if model_key not in members:
+                    continue
                 if oof is not None and hasattr(oof, "predictions"):
                     # Extract class predictions and probabilities as numpy arrays
                     class_preds = oof.get_class_predictions()

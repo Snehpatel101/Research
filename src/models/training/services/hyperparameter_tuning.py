@@ -105,6 +105,7 @@ class HyperparameterTuningService:
             metric=request.scoring,
             max_epochs=request.max_epochs,
             timeout=request.optuna_timeout,
+            purge_bars=cv_config.purge_bars,
         )
 
         X_train = request.prepared_data.X_train
