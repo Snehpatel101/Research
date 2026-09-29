@@ -4,9 +4,57 @@
 
 ---
 
+## Phase 116: Correctness Audit + Repo Hygiene | 2026-09-29 | COMPLETE
+
+**Impact:** Four parallel research audits (financial-ML validation per López de Prado, stacking/calibration literature, reference implementations of every neural architecture, Python tooling practice) found defects that made results optimistic or meaningless while everything still "passed". Every confirmed defect was reproduced, fixed in an isolated worktree, pinned by a regression test and merged; the full mix-and-match matrix was then rerun on the final code (MATRIX2_RESULTS). Suite: ~830 tests, ruff + black + pyright (0 errors) + vulture clean, new uv-based CI.
+
+### Correctness fixes (before → after)
+
+| # | Defect | Evidence | Fix |
+|:-:|--------|----------|-----|
+| 1 | **Backtest filled at the open of the bar whose close produced the signal** (MIDPOINT too) | Random-walk signal `sign(close-open)` earned **+$71k** gross | Fills at bar i+1 (`signal_delay_bars`), stops only after the fill, mark-to-market at close → **−$9.3k** (costs/adverse selection) |
+| 2 | **Circuit breakers ended the whole simulation** | 30k random bars → 6 trades, 17 equity points | Breakers pause until next session / cool-off → 812 trades, 30k equity points, halts recorded |
+| 3 | **Label cost in dollars, not price points** (ticks × tick_value) | MES barriers 5× too wide (MGC 10×, MNQ 2×); 57.6% neutral labels | ticks × tick_size; one helper shared by labels and backtest barriers ((k + cost)·ATR) |
+| 4 | **"Clustered MDA" ignored the target** (importance = 1/cluster size) | True signal ranked 22nd of 32, behind pure noise | Joint-permutation clustered MDA on held-out folds, signed-correlation clusters, log-loss scoring → signal ranks 1–2, noise ≈ 0 |
+| 5 | MDA subsample shuffled rows before purged CV | Non-monotonic index → purge/embargo meaningless | Temporal strided subsample; gaps scaled by stride |
+| 6 | **OOF fold models early-stopped on the fold they predicted** (all ranks, walk-forward, CLI CPCV) | Meta-learner trained on optimistic OOF | Early-stopping set = purged tail of the fold's train rows |
+| 7 | **Label-overlap purging silently a no-op** without a DatetimeIndex (every factory run) | 90 overlapping train rows leaked vs 0 | Label spans `[i, i+bars_to_hit]` on integer positions through OOF, tuner, meta-labeling CV, walk-forward; raises if unusable |
+| 8 | Purge not tied to label span; embargo fixed at 1440 bars at any bar size | H20 purge 20 < 50-bar span; 1h bars → 60-day embargo | Derived: purge = max barrier `max_bars`, embargo = 1 day of bars (capped at 25% of a fold) |
+| 9 | No sample-uniqueness weighting | overlapping labels counted as independent | AFML average-uniqueness weights (default `training.sample_weighting="uniqueness"`) |
+| 10 | Meta-labeling not per AFML | trained on neutral==neutral "correct" rows | Sided rows only, meta_y = side paid off, primary probabilities as meta features, same builder at serving |
+| 11 | `mlp_meta` fit on train+val and reported in-sample "val" metrics | — | Fit on train, temporal early stopping on val |
+| 12 | `ridge_meta` softmaxed RidgeClassifier margins | acc 1.0 with mean confidence 0.76 | L2 multinomial logistic (true probabilities), priors kept |
+| 13 | Meta holdout unpurged, deployed meta-learner never saw the last 20% | — | Purged holdout for evaluation; uniform holdout metrics for meta + every base model; refit on all OOF rows |
+| 14 | Neural train metrics computed on a shuffled loader | GRU reported 0.433 vs 0.54 actual | Unshuffled evaluation loader |
+| 15 | PatchTST never saw the newest 4 bars (unfold remainder) | output unchanged by bars 56–59 | End replication padding (reference `padding_patch='end'`), RevIN |
+| 16 | TCN/Transformer mean-pooled over time; Transformer causal but documented non-causal | — | Last-step heads; docs/flags consistent |
+| 17 | iTransformer load() broke on compiled checkpoints; accessors failed on compiled models | — | Base save/load, `_unwrapped_model()`; iTransformer `use_norm` per reference |
+| 18 | OOM restart reset LR to warmup 0; fp32 fallback kept stale history | — | `WarmupCosineSchedule` by epoch position; full reset on fp32 restart |
+| 19 | DSR was not Bailey–López de Prado (trial-Sharpe moments, no T, Sharpe units) | — | PSR/DSR exact (matches paper example 0.9004), gate at 0.95 |
+| 20 | PBO partitioned CPCV splits; CLI used fabricated ±1% returns | — | CSCV over a T×N matrix of real per-bar strategy returns net of costs; CPCV φ-path assembly |
+| 21 | Contract sequence lengths ignored in standard mode (DECISIONS #4) | TCN windowed at 60 < its needs | Per-model contract lengths everywhere (TCN 64, Transformer 128); `seq_len` is an optional override |
+| 22 | Live tuner scored single-class labels 1.0; default metric `"f1"` unsupported; logistic space paired L1 with lbfgs | tuning crashed / applied garbage params | -inf for degenerate folds, `f1_weighted`, saga + `l1_ratio` space |
+| 23 | Calibration/conformal label heuristics broke binary mode | IndexError on binary conformal | Canonical `map_labels_to_classes`; isotonic only with ≥1000 samples/class; finite-sample conformal quantile |
+| 24 | `argmax - 1` label mapping on 5 inference/ensemble paths | wrong labels in binary mode | `map_classes_to_labels` |
+
+### Repo hygiene
+
+- **Deleted dead code:** serving/monitoring chain (2,568 lines, DECISIONS #1), legacy `AdapterResult` + phantom `TrainingResult` (#6/#7), aspirational config layer + dead global.yaml sections (3,882 lines, #8/#9), unused ensemble modules (second_level, heterogeneous_stacking, meta_selection, meta_base), DEADCODE_RESULTS.
+- **Config honesty:** `ExperimentConfig` fields that never reached the pipeline were wired (splits, calibration, verbose) or removed; `from_dict` warns on and ignores unknown keys.
+- **Reproducibility:** seeded `np.random.default_rng` everywhere (ruff NPY rules on), one global seeder (`set_all_seeds`), CLI report no longer uses simulated prices.
+- **Tooling:** Python 3.11 targets (black/ruff/pyright), CI on uv with CPU torch (ruff, black, pyright, vulture, `pytest -m "not slow" -n auto`; weekly slow job), `slow` marker, Makefile `check`/`matrix` targets, pre-commit, `uv.lock` regenerated.
+
+### Left for the user
+
+- **5-D Optuna island (DECISIONS #5):** deletion prepared on branch `worktree-agent-aeee8a73f7ed7b404`; the auto-mode permission check blocked removing the files, so it was not merged (its live-tuner fix was ported).
+- **Second data pipeline:** `ml data` / `ml train` / `ml cv` run a separate 12-stage PipelineRunner (~17k lines, own config class) that MLFactory does not use and that currently stops at its post-scaling schema check — fix, re-point at MLFactory, or delete (DECISIONS #13).
+- `DIRECTION.md` still describes the deleted server/monitoring chain (edits to it require approval per CLAUDE.md).
+
+---
+
 ## Phase 115: Mix-and-Match Every Model | 2026-09-29 | COMPLETE
 
-**Impact:** Every base model (16), stacking meta-learner (5) and training mode (4) can now be combined freely and runs the full product path — features → labels → per-model selection → training → OOF → stacking ensemble → backtest → bundles → deploy → reload → `predict_from_raw` — with the deployed bundle **proven** to reproduce the trained model (prediction parity on the validation split). Verified by the new `scripts/mix_match.py` matrix (MATRIX_RESULTS) and 27 new tests; full suite, ruff, black and pyright (0 errors) clean. Also verified on real MES 1-minute data (native 1-min and resampled to 5-min).
+**Impact:** Every base model (16), stacking meta-learner (5) and training mode (4) can now be combined freely and runs the full product path — features → labels → per-model selection → training → OOF → stacking ensemble → backtest → bundles → deploy → reload → `predict_from_raw` — with the deployed bundle **proven** to reproduce the trained model (prediction parity on the validation split). Verified by the new `scripts/mix_match.py` matrix (first full run: solo 16/16 and every pair completed passed; the complete matrix was rerun on the Phase 116 code — see above) and 27 new tests; full suite, ruff, black and pyright (0 errors) clean. Also verified on real MES 1-minute data (native 1-min and resampled to 5-min).
 
 ### Correctness fixes (all were silent — no error, wrong results)
 

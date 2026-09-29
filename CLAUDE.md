@@ -86,15 +86,17 @@ Raw OHLCV → Pipeline (12 stages) → Features + Labels → Adapters → Models
 
 ### Model Support
 
-All 12 models are production-ready:
+All 16 base models mix and match (any subset × 5 meta-learners × 4 training modes; see README.md):
 
 | Category | Models |
 |----------|--------|
 | **Boosting** | XGBoost, LightGBM, CatBoost |
+| **Classical** | Random Forest, Logistic, SVM |
 | **Neural RNN** | LSTM, GRU |
 | **Neural CNN** | TCN, InceptionTime, 1D ResNet |
-| **Transformer** | PatchTST, iTransformer, TFT |
+| **Transformer** | Transformer, PatchTST, iTransformer, TFT |
 | **MLP** | N-BEATS |
+| **Meta-learners** | ridge_meta, xgboost_meta, mlp_meta, calibrated_meta, voting_meta |
 
 ---
 
@@ -113,8 +115,14 @@ ruff check src/ --fix  # Auto-fix what's possible
 black src/
 black --check src/  # Check without modifying
 
-# Type checking (informational - many false positives from stubs)
-mypy src/ --ignore-missing-imports
+# Type checking (required - 0 errors)
+pyright
+
+# Dead code (required - clean at min_confidence 80, config in pyproject)
+vulture
+
+# Everything CI runs
+make check
 ```
 
 ### Standards
@@ -123,7 +131,8 @@ mypy src/ --ignore-missing-imports
 |------|---------|--------|
 | **ruff** | Linting + import sorting | `pyproject.toml` |
 | **black** | Code formatting | Default settings |
-| **mypy** | Type checking | Ignore missing imports |
+| **pyright** | Type checking (0 errors) | `pyrightconfig.json` |
+| **vulture** | Dead code | `[tool.vulture]` in `pyproject.toml` |
 
 ### Before Every Commit
 
@@ -628,6 +637,17 @@ src/
 - `data.bar_timeframe` resampling; `training.regime` / `training.meta_labeling` config sections; CLI `--meta-learner --bar-timeframe --purge-bars --embargo-bars`
 - Dev env: `uv venv .venv` (Python 3.11, CPU torch, pandas 3); run black via `uv tool run --python 3.12 black` (py312 target)
 - See COMPLETION.md Phase 115 for the full list
+
+**Phase 116: COMPLETE — Correctness Audit + Repo Hygiene (2026-09-29)**
+- Research-driven audit (AFML/López de Prado, stacking + calibration literature, neural reference repos, tooling practice); 24 confirmed defects fixed, each reproduced and pinned by a test
+- Backtest: no same-bar lookahead (fills at bar i+1), breakers pause instead of ending the run, label/backtest barrier + cost parity (cost in price units, was 5× too large for MES)
+- Leakage: OOF early stopping on a purged train tail (never the predicted fold), label-span purging on integer positions (was a silent no-op), derived purge (label span) / embargo (1 day of bars), uniqueness weights, AFML meta-labeling
+- Feature selection: target-aware clustered MDA (was 1/cluster-size), temporal subsample, log-loss scoring, rank-ordered decorrelation
+- Stacking: ridge_meta = L2 multinomial logistic, mlp_meta out-of-sample, purged meta holdout + uniform metrics + refit on all OOF; binary-safe calibration/conformal
+- Neural: aligned train metrics, PatchTST padding + RevIN, iTransformer use_norm, TCN/Transformer last-step heads, compile-safe load, per-model contract sequence lengths (DECISIONS #4)
+- Stats: exact PSR/DSR, CSCV PBO, CPCV path assembly
+- Deleted dead code (serving chain, config layer, phantom types, verified dead modules); DECISIONS #1/#4/#6/#7/#8/#9/#12 resolved; #5 prepared on a branch (blocked by permission check), #13 (second PipelineRunner pipeline) opened
+- Tooling: py311 targets, uv CI (ruff, black, pyright, vulture, `pytest -m "not slow"`), Makefile `check`/`matrix`, pre-commit, ruff NPY rules
 
 **See CLEANUP_PLAN.md for full phase details.**
 

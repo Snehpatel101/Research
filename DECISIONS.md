@@ -128,6 +128,13 @@ metric comparison on a reference dataset.
 
 ## 5. The 5-dimension Optuna island — keep, wire, or delete (~3,500 lines)
 
+> **Phase 116 status:** deletion + behavioral replacement tests are prepared on
+> branch `worktree-agent-aeee8a73f7ed7b404` (commit 8c22b29). Merging it was
+> blocked by the session's auto-mode permission check on removing the files, so
+> it awaits your go-ahead (`git merge worktree-agent-aeee8a73f7ed7b404`, keep the
+> deletions). The one live bug it found — the live tuner scored single-class
+> labels as a perfect 1.0 — was fixed and ported separately.
+
 **What:** `src/optimization/five_dimension_objective.py`, `hyperparameters.py`,
 `base_feature_sets.py`, `artifact_saver.py`. Zero live consumers — the live
 tuner is `TimeSeriesOptunaTuner` in `src/validation/cv/`. The island survives
@@ -296,6 +303,10 @@ worth a dedicated phase.
 
 ## 12. Python environment: adopt uv or drop the lockfile
 
+> **RESOLVED in Phase 116 (2026-09-29):** option A — `uv venv .venv`
+> (Python 3.11, CPU torch), `uv.lock` regenerated against pyproject, CI installs
+> with uv (`.github/workflows/ci.yml`), `make install` uses uv.
+
 > **Phase 115 note:** development/verification now runs in `uv venv .venv`
 > (Python 3.11, CPU torch, pandas 3.0) — no apt/pip shadowing issues were hit.
 > `uv.lock` itself was not regenerated; that part of the decision is still open.
@@ -316,6 +327,30 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 
 ---
 
+## 13. Second data pipeline behind `ml data` / `ml train` / `ml cv`
+
+**What:** `src/data/pipeline/runner.py` (PipelineRunner) runs a separate 12-stage
+pipeline (ingest → clean → features → labeling → GA/Optuna barrier search →
+final labels → splits → scaling → datasets → validation → reporting) with its
+own config class (`DataConfig`) and writes parquet splits that the CLI
+`ml train model|ensemble`, `ml cv`, `walk-forward` and `cpcv-pbo` commands
+consume via `TimeSeriesDataContainer.from_parquet_dir`. `MLFactory` (the path
+the notebooks, `ml run`, README and the mix-and-match matrix use) shares only
+the feature code with it. ~17k lines are runner-only. A Phase 116 smoke run
+stopped at the post-`feature_scaling` schema check (10 NaN cells); no test runs
+it end to end.
+
+**Options:**
+- **A. Re-point** the CLI train/cv commands at `MLFactory` artifacts and delete
+  the runner stack (one pipeline, one config class).
+- **B. Fix and test** the runner as a supported second path (add an e2e test).
+- **C. Delete** the runner and its CLI commands outright.
+
+**Recommendation:** A — two pipelines with two config classes is how
+train/serve and label/backtest drift keeps reappearing.
+
+---
+
 ## Quick-reference matrix
 
 | # | Decision | Default if you do nothing | Recommended | Effort |
@@ -324,14 +359,15 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 | 2 | Special-mode bundles | ✅ Resolved (Phase 115) | — | — |
 | 3 | Governance modules | Tests-only forever | Wire lifecycle+registry, park rest | 1–2 days |
 | 4 | Contract seq_len | ✅ Resolved (Phase 116) | — | — |
-| 5 | 5-D Optuna island | Dead code pinned by tests | Delete + replacement test | ~0.5 day |
+| 5 | 5-D Optuna island | Dead code pinned by tests | Merge prepared branch (needs your OK) | minutes |
 | 6 | Dual AdapterResult | ✅ Resolved (Phase 116) | — | — |
 | 7 | Core TrainingResult | ✅ Resolved (Phase 116) | — | — |
 | 8 | to_*_config methods | ✅ Resolved (Phase 116) | — | — |
 | 9 | Dead config layer/yaml | ✅ Resolved (Phase 116) | — | — |
 | 10 | Import SCC | 4–5s imports, GPU-stack coupling | Staged lazy break | 3–5 days |
 | 11 | Source-grep tests | Documentation-grade tests stay | Replace opportunistically | rolling |
-| 12 | uv adoption | Stale lockfile | Adopt uv venv | ~2 h |
+| 12 | uv adoption | ✅ Resolved (Phase 116: uv venv, lock regenerated, CI on uv) | — | — |
+| 13 | Second data pipeline | Broken parallel pipeline stays | Re-point CLI at MLFactory, delete runner | 2–3 days |
 
 ---
 

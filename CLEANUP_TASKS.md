@@ -1,9 +1,30 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 115 complete (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
+**Status:** All phases through 116 complete (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
 **Last Updated:** 2026-09-29
 
 ---
+
+## Phase 116: Correctness Audit + Repo Hygiene — COMPLETE (2026-09-29)
+
+| # | Task | Location | Status |
+|:-:|------|----------|:------:|
+| 1 | Backtest: signal at bar i fills at i+1 (open/midpoint); stops only after fill; breakers pause, full period simulated; halt events | `src/inference/backtesting/{backtest,execution,equity_curve}.py`, `tests/test_backtest_realism.py` | ✅ |
+| 2 | Label cost in price units (ticks × tick_size); one cost/barrier helper shared with backtest | `src/data/labeling/triple_barrier.py`, `src/factory.py` | ✅ |
+| 3 | OOF early stopping on purged tail of fold train rows (2D/3D/4D, walk-forward, CLI CPCV) | `src/validation/cv/early_stopping_split.py`, `oof_core.py`, `oof_sequence.py`, `oof_generation.py` | ✅ |
+| 4 | Meta-learners: ridge_meta = L2 multinomial logistic; mlp_meta temporal early stopping; purged meta holdout, uniform metrics, refit on all OOF | `src/models/ensemble/`, `ensemble_service.py`, `src/models/metrics.py`, `tests/test_stacking_integrity.py` | ✅ |
+| 5 | Calibration/conformal: canonical label mapping (binary-safe), isotonic ≥1000/class, finite-sample conformal quantile | `src/models/calibration/` | ✅ |
+| 6 | Neural: aligned train metrics, PatchTST end padding + RevIN, iTransformer use_norm, TCN/Transformer last-step heads, compile-safe load/accessors, OOM restart state, N-BEATS per-block basis, TFT mask semantics | `src/models/neural/`, `tests/test_neural_fidelity.py` | ✅ |
+| 7 | DSR/PSR per Bailey & LdP; CSCV PBO; CPCV φ-path assembly + label purge | `src/validation/deflated_sharpe.py`, `cv/pbo.py`, `cv/cpcv.py`, `cli/commands/evaluate.py`, `tests/test_overfitting_stats.py` | ✅ |
+| 8 | Clustered MDA (joint permutation, signed-corr clusters, log-loss), temporal subsample, rank-ordered decorrelation | `src/optimization/feature_selection/{walk_forward,filtering}.py`, `src/models/training/feature_selection.py`, `tests/test_feature_selection_integrity.py` | ✅ |
+| 9 | Label spans + purging on positions; derived purge (max_bars) / embargo (1 day of bars); uniqueness weights; AFML meta-labeling (sided rows, primary probs as features) | `src/core/label_spans.py`, `cv/purged_kfold.py`, `config/experiment.py`, `training_ops.py`, `meta_labeling_bundle.py`, `tests/test_label_overlap.py` | ✅ |
+| 10 | Per-model contract sequence lengths (DECISIONS #4) | `src/core/config.py::sequence_length_for`, `adapters/preparation.py` | ✅ |
+| 11 | Live tuner: degenerate labels → -inf, valid default metric, logistic space | `src/validation/cv/{cv_tuner,param_spaces}.py`, `tests/test_tuner_degenerate_labels.py` | ✅ |
+| 12 | Binary-safe class→label mapping on every prediction path | `src/inference/{batch,orchestrator,pipeline,universal_pipeline}.py`, `src/models/ensemble/orchestrator.py` | ✅ |
+| 13 | Delete dead serving/monitoring chain, legacy AdapterResult, phantom TrainingResult (DECISIONS #1/#6/#7) | `src/inference/server.py`, `src/validation/monitoring/`, `src/core/interfaces.py` | ✅ |
+| 14 | Shrink config surface to what runs; from_dict ignores unknown keys with a warning (DECISIONS #8/#9) | `src/config/`, `config/global.yaml` | ✅ |
+| 15 | Dead-code sweep from verified map | see COMPLETION.md | ✅ |
+| 16 | Tooling: py311 targets, uv CI (ruff/black/pyright/vulture/fast tests), slow marker, Makefile, pre-commit, NPY rules, uv.lock | `pyproject.toml`, `.github/workflows/ci.yml`, `Makefile`, `.pre-commit-config.yaml` | ✅ |
 
 ## Phase 115: Mix-and-Match Every Model — COMPLETE (2026-09-29)
 
@@ -119,19 +140,17 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 114 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 116 are complete. See COMPLETION.md for full details.
 
-### Open Decisions (Phase 116+ candidates, pending user — see DECISIONS.md)
+### Open Decisions (pending user — see DECISIONS.md)
 
 | # | Item | Notes |
 |:-:|------|-------|
-| 1 | Serving/monitoring chain | `src/inference/server.py` + `validation/monitoring` — unreachable, server has known crashes; wire or delete |
-| 2 | ~~Phase 52 special-mode bundles~~ | ✅ Resolved in Phase 115 (regime + meta-labeling wired, walk-forward bundle deleted) |
 | 3 | Phase 99-102 governance modules | Tests-only; wire into pipeline or move to experimental |
-| 4 | ModelContract `sequence_length` not honored in standard mode | C4 — contract 64/128 vs config 60, cross-mode inconsistency |
-| 5 | 5d-optimization island | `five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver` — tests-only |
-| 6 | Core `AdapterResult` + `TrainingResult` duplicate-class consolidation | Related to the "Dual AdapterResult" documented exception in CLAUDE.md |
-| 7 | `ExperimentConfig.to_trainer_config`/`to_backtest_config`/`to_bundle_config` | Zero callers — adopt or delete |
+| 5 | 5d-optimization island | Deletion prepared on branch `worktree-agent-aeee8a73f7ed7b404`; the auto-mode permission check blocked the file removal, so it needs your go-ahead |
+| 10 | Import SCC | Staged lazy break of facade re-exports |
+| 13 | Second data pipeline | `ml data`/`resume` PipelineRunner (~17k lines, own config class, currently fails its post-scaling schema check) feeds `ml train`/`ml cv`; MLFactory does not use it — fix, re-point CLI at MLFactory, or delete |
+
 
 ---
 

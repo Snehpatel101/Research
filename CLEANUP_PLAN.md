@@ -1,7 +1,38 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 115 COMPLETE (Mix-and-Match Every Model). Phase 114 COMPLETE (Repository Rehabilitation). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
+**Status:** Phase 116 COMPLETE (Correctness Audit + Repo Hygiene). Phase 115 COMPLETE (Mix-and-Match Every Model). Phase 114 COMPLETE (Repository Rehabilitation). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
 **Last Updated:** 2026-09-29
+
+---
+
+## Phase 116: Correctness Audit + Repo Hygiene — COMPLETE (2026-09-29)
+
+**Goal:** make every mix-and-match result *trustworthy*, not just runnable:
+research-driven audit (López de Prado purged CV / labeling / meta-labeling,
+stacking + calibration literature, reference implementations of every neural
+architecture, current Python tooling practice), then fix every confirmed defect
+behind a regression test, and shrink the tree to what runs.
+
+```
+labels ──► label spans [i, i+bars_to_hit] ──► purging on POSITIONS (any index type), derived purge/embargo,
+       │                                      average-uniqueness sample weights
+       └─► cost in PRICE units (ticks × tick_size) ─── same helper ──► backtest barriers (k + cost)·ATR
+features ─► target-aware clustered MDA (joint permutation, log-loss) ─► greedy rank-ordered decorrelation
+models ──► contract sequence lengths per model; fixed neural heads/padding/metrics
+OOF ─────► early stopping on a purged tail of the fold's TRAIN rows (never the predicted fold)
+stacking ► purged meta holdout ─► uniform holdout metrics (meta + every base) ─► refit on all OOF rows
+backtest ► fills at bar i+1 (no same-bar lookahead), breakers pause instead of ending the run
+stats ───► PSR/DSR (Bailey & LdP 2014), CSCV PBO, CPCV path assembly
+```
+
+**Rationale:** Phase 115 proved every combination *runs* and deploys identically;
+the audit showed several results were optimistic or meaningless (same-bar fills
+earned money on a random walk, feature ranking ignored the target, OOF fold models
+early-stopped on the fold they predicted, label costs were in dollars not points).
+Each fix was reproduced before and after with a script, then pinned by a test.
+
+**Validation:** mix-and-match matrix rerun on the final code (MATRIX2_RESULTS),
+full pytest suite, ruff + black + pyright (0 errors) + vulture (clean), new CI.
 
 ---
 
@@ -187,17 +218,15 @@ See **COMPLETION.md** for full details on all completed phases.
 
 ## Active Phases
 
-**No active phases.** All phases through 114 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 116 are complete. See COMPLETION.md for full details.
 
-### Open Decisions (Phase 116+ candidates, pending user — see DECISIONS.md)
+### Open Decisions (pending user — see DECISIONS.md)
 
-- Serving/monitoring chain (`src/inference/server.py` + `validation/monitoring`) — unreachable, server has known crashes; wire or delete
-- ~~Phase 52 special-mode bundles~~ — resolved in Phase 115 (regime + meta-labeling wired, walk-forward bundle deleted)
-- Phase 99-102 governance modules — tests-only; wire into pipeline or move to experimental
-- `ModelContract.sequence_length` not honored in standard mode (contract 64/128 vs config 60)
-- 5d-optimization island (`five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver`) — tests-only
-- Core `AdapterResult` + `TrainingResult` duplicate-class consolidation
-- `ExperimentConfig.to_trainer_config`/`to_backtest_config`/`to_bundle_config` — zero callers, adopt or delete
+- Phase 99-102 governance modules — tests-only; wire or move to experimental
+- 5d-optimization island — deletion prepared on a branch; needs your go-ahead (the permission check blocked the file removal)
+- Import SCC — staged lazy break of facade re-exports
+- Second data pipeline (PipelineRunner behind `ml data` / `ml train` / `ml cv`) — fix, re-point at MLFactory, or delete
+
 
 ---
 
