@@ -17,7 +17,7 @@ field that can be set but never reaches MLFactory is a bug waiting to happen
     # Contract specs per symbol
     from src.config import SymbolConfig
 
-    # Process-wide defaults from config/global.yaml
+    # Process-wide defaults from src/config/global.yaml
     from src.config import get_config_value
     batch_size = get_config_value("training.batch_size", 512)
 
@@ -31,7 +31,8 @@ Package Structure:
         training.py         <- Optuna / Calibration configs
         cv.py               <- WalkForwardConfig
         symbol.py           <- SymbolConfig (contract specs)
-        global_config.py    <- GlobalConfig (config/global.yaml loader)
+        global_config.py    <- GlobalConfig (global.yaml loader)
+        global.yaml         <- Process-wide defaults (package data)
         utils.py            <- get_config_value (single implementation)
         validators.py       <- global.yaml schema validation
         constants/          <- Re-exports from src.core.common

@@ -9,8 +9,17 @@ make install-dev          # uv venv (Python 3.11, CPU torch) + dev tools + git h
 ## Before every commit
 
 ```bash
-make check                # ruff, black --check, pyright (0 errors), vulture, fast tests
+make check                # uv lock --check, ruff, black --check, pyright (0 errors), vulture, fast tests
 ```
+
+Changed dependencies in `pyproject.toml`? Run `uv lock` and commit `uv.lock` —
+CI fails when they drift. Added a runtime data file under `src/` (YAML, JSON)?
+List it in `[tool.setuptools.package-data]` and run `make wheel-smoke` (builds
+the wheel, installs it into a fresh venv, imports every module).
+
+CI runs the fast tests on Python 3.11 and 3.12; lint, types and dead code run on
+3.11. Dependabot opens weekly update PRs for GitHub Actions and Python
+dependencies (minor/patch grouped).
 
 Slow end-to-end tests: `make test-slow`. The full mix-and-match verification:
 `make matrix` (hours on CPU; `scripts/mix_match.py <kind> --resume` continues an

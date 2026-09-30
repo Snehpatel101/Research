@@ -21,6 +21,7 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -115,7 +116,9 @@ where = ["."]
 include = ["src*"]
 
 [tool.setuptools.package-data]
-src = ["py.typed"]
+# Data files the code loads at runtime (list each one explicitly; CI `package`
+# job / `make wheel-smoke` install the wheel and load them).
+"src.config" = ["global.yaml"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -1,0 +1,23 @@
+# Weekly dependency updates. Minor/patch bumps are grouped into one PR per
+# ecosystem; major bumps arrive as individual PRs so each gets its own review.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # pyproject.toml + uv.lock (CI fails on drift via `uv lock --check`).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

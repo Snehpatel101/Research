@@ -8,24 +8,41 @@ on:
     - cron: "17 4 * * 1" # weekly full run incl. slow end-to-end tests
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   HYPOTHESIS_PROFILE: ci
 
+# A newer push to the same branch/PR cancels the superseded run. The event name
+# is part of the group so the weekly scheduled run and a push to main never
+# cancel each other.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint-type-test:
+  # Fast tests on every supported Python; lint, format, types, dead code and the
+  # lockfile check run once, on 3.11.
+  checks:
+    name: checks (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+
+      - name: Lockfile matches pyproject
+        if: matrix.python-version == '3.11'
+        run: uv lock --check
 
       - name: Install (CPU torch)
         run: |
@@ -34,19 +51,40 @@ jobs:
           uv pip install -e ".[dev,stats]"
 
       - name: Lint
+        if: matrix.python-version == '3.11'
         run: uv run --no-sync ruff check src/ tests/ scripts/
 
       - name: Format
+        if: matrix.python-version == '3.11'
         run: uv run --no-sync black --check src/ tests/ scripts/
 
       - name: Types
+        if: matrix.python-version == '3.11'
         run: uv run --no-sync pyright
 
       - name: Dead code
+        if: matrix.python-version == '3.11'
         run: uv run --no-sync vulture
 
       - name: Fast tests
         run: uv run --no-sync pytest -m "not slow" -n auto --dist loadfile
+
+  # Build sdist + wheel, install the wheel (not editable) into a fresh venv and
+  # import every module from outside the source tree: catches modules or data
+  # files missing from the distribution.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.11"
+
+      - name: Build + wheel smoke test
+        run: bash scripts/wheel_smoke.sh
 
   docs:
     runs-on: ubuntu-latest
