@@ -239,6 +239,8 @@ class EnsembleBundle:
 
         # Loaded base bundles (lazy load)
         self._base_bundles: dict[str, Any] = {}
+        # Passed to the base bundles' load (see ModelBundle.load)
+        self.allow_engine_mismatch = False
 
     def save(self, path: str | Path, overwrite: bool = False) -> Path:
         """
@@ -352,12 +354,14 @@ class EnsembleBundle:
         return path
 
     @classmethod
-    def load(cls, path: str | Path) -> EnsembleBundle:
+    def load(cls, path: str | Path, allow_engine_mismatch: bool = False) -> EnsembleBundle:
         """
         Load ensemble bundle from disk.
 
         Args:
             path: Path to bundle directory
+            allow_engine_mismatch: Passed to the base bundles when they load
+                (see ``ModelBundle.load``).
 
         Returns:
             Loaded EnsembleBundle
@@ -440,7 +444,7 @@ class EnsembleBundle:
             f"({metadata.n_base_models} base models)"
         )
 
-        return cls(
+        bundle = cls(
             meta_learner=meta_learner,
             metadata=metadata,
             base_bundle_paths=base_bundle_paths,
@@ -448,6 +452,8 @@ class EnsembleBundle:
             scaler=scaler,
             alignment_config=alignment_config,
         )
+        bundle.allow_engine_mismatch = allow_engine_mismatch
+        return bundle
 
     def predict(
         self,
@@ -657,7 +663,9 @@ class EnsembleBundle:
             if info is None:
                 raise FileNotFoundError(f"Base bundle not found: {bundle_path}")
             # Any bundle kind can be a base model (e.g. a regime-routed model)
-            self._base_bundles[info.model_name] = load_bundle(bundle_path)
+            self._base_bundles[info.model_name] = load_bundle(
+                bundle_path, allow_engine_mismatch=self.allow_engine_mismatch
+            )
             logger.debug(f"Loaded base bundle: {info.model_name} ({info.kind})")
 
     def validate(self) -> dict[str, Any]:

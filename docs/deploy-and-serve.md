@@ -44,13 +44,23 @@ deployed bundle must reproduce the trained model's validation probabilities
 from raw bars, and features recomputed from raw OHLCV must equal the training
 features ([verification matrix](MIX_AND_MATCH.md)).
 
-**Pass enough history.** Features look back over a bounded window
-(session-reset OBV/VWAP, trailing windows) or an exponentially fading one
-(EMA-based indicators), so a bar gets the value training gave it once that
-lookback is inside the bars you pass. Long lookbacks
-(SMA-200 regimes, 256-bar wavelet z-scores) mean the first ~300 rows scored
-from a short window can still differ; pass at least that many bars before the
-ones you act on.
+**Warmup.** Features look back over a bounded window (session-reset OBV/VWAP,
+rolling windows) or an exponentially fading one (EMA-based indicators).
+`FeatureEngineer.warmup_bars()` derives from the feature definitions how many
+bars that takes (SMA-200, EWMs until their start weighs < 1e-3, the wavelet
+windows, each MTF timeframe's indicators in base bars — about 320 5-minute bars
+without MTF, about 1,900 with 15/60-minute MTF). Training and serving apply the
+same rule: a bar is scored only once that many bars precede it and the session
+before it is complete, so every row a bundle returns from a short window equals
+the row it returns from the full history. The warmup is recorded in the bundle's
+`preprocessing_graph.json`; passing fewer bars raises a `ValueError` naming the
+raw bars needed (after resampling to the training bar timeframe).
+
+**Feature engine version.** Bundles record the `FEATURE_ENGINE_VERSION` that
+computed their training features. Loading a bundle built by another version (or
+one that recorded none) raises, because the model would see differently computed
+inputs; retrain it, or pass `allow_engine_mismatch=True` to `load_bundle` /
+`load_deploy_artifact` / `ModelBundle.load` to serve it anyway (logged as an error).
 
 ## What a run writes
 
@@ -168,23 +178,23 @@ print(pipe.summary())
 
 ## Warmup
 
-Features are rolling statistics, so the first bars of any input window have no
-valid features and are dropped (the returned `timestamps` say which bars were
-predicted). How much history to pass:
+A bar is scored only once its features no longer depend on where the input
+starts — the same rule training applied to its own first bars (see *Warmup*
+above). The returned `timestamps` say which bars were scored. How much history
+to pass (at the training bar timeframe):
 
-| Needed by | Bars of history (at the training bar timeframe) |
+| Needed by | Bars of history |
 |---|---|
-| Most rolling features | ~200 |
-| MTF features (`data.mtf.enabled`, default on) | **≥ 500** — below that the MTF columns cannot be reproduced and prediction raises |
-| Wavelet features | ≥ 64 |
-| 3D / 4D models | plus `seq_len − 1` bars for the first window (60–128) |
-| Ensembles | the largest requirement among the base models (predictions are the bars every base model covers) |
+| Default features, no MTF, 5-minute bars | `warmup_bars` ≈ 320 (+ one complete session) |
+| MTF features (`data.mtf.enabled`, default on; 15/60-minute) | ≈ 1,900 5-minute bars — the hourly MACD needs ~160 hourly bars to forget its start |
+| 1-minute bars | periods scale ×5: ≈ 1,100 without MTF, ≈ 9,500 with 60-minute MTF |
+| 3D models | plus `seq_len − 1` bars for the first window |
+| Ensembles | the largest requirement among the base models |
 
-EMA-type and session-cumulative features converge rather than switch on, so
-more history than the minimum brings served features closer to the training
-values. In practice pass **1,000+ bars** and use the last row(s). If there is
-too little history, prediction fails loudly with the number of bars each
-feature family needs rather than returning skewed values.
+The exact number is `preprocessing_graph.json`'s `warmup_bars` (or
+`FeatureEngineer.warmup_bars()`). With too little history `predict_from_raw`
+raises a `ValueError` that names the minimum number of raw bars (e.g. five
+times as many 1-minute bars for a 5-minute model).
 
 For live use, keep a rolling buffer of recent raw bars and call
 `predict_from_raw` on it when a bar closes; the last row is the signal for that

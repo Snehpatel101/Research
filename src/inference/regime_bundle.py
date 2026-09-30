@@ -178,8 +178,8 @@ class RegimeBundle:
         return path
 
     @classmethod
-    def load(cls, path: str | Path) -> RegimeBundle:
-        """Load a regime bundle saved with :meth:`save`."""
+    def load(cls, path: str | Path, allow_engine_mismatch: bool = False) -> RegimeBundle:
+        """Load a regime bundle saved with :meth:`save` (see ``ModelBundle.load``)."""
         path = Path(path)
         metadata_path = path / REGIME_BUNDLE_METADATA_FILE
         if not metadata_path.exists():
@@ -188,7 +188,9 @@ class RegimeBundle:
             metadata = json.load(f)
         return cls(
             regime_bundles={
-                regime: ModelBundle.load(path / REGIME_BUNDLES_DIR / regime)
+                regime: ModelBundle.load(
+                    path / REGIME_BUNDLES_DIR / regime, allow_engine_mismatch=allow_engine_mismatch
+                )
                 for regime in metadata["regimes"]
             },
             detector_config=metadata["detector_config"],

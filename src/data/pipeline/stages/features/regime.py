@@ -21,6 +21,27 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+# Bars of hvol_20 whose median splits high from low volatility
+VOLATILITY_REGIME_WINDOW = 100
+
+
+def _volatility_regime(hvol: pd.Series) -> pd.Series:
+    """1 when volatility is above its trailing median, 0 below; NaN until the window is full."""
+    median = hvol.rolling(window=VOLATILITY_REGIME_WINDOW).median()
+    return (hvol > median).astype(float).where(median.notna())
+
+
+def _trend_regime(close: pd.Series, sma_50: pd.Series, sma_200: pd.Series) -> pd.Series:
+    """1 = up (close > SMA50 > SMA200), -1 = down, 0 = sideways; NaN until both SMAs exist.
+
+    ANTI-LOOKAHEAD: the SMAs are already lagged, so the close is lagged too.
+    """
+    close_lagged = close.shift(1)
+    uptrend = (close_lagged > sma_50) & (sma_50 > sma_200)
+    downtrend = (close_lagged < sma_50) & (sma_50 < sma_200)
+    regime = pd.Series(np.where(uptrend, 1.0, np.where(downtrend, -1.0, 0.0)), index=close.index)
+    return regime.where(sma_50.notna() & sma_200.notna() & close_lagged.notna())
+
 
 def add_regime_features(
     df: pd.DataFrame,
@@ -92,25 +113,14 @@ def _add_basic_regime_features(df: pd.DataFrame, feature_metadata: dict[str, str
     # Volatility regime (high/low based on historical volatility)
     if "hvol_20" in df.columns:
         # hvol_20 is already lagged, so median calculation is safe
-        hvol_median = df["hvol_20"].rolling(window=100, min_periods=1).median()
-        df["volatility_regime"] = (df["hvol_20"] > hvol_median).astype(int)
+        df["volatility_regime"] = _volatility_regime(df["hvol_20"])
         feature_metadata["volatility_regime"] = "Volatility regime (1=high, 0=low, lagged)"
     else:
         logger.debug("hvol_20 not found, skipping basic volatility regime")
 
     # Trend regime based on price vs moving averages
     if "sma_50" in df.columns and "sma_200" in df.columns:
-        # sma_50 and sma_200 are already lagged, use lagged close for comparison
-        close_lagged = df["close"].shift(1)
-
-        # Uptrend: price > SMA50 > SMA200 (all using t-1 data)
-        uptrend = (close_lagged > df["sma_50"]) & (df["sma_50"] > df["sma_200"])
-
-        # Downtrend: price < SMA50 < SMA200
-        downtrend = (close_lagged < df["sma_50"]) & (df["sma_50"] < df["sma_200"])
-
-        # Trend regime: 1=up, -1=down, 0=sideways
-        df["trend_regime"] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
+        df["trend_regime"] = _trend_regime(df["close"], df["sma_50"], df["sma_200"])
         feature_metadata["trend_regime"] = "Trend regime (1=up, -1=down, 0=sideways, lagged)"
     else:
         logger.debug("SMA features not found, skipping basic trend regime")
@@ -189,8 +199,7 @@ def add_volatility_regime(df: pd.DataFrame, feature_metadata: dict[str, str]) ->
         return df
 
     # ANTI-LOOKAHEAD: hvol_20 is already lagged, so median is safe
-    hvol_median = df["hvol_20"].rolling(window=100, min_periods=1).median()
-    df["volatility_regime"] = (df["hvol_20"] > hvol_median).astype(int)
+    df["volatility_regime"] = _volatility_regime(df["hvol_20"])
     feature_metadata["volatility_regime"] = "Volatility regime (1=high, 0=low, lagged)"
 
     return df
@@ -221,17 +230,7 @@ def add_trend_regime(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.D
         logger.warning("SMA features not found, skipping trend regime")
         return df
 
-    # ANTI-LOOKAHEAD: sma_50 and sma_200 are already lagged, use lagged close
-    close_lagged = df["close"].shift(1)
-
-    # Uptrend: price > SMA50 > SMA200 (all using t-1 data)
-    uptrend = (close_lagged > df["sma_50"]) & (df["sma_50"] > df["sma_200"])
-
-    # Downtrend: price < SMA50 < SMA200
-    downtrend = (close_lagged < df["sma_50"]) & (df["sma_50"] < df["sma_200"])
-
-    # Trend regime: 1=up, -1=down, 0=sideways
-    df["trend_regime"] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
+    df["trend_regime"] = _trend_regime(df["close"], df["sma_50"], df["sma_200"])
     feature_metadata["trend_regime"] = "Trend regime (1=up, -1=down, 0=sideways, lagged)"
 
     return df

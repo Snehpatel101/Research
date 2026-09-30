@@ -285,8 +285,8 @@ class MetaLabelingBundle:
         return path
 
     @classmethod
-    def load(cls, path: str | Path) -> MetaLabelingBundle:
-        """Load a bundle saved with :meth:`save`."""
+    def load(cls, path: str | Path, allow_engine_mismatch: bool = False) -> MetaLabelingBundle:
+        """Load a bundle saved with :meth:`save` (see ``ModelBundle.load``)."""
         path = Path(path)
         metadata_path = path / META_LABELING_METADATA_FILE
         if not metadata_path.exists():
@@ -301,7 +301,9 @@ class MetaLabelingBundle:
                 "Retrain it — serving it would feed the meta-model different inputs."
             )
         return cls(
-            primary_bundle=ModelBundle.load(path / PRIMARY_BUNDLE_DIR),
+            primary_bundle=ModelBundle.load(
+                path / PRIMARY_BUNDLE_DIR, allow_engine_mismatch=allow_engine_mismatch
+            ),
             meta_model=safe_pickle_load(path / META_MODEL_FILE),
             threshold=metadata["threshold"],
             meta_model_name=metadata["meta_model_name"],

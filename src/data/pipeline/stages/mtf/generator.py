@@ -26,6 +26,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.math_utils import span_settle_bars, wilder_settle_bars
+
 from .constants import (
     DEFAULT_MTF_MODE,
     DEFAULT_MTF_TIMEFRAMES,
@@ -209,6 +211,25 @@ class MTFFeatureGenerator:
             df_tf[f"{col}{tf_suffix}"] = df_tf[col]
 
         return df_tf
+
+    @staticmethod
+    def warmup_bars() -> int:
+        """Higher-timeframe bars before MTF features stop depending on the series start.
+
+        Covers the longest indicator of :meth:`compute_mtf_indicators` (keep the
+        two in step): SMA-50, EMA-9/21, Wilder RSI-14, ATR-14, Bollinger-20 and
+        MACD 12/26/9 (an EWM of an EWM), each until its starting value no longer
+        matters, plus the partial first bar of a resample and the one-bar lag.
+        """
+        indicators = (
+            50,
+            21 + span_settle_bars(21),
+            14 + wilder_settle_bars(14),
+            14 + 1,
+            20,
+            26 + span_settle_bars(26) + 9 + span_settle_bars(9),
+        )
+        return max(indicators) + 2
 
     def compute_mtf_indicators(self, df_tf: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """

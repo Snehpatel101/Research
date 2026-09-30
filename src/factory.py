@@ -832,10 +832,7 @@ class MLFactory:
             mtf_timeframes=list(mtf.timeframes),
         )
         # Recorded so bundles replay the exact same transform at inference
-        self._feature_pipeline = {
-            "bar_timeframe": bar_timeframe,
-            "engineer": engineer.to_spec(),
-        }
+        self._feature_pipeline = engineer.pipeline_record(bar_timeframe)
         df_features, _report = engineer.engineer_features(
             df_for_features,
             symbol=self.config.data.symbol,

@@ -9,18 +9,28 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from src.core.constants import OHLCV_COLUMNS
+from src.core.utils.math_utils import span_settle_bars, wilder_settle_bars
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
 from ..mtf.generator import MTFFeatureGenerator
-from .entropy import add_entropy_features
+from .entropy import (
+    DEFAULT_APEN_WINDOWS,
+    DEFAULT_HURST_WINDOWS,
+    DEFAULT_LZ_WINDOWS,
+    DEFAULT_SAMPLE_ENTROPY_WINDOWS,
+    DEFAULT_SHANNON_WINDOWS,
+    add_entropy_features,
+)
 from .microstructure import add_microstructure_features
 from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
 from .moving_averages import add_ema, add_sma
@@ -28,7 +38,7 @@ from .nan_handling import clean_nan_columns
 
 # Import all feature modules
 from .price_features import add_autocorrelation, add_clv, add_price_ratios, add_returns
-from .regime import add_regime_features
+from .regime import VOLATILITY_REGIME_WINDOW, add_regime_features
 from .scaling import PeriodScaler, create_period_config
 from .temporal import add_temporal_features
 from .trend import add_adx, add_supertrend
@@ -48,15 +58,17 @@ from .volatility import (
 
 # Re-import here for wrapper methods
 from .volume import add_dollar_volume, add_twap_features, add_volume_features, add_vwap
-from .wavelets import PYWT_AVAILABLE, add_wavelet_features
+from .wavelets import NORMALIZE_WINDOW, PYWT_AVAILABLE, add_wavelet_features
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # Part of the feature-cache key: bump when feature values change so stale
 # caches are never reused (2: pywt read-only fix, SampEn caps, causal ffill;
-# 3: session-reset OBV, trailing-window wavelet z-scores).
-FEATURE_ENGINE_VERSION = 3
+# 3: session-reset OBV, trailing-window wavelet z-scores; 4: warmup rows dropped
+# by the recorded warmup rule instead of by NaNs, regime features NaN until warm).
+# Bundles record it; loading a bundle built by another version is refused.
+FEATURE_ENGINE_VERSION = 4
 logger.addHandler(logging.NullHandler())
 
 
@@ -155,6 +167,30 @@ FEATURE_COMPUTE_ORDER: list[str] = [
     # Level 3: Depends on all
     "mtf",
 ]
+
+
+def warmup_mask(datetimes: pd.Series, warmup_bars: int, session_features: bool) -> np.ndarray:
+    """Rows whose features no longer depend on where the input starts.
+
+    The one warmup rule shared by training (``engineer_features``) and serving
+    (``PreprocessingGraph``): a row is kept once ``warmup_bars`` bars precede it
+    and, when session-reset features (OBV, VWAP) are computed, once the session
+    (calendar date) of the bar before it starts inside the input — the first
+    date may be partial, and those features are lagged one bar, so a session's
+    first bar still carries the previous session's value.
+
+    Args:
+        datetimes: Bar timestamps, oldest first.
+        warmup_bars: Bars of history every kept row needs
+            (:meth:`FeatureEngineer.warmup_bars`).
+        session_features: Whether session-reset features are computed.
+    """
+    keep = np.arange(len(datetimes)) >= warmup_bars
+    if session_features and len(datetimes):
+        dates = pd.to_datetime(pd.Series(datetimes)).dt.date.to_numpy()
+        previous = np.concatenate([dates[:1], dates[:-1]])
+        keep &= previous != dates[0]
+    return keep
 
 
 class FeatureEngineer:
@@ -363,6 +399,79 @@ class FeatureEngineer:
         """Rebuild a compute-only FeatureEngineer from :meth:`to_spec` output."""
         known = {k: v for k, v in spec.items() if k in cls._SPEC_FIELDS}
         return cls(**known)
+
+    def pipeline_record(self, bar_timeframe: str) -> dict[str, Any]:
+        """What a bundle needs to replay these features from raw bars.
+
+        The settings (:meth:`to_spec`), the engine version that computed the
+        training features, and the warmup rule both sides apply.
+        """
+        return {
+            "bar_timeframe": bar_timeframe,
+            "engineer": self.to_spec(),
+            "engine_version": FEATURE_ENGINE_VERSION,
+            "warmup_bars": self.warmup_bars(),
+        }
+
+    @property
+    def session_features(self) -> bool:
+        """Whether session-reset features (OBV, VWAP) are computed."""
+        return self.enable_volume_features
+
+    def warmup_bars(self) -> int:
+        """Bars of history before every feature stops depending on the input start.
+
+        Derived from the feature definitions: the longest rolling window
+        (SMA-200 and every other period-config indicator, the entropy and regime
+        windows), EWM-based indicators until their starting value weighs less
+        than ``EWM_SETTLE_TOLERANCE`` (EMA, MACD, Wilder RSI/ATR/ADX, Keltner,
+        Supertrend), the wavelet DWT window plus its z-score window, and each
+        MTF timeframe's indicator warmup in base bars. Each lookback includes
+        the one-bar anti-lookahead lag.
+        """
+        pc = self.period_config
+
+        def longest(name: str, default: int) -> int:
+            return max(pc.get(name) or [default])
+
+        rolling = max(max(periods) for periods in pc.values() if periods)
+        fixed = max(
+            *DEFAULT_SHANNON_WINDOWS,
+            *DEFAULT_LZ_WINDOWS,
+            *DEFAULT_APEN_WINDOWS,
+            *DEFAULT_SAMPLE_ENTROPY_WINDOWS,
+            *DEFAULT_HURST_WINDOWS,
+            VOLATILITY_REGIME_WINDOW + longest("hvol", 20),
+        )
+        ema, atr, adx = longest("ema", 50), longest("atr", 14), longest("adx", 14)
+        slow, signal = longest("macd_slow", 26), longest("macd_signal", 9)
+        rsi, keltner = longest("rsi", 14), longest("keltner", 20)
+        supertrend = longest("supertrend_period", 10)
+        ewm = max(
+            ema + span_settle_bars(ema),
+            slow + span_settle_bars(slow) + signal + span_settle_bars(signal),
+            rsi + wilder_settle_bars(rsi),
+            atr + wilder_settle_bars(atr),
+            keltner + max(span_settle_bars(keltner), wilder_settle_bars(keltner)),
+            2 * (adx + wilder_settle_bars(adx)),
+            supertrend + wilder_settle_bars(supertrend),
+        )
+        lookbacks = [rolling, fixed, ewm]
+        if self.enable_wavelets:
+            lookbacks.append(self.wavelet_window + NORMALIZE_WINDOW)
+        if self.enable_mtf:
+            from src.core.common.timeframes import get_timeframe_minutes
+
+            base = get_timeframe_minutes(self.timeframe)
+            for tf in self.mtf_timeframes:
+                ratio = get_timeframe_minutes(tf) / base
+                if ratio > 1:
+                    lookbacks.append(math.ceil(ratio) * MTFFeatureGenerator.warmup_bars())
+        return max(lookbacks) + 1
+
+    def warmup_mask(self, datetimes: pd.Series) -> np.ndarray:
+        """:func:`warmup_mask` with this engineer's warmup."""
+        return warmup_mask(datetimes, self.warmup_bars(), self.session_features)
 
     def compute_features(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
         """
@@ -649,6 +758,9 @@ class FeatureEngineer:
         logger.info(f"Feature cache MISS: {cache_key} — computing features")
 
         df, stats = self.compute_features(df)
+        # Same warmup rule as serving (PreprocessingGraph): drop rows whose
+        # features still depend on where the data starts
+        df = df[self.warmup_mask(df["datetime"])].reset_index(drop=True)
         wavelet_cols_added = stats["wavelet_cols_added"]
         mtf_cols_added = stats["mtf_cols_added"]
         mtf_skipped = stats["mtf_skipped"]

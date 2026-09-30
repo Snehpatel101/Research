@@ -7,10 +7,13 @@ the deployed MetaLabelingBundle against what training computed:
 1. Served on the training history, P(bet pays off) on every validation bar equals
    the trained meta-model applied to the validation meta features training built
    (``X_meta_val``), and the traded bars are the same.
-2. Served on only the last 1000 bars (as the docs example serves), bars after the
-   training range get (nearly) the same P(win) and trade decisions as with full
-   history. With OBV as a running sum from the first bar, the short window shifted
-   the filter's logit by ~+1.5 and it traded 891 of 917 bars at P(win) ~0.9.
+2. Served on only the last 1000 bars (as the docs example serves), every row the
+   bundle emits — the bars past the training warmup rule — gets the P(win) and
+   trade decision it gets with full history. With OBV as a running sum from the
+   first bar, the short window shifted the filter's logit by ~+1.5 and it traded
+   891 of 917 bars at P(win) ~0.9; before the warmup rule the first rows of a
+   window (SMA-200 regimes, wavelet z-scores still warming up) differed too.
+3. Too little history raises a ValueError naming the raw bars needed.
 
 The primary is the model refit on all training rows, so on training bars its
 probabilities are in-sample; only held-out bars are compared.
@@ -26,6 +29,7 @@ import pytest
 
 import src.inference.meta_labeling_bundle as meta_labeling_bundle
 from src.config.experiment import ExperimentConfig
+from src.data.pipeline.stages.features.engineer import FeatureEngineer, warmup_mask
 from src.factory import MLFactory
 from src.inference import load_deploy_artifact
 from src.inference.meta_labeling_bundle import MetaLabelingBundle, primary_sides
@@ -37,9 +41,9 @@ pytestmark = pytest.mark.slow
 
 N_ROWS = 4000
 SERVE_WINDOW = 1000
-# Features with long warmups (SMA-200 regimes, expanding wavelet z-scores) still
-# depend on the window start for the first few hundred bars; compare after them.
-WINDOW_WARMUP = 300
+# Features agree to ~1e-3 of their spread after the warmup (EWM starts fade
+# geometrically), so P(win) agrees to well under this
+P_TOLERANCE = 1e-3
 
 
 @pytest.fixture(scope="module")
@@ -139,18 +143,36 @@ def test_served_meta_probability_equals_training_on_validation_bars(
     np.testing.assert_array_equal(traded.reindex(rows).to_numpy(dtype=bool), expected_trade)
 
 
-def test_short_serving_window_matches_full_history_on_held_out_bars(
+def test_every_row_served_from_a_short_window_matches_full_history(
     trained: dict[str, Any],
 ) -> None:
     bundle, raw = trained["bundle"], trained["raw"]
     full = _served(bundle, raw)
-    window = _served(bundle, raw.iloc[-SERVE_WINDOW:])
-    # Held out: after the validation split, past the window's feature warmup
-    bars = window.index[WINDOW_WARMUP:]
-    bars = bars[bars > trained["val_rows"][-1]]
-    assert len(bars) > 200
+    window = raw.iloc[-SERVE_WINDOW:]
+    served = _served(bundle, window)
 
-    dp = np.abs(window.loc[bars, "p_win"].to_numpy() - full.loc[bars, "p_win"].to_numpy())
-    same_trade = window.loc[bars, "trade"].to_numpy() == full.loc[bars, "trade"].to_numpy()
-    assert dp.mean() < 0.03, f"mean |dP(win)| {dp.mean():.3f} (max {dp.max():.3f})"
-    assert same_trade.mean() > 0.9, f"trade decisions agree on {same_trade.mean():.0%}"
+    # Exactly the bars the training warmup rule keeps are emitted
+    graph = bundle.primary_bundle.preprocessing_graph
+    assert graph is not None and graph.config.warmup_bars > 0
+    session = FeatureEngineer.from_spec(graph.config.feature_engineering).session_features
+    kept = warmup_mask(pd.Series(window.index), graph.config.warmup_bars, session)
+    assert list(served.index) == list(window.index[kept])
+    assert len(served) > 300
+
+    reference = full.loc[served.index]
+    dp = np.abs(served["p_win"].to_numpy() - reference["p_win"].to_numpy())
+    assert dp.max() < P_TOLERANCE, f"max |dP(win)| {dp.max():.2e} over {len(served)} rows"
+    np.testing.assert_array_equal(served["direction"], reference["direction"])
+    # A trade decision may only flip where P(win) sits on the threshold
+    on_threshold = np.abs(reference["p_win"].to_numpy() - bundle.threshold) < P_TOLERANCE
+    flipped = served["trade"].to_numpy() != reference["trade"].to_numpy()
+    assert not (flipped & ~on_threshold).any()
+
+
+def test_too_little_history_names_the_raw_bars_needed(trained: dict[str, Any]) -> None:
+    bundle = trained["bundle"]
+    graph = bundle.primary_bundle.preprocessing_graph
+    assert graph is not None
+    needed = graph.config.warmup_bars + 1
+    with pytest.raises(ValueError, match=f"at least {needed} raw 5min bars"):
+        bundle.predict_from_raw(trained["raw"].iloc[-(needed - 1) :])

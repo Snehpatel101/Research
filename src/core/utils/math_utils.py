@@ -5,8 +5,15 @@ This module provides safe mathematical operations that handle edge cases
 like division by zero, NaN values, and moving averages.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
+
+# An exponentially weighted average forgets its starting value geometrically;
+# once that start's weight is below this fraction the average no longer depends
+# on where the series began (for feature warmup purposes).
+EWM_SETTLE_TOLERANCE = 1e-3
 
 
 def safe_divide(
@@ -163,7 +170,30 @@ def normalize_series(
     raise ValueError(f"Unknown normalization method: {method}")
 
 
+def ewm_settle_bars(alpha: float, tolerance: float = EWM_SETTLE_TOLERANCE) -> int:
+    """Bars until an EWM's starting value weighs less than ``tolerance`` ((1 - alpha)^n)."""
+    if not 0.0 < alpha <= 1.0:
+        raise ValueError(f"alpha must be in (0, 1], got {alpha}")
+    if alpha == 1.0:
+        return 1
+    return math.ceil(math.log(tolerance) / math.log1p(-alpha))
+
+
+def span_settle_bars(span: int) -> int:
+    """:func:`ewm_settle_bars` of an EWM with ``span`` (alpha = 2 / (span + 1))."""
+    return ewm_settle_bars(2.0 / (span + 1))
+
+
+def wilder_settle_bars(period: int) -> int:
+    """:func:`ewm_settle_bars` of Wilder smoothing over ``period`` (alpha = 1 / period)."""
+    return ewm_settle_bars(1.0 / period)
+
+
 __all__ = [
+    "EWM_SETTLE_TOLERANCE",
+    "ewm_settle_bars",
+    "span_settle_bars",
+    "wilder_settle_bars",
     "safe_divide",
     "sma",
     "ema",
