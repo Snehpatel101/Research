@@ -241,6 +241,9 @@ class MetaLabelingBundle:
         X, timestamps = self.primary_bundle.raw_to_input(raw_df, skip_cleaning=skip_cleaning)
         result = self.predict(X, calibrate=calibrate)
         result.metadata["timestamps"] = timestamps
+        flags = self.primary_bundle.event_flags(raw_df, timestamps, skip_cleaning=skip_cleaning)
+        if flags is not None:
+            result.metadata["is_event"] = flags
         return result
 
     def _apply_filter(self, primary: PredictionResult, p_win: np.ndarray) -> PredictionResult:

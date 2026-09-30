@@ -233,6 +233,8 @@ DEFAULT_MIN_FEATURES: int = 20
 # =============================================================================
 
 OHLCV_COLUMNS: list[str] = ["open", "high", "low", "close", "volume"]
+# Price-level columns fractionally differentiated log-price features can be built from
+FRAC_DIFF_PRICE_COLUMNS: tuple[str, ...] = ("open", "high", "low", "close")
 REQUIRED_COLUMNS: list[str] = ["datetime"] + OHLCV_COLUMNS
 
 
@@ -325,6 +327,7 @@ __all__ = [
     "DEFAULT_MIN_FEATURES",
     # OHLCV
     "OHLCV_COLUMNS",
+    "FRAC_DIFF_PRICE_COLUMNS",
     "REQUIRED_COLUMNS",
     # Labels
     "LABEL_CLASSES",

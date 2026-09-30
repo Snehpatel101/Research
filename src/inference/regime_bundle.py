@@ -141,11 +141,17 @@ class RegimeBundle:
             probabilities[rows] = output.class_probabilities[src]
             predictions[rows] = output.class_predictions[src]
 
+        metadata: dict[str, Any] = {"timestamps": common, "regimes": routed}
+        flags = next(iter(self.regime_bundles.values())).event_flags(
+            raw_df, common, skip_cleaning=skip_cleaning
+        )
+        if flags is not None:
+            metadata["is_event"] = flags
         return PredictionResult(
             class_predictions=predictions,
             class_probabilities=probabilities,
             confidence=probabilities.max(axis=1),
-            metadata={"timestamps": common, "regimes": routed},
+            metadata=metadata,
         )
 
     # -----------------------------------------------------------------

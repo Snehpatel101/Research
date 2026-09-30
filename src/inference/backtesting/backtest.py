@@ -151,6 +151,11 @@ class BacktestConfig:
         risk_per_trade: Risk per trade for position sizing
         kelly_fraction: Kelly fraction for Kelly sizing
         target_volatility: Target volatility for vol-targeted sizing
+        bet_max_contracts / bet_n_classes / bet_step_size: AFML probability
+            sizing (``position_sizing="probability"``): contracts at full
+            size, outcome count K (3 = short/neutral/long), and the size
+            discretization step (0 = none). The probability fed to the sizer
+            is each prediction's ``confidence``.
         min_holding_period: Minimum bars before a SIGNAL-driven exit (stops,
             take-profits, time and forced exits are always honored)
         max_holding_period: Maximum bars to hold, counted from the signal bar
@@ -188,6 +193,9 @@ class BacktestConfig:
     kelly_fraction: float = 0.25
     target_volatility: float = 0.10
     fixed_contracts: int = 1
+    bet_max_contracts: int = 5
+    bet_n_classes: int = 3
+    bet_step_size: float = 0.0
     min_holding_period: int = 1
     max_holding_period: int = 0
     max_drawdown_threshold: float = 0.10
@@ -478,9 +486,9 @@ class Backtester:
             cost_calculator: Cost calculator (created from config if not provided)
             position_sizer: Position sizer (created from config if not provided)
         """
+        self.config = config or BacktestConfig()
         self.predictions = self._validate_predictions(predictions)
         self.prices = self._validate_prices(prices)
-        self.config = config or BacktestConfig()
 
         # Create cost calculator
         if cost_calculator is None:
@@ -503,6 +511,9 @@ class Backtester:
                 target_volatility=self.config.target_volatility,
                 point_value=self.config.point_value,
                 contracts=self.config.fixed_contracts,
+                bet_max_contracts=self.config.bet_max_contracts,
+                bet_n_classes=self.config.bet_n_classes,
+                bet_step_size=self.config.bet_step_size,
             )
         else:
             self.position_sizer = position_sizer
@@ -531,6 +542,8 @@ class Backtester:
         self._flatten_at_bar: int | None = None
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+        # Entry signals skipped because the sizer returned zero contracts
+        self._zero_size_signals = 0
 
         # Running Kelly statistics from completed trades
         self._kelly_win_rate: float = 0.5
@@ -547,7 +560,7 @@ class Backtester:
         """Map canonical position_sizing values to local PositionSizingMethod values.
 
         ExperimentConfig.evaluation.position_sizing uses short names like
-        "fixed", "kelly", "volatility", "confidence".  The local position sizer
+        "fixed", "kelly", "volatility", "confidence", "probability".  The local position sizer
         (position_sizing.py) expects "fixed_contracts", "kelly",
         "volatility_targeted", "bet_sizing", etc.  This method bridges the two.
         """
@@ -618,7 +631,17 @@ class Backtester:
         if "confidence" not in df.columns and "probability" in df.columns:
             df["confidence"] = df["probability"]
         if "confidence" not in df.columns:
-            df["confidence"] = 1.0
+            if self._resolve_sizing_method(self.config.position_sizing) == "probability":
+                # Full size for a prediction without a probability would be a
+                # silent default; NaN sizes to 0 contracts (no bet)
+                logger.warning(
+                    "position_sizing='probability' needs a 'confidence' (or 'probability') "
+                    "column with the predicted probability of the chosen side; none given, "
+                    "so no position will be opened"
+                )
+                df["confidence"] = np.nan
+            else:
+                df["confidence"] = 1.0
 
         if "label" not in df.columns:
             df["label"] = np.nan
@@ -805,6 +828,7 @@ class Backtester:
         )
 
         if contracts <= 0:
+            self._zero_size_signals += 1
             return
 
         # Calculate stop loss and take profit
@@ -1115,6 +1139,7 @@ class Backtester:
         self._flatten_at_bar = None
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+        self._zero_size_signals = 0
         self._kelly_active = False
         self._kelly_win_rate = 0.5
         self._kelly_avg_win = 100.0
@@ -1430,7 +1455,13 @@ class Backtester:
             "halted_at": str(self._halts[0].timestamp) if self._halts else None,
             "halts_by_reason": halts_by_reason,
             "bars_halted": bars_halted,
+            "zero_size_signals": self._zero_size_signals,
         }
+        if self._zero_size_signals:
+            logger.info(
+                f"{self._zero_size_signals} entry signals opened no position: the position "
+                f"sizer ({cfg.position_sizing}) returned zero contracts"
+            )
 
         return BacktestResult(
             equity_curve=equity_curve,

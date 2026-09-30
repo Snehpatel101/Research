@@ -14,6 +14,11 @@ and replays it at inference time:
    warmup rows with NaN in those columns are dropped.
 4. Optional scaling with the fitted training scaler.
 
+When the model was trained with event sampling (``data.labeling.event_sampling``)
+the graph also records the resolved event definition. Predictions are still
+produced for every bar; ``event_flags`` marks the bars the model was trained on
+(and the backtest acts on).
+
 Usage:
     # During training (BundleBuilder)
     graph = PreprocessingGraph.from_feature_pipeline(feature_pipeline, feature_columns)
@@ -34,6 +39,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from src.core.constants import OHLCV_COLUMNS
@@ -62,9 +68,11 @@ class PreprocessingGraphConfig:
     # Trained feature columns, in model input order
     feature_columns: list[str] = field(default_factory=list)
     config_hash: str = ""
+    # Resolved event sampling (EventSamplingSpec.to_dict()); empty = every bar
+    event_sampling: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "version": self.version,
             "created_at": self.created_at,
             "horizon": self.horizon,
@@ -74,6 +82,11 @@ class PreprocessingGraphConfig:
             "feature_columns": list(self.feature_columns),
             "config_hash": self.config_hash,
         }
+        if self.event_sampling:
+            # Only written when used, so graphs without event sampling keep
+            # the exact serialized form (and hash) they always had
+            data["event_sampling"] = dict(self.event_sampling)
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PreprocessingGraphConfig:
@@ -86,6 +99,7 @@ class PreprocessingGraphConfig:
             feature_engineering=dict(data.get("feature_engineering") or {}),
             feature_columns=list(data.get("feature_columns") or []),
             config_hash=data.get("config_hash", ""),
+            event_sampling=dict(data.get("event_sampling") or {}),
         )
 
     def compute_hash(self) -> str:
@@ -121,7 +135,8 @@ class PreprocessingGraph:
         Create from the feature pipeline recorded by MLFactory.
 
         Args:
-            feature_pipeline: ``{"bar_timeframe": str, "engineer": FeatureEngineer.to_spec()}``
+            feature_pipeline: ``{"bar_timeframe": str, "engineer": FeatureEngineer.to_spec()}``,
+                optionally with ``"event_sampling": EventSamplingSpec.to_dict()``
             feature_columns: Trained feature columns (model input order)
             symbol: Trading symbol
             horizon: Prediction horizon
@@ -133,6 +148,7 @@ class PreprocessingGraph:
             bar_timeframe=feature_pipeline["bar_timeframe"],
             feature_engineering=dict(feature_pipeline["engineer"]),
             feature_columns=list(feature_columns or []),
+            event_sampling=dict(feature_pipeline.get("event_sampling") or {}),
         )
         config.config_hash = config.compute_hash()
         return cls(config)
@@ -212,6 +228,32 @@ class PreprocessingGraph:
                 self._scaler.transform(df.to_numpy()), index=df.index, columns=df.columns
             )
         return df
+
+    def event_flags(
+        self,
+        raw_df: pd.DataFrame,
+        timestamps: pd.DatetimeIndex,
+        skip_cleaning: bool = False,
+    ) -> np.ndarray | None:
+        """Which of ``timestamps`` are event bars the model was trained on.
+
+        None when the model was trained on every bar. The CUSUM filter is path
+        dependent (its sums reset at every event), so the flags are computed on
+        the supplied history from its first bar, exactly like training did on
+        the full raw series: give ``predict_from_raw`` the same history start
+        for identical events.
+        """
+        if not self.config.event_sampling:
+            return None
+        from src.data.labeling.event_sampling import EventSamplingSpec
+
+        df = self._to_datetime_column(raw_df)
+        if not skip_cleaning:
+            df = self._resample_to_bar_timeframe(df)
+        spec = EventSamplingSpec.from_dict(self.config.event_sampling)
+        events = pd.Series(spec.mask(df["close"]), index=pd.DatetimeIndex(df["datetime"]))
+        flags = events.reindex(pd.DatetimeIndex(timestamps)).fillna(False)
+        return flags.to_numpy(dtype=bool)
 
     @staticmethod
     def _to_datetime_column(raw_df: pd.DataFrame) -> pd.DataFrame:

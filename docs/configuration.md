@@ -63,6 +63,7 @@ Feature configuration. (`src.config.data.FeatureConfig`)
 |---|---|---|---|
 | `selection_enabled` | `bool` | `True` | Run train-only MDA feature selection per model. |
 | `governance` | `FeatureGovernanceConfig` | see below | Opt-in stability / label-perturbation / registry diagnostics. See [`data.features.governance`](#datafeaturesgovernance). |
+| `frac_diff` | `FracDiffConfig` | see below | Fractionally differentiated log-price features (opt-in) See [`data.features.frac_diff`](#datafeaturesfrac_diff). |
 
 ## `data.features.governance`
 
@@ -81,6 +82,18 @@ Opt-in feature-governance diagnostics run after feature selection. (`src.config.
 | `barrier_scales` | `list[float]` | `[0.75, 1.25]` | Multipliers applied to the label's k_up and k_down for the perturbed label variants (e.g. 0.75 = tighter, 1.25 = wider). |
 | `max_degraded_runs` | `int` | `3` | Consecutive failing runs in DEGRADED before the registry retires a feature (retirement is recorded, never applied). |
 
+## `data.features.frac_diff`
+
+Fractionally differentiated log-price features (AFML ch. 5), opt-in. (`src.config.data.FracDiffConfig`)
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `bool` | `False` | Add the FFD features (default False = features unchanged) |
+| `d` | `float \| str` | `"auto"` | Differentiation order in (0, 1], or ``"auto"``: the smallest d whose FFD log close passes the ADF stationarity test (at least 0.05, even for a series that is already stationary), fitted on the leading training bars only (same prefix as the CUSUM threshold) and then frozen into the feature spec (inference replays the same d). ``"auto"`` needs the ``stats`` extra (statsmodels). |
+| `columns` | `list[str]` | `['close', 'open', 'high', 'low']` | Price columns (of open/high/low/close) to differentiate. |
+| `window` | `int` | `100` | Fixed FFD window cap in bars (the first ``window`` bars of a series are warmup NaN) |
+| `threshold` | `float` | `1e-05` | FFD weight truncation threshold. |
+
 ## `data.labeling`
 
 Triple-barrier labeling configuration. (`src.config.data.LabelingConfig`)
@@ -92,6 +105,9 @@ Triple-barrier labeling configuration. (`src.config.data.LabelingConfig`)
 | `atr_period` | `int` | `14` | ATR calculation period. |
 | `max_holding_bars` | `int \| None` | `None` | Maximum holding period (time barrier, bars). None = auto from BARRIER_PARAMS, see upper_mult. |
 | `binary_mode` | `bool` | `False` | Remap labels to {0: time-out, 1: barrier hit}. |
+| `event_sampling` | `str` | `"none"` | ``"none"`` (default: every bar is labeled) or ``"cusum"`` (AFML ch. 2): only bars where a symmetric CUSUM filter on the log returns fires carry a label; all other bars are marked invalid (-99) and dropped from training, CV and the ensemble. Features are still computed on every bar. Label spans stay in bar coordinates, so purging and uniqueness weights follow the events. The backtest acts on event bars only; ``predict_from_raw`` still predicts every bar and flags the event bars in ``metadata["is_event"]``. |
+| `cusum_threshold` | `float \| str` | `"auto"` | CUSUM threshold in log-return units, or ``"auto"``: ``cusum_vol_multiple`` x the per-bar return volatility of the leading bars only — the training split (walk-forward: the bars before the first test window) — frozen into the deployment bundle. The validation/test holdout never influences it; purged-CV folds inside the training split see a value fitted on all of it (the same convention as the labeler's cost calibration). |
+| `cusum_vol_multiple` | `float` | `3.0` | Multiple for the ``"auto"`` threshold. For i.i.d. returns an event fires about every ``multiple^2`` bars. |
 
 ## `data.sequence`
 
@@ -201,7 +217,9 @@ Evaluation-related configuration section. (`src.config.experiment.EvaluationSect
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `run_backtest` | `bool` | `False` | Backtest the deployed strategy's out-of-sample signals. |
-| `position_sizing` | `str` | `"fixed"` | Backtest sizing: `fixed` (fixed contracts), `volatility` (volatility targeted), `confidence` (bet sizing from model confidence), `kelly`. Choices: `fixed`, `volatility`, `confidence`, `kelly`. |
+| `position_sizing` | `str` | `"fixed"` | Backtest position sizing. ``"fixed"`` (default, one contract), ``"kelly"``, ``"volatility"``, ``"confidence"`` (meta-labeling bet sizing) or ``"probability"`` (AFML ch. 10: size from the predicted probability of the chosen side — ``2 * Phi((p - 1/K) / sqrt(p (1 - p))) - 1`` of ``bet_max_contracts``). Choices: `fixed`, `volatility`, `confidence`, `kelly`. |
+| `bet_max_contracts` | `int` | `5` | ``"probability"`` sizing: contracts at full size. |
+| `bet_step_size` | `float` | `0.0` | ``"probability"`` sizing: discretization step of the size in (0, 1] (AFML 10.3); 0 = none. |
 | `commission_per_contract` | `float \| None` | `None` | Override the round-trip commission per contract (dollars; exchange and NFA fees are added on top). |
 | `slippage_ticks` | `float \| None` | `None` | Override the slippage per fill (ticks, one way). |
 | `initial_equity` | `float` | `100000.0` | Starting equity of the backtest (dollars). |
@@ -245,12 +263,25 @@ data:
       - 0.75
       - 1.25
       max_degraded_runs: 3
+    frac_diff:
+      enabled: false
+      d: auto
+      columns:
+      - close
+      - open
+      - high
+      - low
+      window: 100
+      threshold: 1.0e-05
   labeling:
     upper_mult: null
     lower_mult: null
     atr_period: 14
     max_holding_bars: null
     binary_mode: false
+    event_sampling: none
+    cusum_threshold: auto
+    cusum_vol_multiple: 3.0
   sequence:
     seq_len: null
   mtf:
@@ -304,6 +335,8 @@ training:
 evaluation:
   run_backtest: false
   position_sizing: fixed
+  bet_max_contracts: 5
+  bet_step_size: 0.0
   commission_per_contract: null
   slippage_ticks: null
   initial_equity: 100000.0
