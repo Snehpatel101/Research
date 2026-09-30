@@ -39,7 +39,7 @@ from .multi_resolution_utils import (
     DEFAULT_MTF_FEATURES,
     DEFAULT_MTF_TIMEFRAMES,
 )
-from .multi_stream import MultiStreamAdapter
+from .multi_stream import MultiStreamAdapter, resample_higher_timeframes
 
 # PHASE_2: Unified data preparation (split + transform + scale)
 from .preparation import PreparedData, UnifiedDataPreparation, prepare_for_model
@@ -63,6 +63,7 @@ __all__ = [
     "TabularAdapter",
     "SequenceAdapter",
     "MultiStreamAdapter",
+    "resample_higher_timeframes",
     # Multi-Resolution 4D
     "MultiResolution4DAdapter",
     "MultiResolution4DConfig",

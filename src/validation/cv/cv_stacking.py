@@ -48,12 +48,7 @@ def validate_stacking_consistency(
     ref_n_samples = len(reference.predictions)
 
     # Check for NaN patterns to detect sequence model gaps
-    ref_pred_col = (
-        "prediction"
-        if "prediction" in reference.predictions.columns
-        else reference.predictions.columns[0]
-    )
-    ref_valid_mask = ~reference.predictions[ref_pred_col].isna()
+    ref_valid_mask = ~reference.predictions[f"{first_key}_pred"].isna()
 
     for model_name, result in oof_predictions.items():
         # Check sample count matches
@@ -66,12 +61,7 @@ def validate_stacking_consistency(
             )
 
         # Check valid samples align (important for sequence models with different seq_len)
-        pred_col = (
-            "prediction"
-            if "prediction" in result.predictions.columns
-            else result.predictions.columns[0]
-        )
-        valid_mask = ~result.predictions[pred_col].isna()
+        valid_mask = ~result.predictions[f"{model_name}_pred"].isna()
 
         if not np.array_equal(ref_valid_mask.values, valid_mask.values):
             # Count mismatches for more informative warning
@@ -133,7 +123,7 @@ def build_stacking_datasets_from_cv_results(
         _, y, _ = container.get_sklearn_arrays("train", return_df=True)
 
         # Build stacking dataset
-        oof_gen = OOFGenerator(cv)
+        oof_gen = OOFGenerator(cv, n_classes=container.n_classes)
         stacking_ds = oof_gen.build_stacking_dataset(
             oof_predictions=oof_predictions,
             y_true=y,

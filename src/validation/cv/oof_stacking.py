@@ -21,7 +21,7 @@ from .oof_alignment import (
     OOFAlignmentResult,
     OOFAlignmentValidator,
 )
-from .oof_core import OOFPrediction
+from .oof_core import OOFPrediction, get_prob_column_names
 from .timestamp_alignment import (
     align_predictions_on_datetime,
     get_datetime_alignment_report,
@@ -145,6 +145,13 @@ class StackingDatasetBuilder:
     Combines predictions from multiple models and adds derived features
     for meta-learner training.
     """
+
+    def __init__(self, n_classes: int = 3) -> None:
+        """
+        Args:
+            n_classes: Label classes of the OOF predictions (2 for binary labels).
+        """
+        self.n_classes = n_classes
 
     def build_stacking_dataset(
         self,
@@ -295,8 +302,7 @@ class StackingDatasetBuilder:
         # Collect per-model probability arrays: (n_samples, n_classes) each
         all_probs = []
         for model in model_names:
-            prob_cols = [f"{model}_prob_short", f"{model}_prob_neutral", f"{model}_prob_long"]
-            probs = df[prob_cols].values
+            probs = df[get_prob_column_names(model, self.n_classes)].values
             all_probs.append(probs)
 
         # Stack: (n_models, n_samples, n_classes)

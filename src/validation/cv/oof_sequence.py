@@ -19,7 +19,7 @@ from src.models.registry import ModelRegistry
 
 from .early_stopping_split import carve_early_stopping_split
 from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from .oof_core import OOFPrediction, _get_prob_column_names, held_out_fold_metrics
+from .oof_core import OOFPrediction, build_oof_frame, held_out_fold_metrics
 from .purged_kfold import PurgedKFold
 from .sequence_cv import SequenceCVBuilder
 
@@ -323,18 +323,9 @@ class SequenceOOFGenerator:
         # Phase 4 SNwH: Store original indices for alignment
         valid_indices = np.where(~np.isnan(oof_preds))[0]
 
-        # Build result DataFrame with dynamic probability columns
-        prob_col_names = _get_prob_column_names(model_name, n_classes)
-        oof_data: dict[str, Any] = {
-            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-            "y_true": y.values,
-        }
-        for i, col_name in enumerate(prob_col_names):
-            oof_data[col_name] = oof_probs[:, i]
-        oof_data[f"{model_name}_pred"] = oof_preds
-        oof_data[f"{model_name}_confidence"] = oof_confidence
-        oof_data["fold_id"] = oof_fold_ids
-        oof_df = pd.DataFrame(oof_data)
+        oof_df = build_oof_frame(
+            model_name, X.index, y.values, oof_probs, oof_preds, oof_confidence, oof_fold_ids
+        )
 
         return OOFPrediction(
             model_name=model_name,

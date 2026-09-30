@@ -31,6 +31,7 @@ from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv.early_stopping_split import carve_early_stopping_split
 from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+from src.validation.cv.oof_core import build_oof_frame
 from src.validation.cv.walk_forward import (
     WalkForwardConfig,
     WalkForwardEvaluator,
@@ -373,6 +374,7 @@ class WalkForwardTrainer:
         all_preds = np.full(n_samples, np.nan)
         all_probs = np.full((n_samples, n_classes), np.nan)
         all_confidence = np.full(n_samples, np.nan)
+        all_window_ids = np.full(n_samples, -1, dtype=int)
 
         # Create evaluator
         evaluator = WalkForwardEvaluator(wf_config)
@@ -576,6 +578,7 @@ class WalkForwardTrainer:
                     prediction_output.class_probabilities
                 )
             all_confidence[test_idx] = prediction_output.confidence
+            all_window_ids[test_idx] = window_idx
 
             # Compute metrics
             metrics = compute_classification_metrics(
@@ -637,18 +640,9 @@ class WalkForwardTrainer:
             _mmap_file = None
 
         # Build predictions DataFrame
-        predictions_df = pd.DataFrame(
-            {
-                "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-                f"{model_name}_pred": all_preds,
-                f"{model_name}_confidence": all_confidence,
-                "y_true": y.values,
-            }
+        predictions_df = build_oof_frame(
+            model_name, X.index, y.values, all_probs, all_preds, all_confidence, all_window_ids
         )
-
-        # Add probability columns
-        for i in range(n_classes):
-            predictions_df[f"{model_name}_prob_class{i}"] = all_probs[:, i]
 
         total_time = time.time() - model_start
 

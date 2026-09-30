@@ -290,6 +290,7 @@ def _run_walk_forward_for_model(
     from src.models.registry import ModelRegistry
     from src.validation.cv.early_stopping_split import carve_early_stopping_split
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+    from src.validation.cv.oof_core import build_oof_frame
     from src.validation.cv.walk_forward import (
         WalkForwardEvaluator,
         WalkForwardResult,
@@ -303,12 +304,13 @@ def _run_walk_forward_for_model(
     X, y, weights = container.get_sklearn_arrays("train", return_df=True)
 
     n_samples = len(X)
-    n_classes = 3
+    n_classes = container.n_classes
 
     # Initialize prediction storage
     all_preds = np.full(n_samples, np.nan)
     all_probs = np.full((n_samples, n_classes), np.nan)
     all_confidence = np.full(n_samples, np.nan)
+    all_window_ids = np.full(n_samples, -1, dtype=int)
 
     # Create evaluator
     wf = WalkForwardEvaluator(config)
@@ -351,7 +353,7 @@ def _run_walk_forward_for_model(
             w_train = weights.iloc[train_idx].values
 
         # Create and train model
-        model = ModelRegistry.create(model_name)
+        model = ModelRegistry.create(model_name, config={"n_classes": n_classes})
         model.fit(
             X_train=X_train_scaled,
             y_train=y_train.values,
@@ -367,6 +369,7 @@ def _run_walk_forward_for_model(
         all_preds[test_idx] = prediction_output.class_predictions
         all_probs[test_idx] = prediction_output.class_probabilities
         all_confidence[test_idx] = prediction_output.confidence
+        all_window_ids[test_idx] = window_idx
 
         # Compute metrics
         metrics = _compute_metrics(y_test.values, prediction_output.class_predictions)
@@ -400,16 +403,8 @@ def _run_walk_forward_for_model(
         )
 
     # Build predictions DataFrame
-    predictions_df = pd.DataFrame(
-        {
-            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-            f"{model_name}_pred": all_preds,
-            f"{model_name}_prob_short": all_probs[:, 0],
-            f"{model_name}_prob_neutral": all_probs[:, 1],
-            f"{model_name}_prob_long": all_probs[:, 2],
-            f"{model_name}_confidence": all_confidence,
-            "y_true": y.values,
-        }
+    predictions_df = build_oof_frame(
+        model_name, X.index, y.values, all_probs, all_preds, all_confidence, all_window_ids
     )
 
     total_time = time.time() - start_time
@@ -641,6 +636,15 @@ def _forward_returns_and_costs(
     return forward_returns, cost, groups
 
 
+def _require_directional_labels(container) -> None:
+    """CPCV/PBO backtests sign(prediction) as a position; binary labels have no sign."""
+    if container.n_classes == 2:
+        raise ValueError(
+            "cpcv-pbo needs directional labels {-1, 0, +1}: binary labels {0: no move, "
+            "1: move} carry no trade direction, so strategy returns are undefined"
+        )
+
+
 def _run_cpcv_for_model(
     container,
     model_name: str,
@@ -655,7 +659,12 @@ def _run_cpcv_for_model(
 
     Returns:
         (CPCVResult with one entry per path, path-averaged per-bar returns)
+
+    Raises:
+        ValueError: For binary labels, which carry no trade direction.
     """
+    _require_directional_labels(container)
+
     from sklearn.metrics import accuracy_score, f1_score
 
     from src.models.base import PredictionResult
@@ -696,7 +705,7 @@ def _run_cpcv_for_model(
         X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
         X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
-        model = ModelRegistry.create(model_name)
+        model = ModelRegistry.create(model_name, config={"n_classes": container.n_classes})
         model.fit(
             X_train=scaling_result.X_train_scaled,
             y_train=y.iloc[fit_idx].values,
@@ -852,6 +861,11 @@ def run_cpcv_pbo(
         console.print("-" * 60)
 
         container = containers[horizon]
+        try:
+            _require_directional_labels(container)
+        except ValueError as e:
+            show_error(str(e))
+            raise typer.Exit(1) from None
         try:
             split = container.get_split("train")
             forward_returns, costs, groups = _forward_returns_and_costs(
