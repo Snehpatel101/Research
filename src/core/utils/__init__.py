@@ -2,6 +2,10 @@
 Utility modules for the ML Model Factory.
 
 Memory management, math helpers, JSON encoding and safe pickle I/O.
+
+The canonical Wilder ATR / true range live in ``src.core.utils.atr``
+(imported from there, not re-exported here, so importing this package does
+not load numba).
 """
 
 from .json_utils import NumpyEncoder

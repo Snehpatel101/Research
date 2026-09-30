@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.utils.atr import true_range
+
 if TYPE_CHECKING:
     from src.core import PipelineConfig
 
@@ -178,16 +180,6 @@ def _compute_volatility(returns: pd.Series, window: int) -> pd.Series:
     return returns.rolling(window=window, min_periods=window).std()
 
 
-def _compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
-    """Compute Average True Range."""
-    high_low = high - low
-    high_close = (high - close.shift(1)).abs()
-    low_close = (low - close.shift(1)).abs()
-
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-
-
 def _compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """
     Compute Average Directional Index (ADX).
@@ -196,7 +188,7 @@ def _compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int 
     Values > 25 typically indicate a strong trend.
     """
     # True Range
-    tr = _compute_atr(high, low, close, period=1)  # Raw TR
+    tr = pd.Series(true_range(high, low, close), index=high.index)
 
     # Directional Movement
     up_move = high - high.shift(1)

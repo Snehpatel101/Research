@@ -64,10 +64,7 @@ from .trend import (
 from .unified import get_regime_labels
 
 # Individual detectors
-from .volatility import (
-    VolatilityRegimeDetector,
-    calculate_atr,
-)
+from .volatility import VolatilityRegimeDetector
 
 __all__ = [
     # Base classes
@@ -79,7 +76,6 @@ __all__ = [
     "RegimeDetector",
     # Volatility
     "VolatilityRegimeDetector",
-    "calculate_atr",
     # Trend
     "TrendRegimeDetector",
     "calculate_adx",

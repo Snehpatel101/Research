@@ -11,8 +11,10 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
+from src.core.utils.atr import wilder_atr
+
 from ._helpers import np_shift1 as _np_shift1
-from .numba_functions import calculate_adx_numba, calculate_atr_numba
+from .numba_functions import calculate_adx_numba
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +170,7 @@ def add_supertrend(
     low = df["low"].values
 
     # Calculate ATR
-    atr = calculate_atr_numba(high, low, close, period)
+    atr = wilder_atr(high, low, close, period)
 
     # Calculate basic bands: midpoint +/- multiplier * ATR
     hl2 = (high + low) / 2

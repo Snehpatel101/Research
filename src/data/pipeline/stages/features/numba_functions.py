@@ -164,49 +164,6 @@ def calculate_rsi_numba(close: np.ndarray, period: int = 14) -> np.ndarray:
 
 
 @jit(nopython=True, cache=True)
-def calculate_atr_numba(
-    high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
-) -> np.ndarray:
-    """
-    Calculate Average True Range using Numba.
-
-    Parameters
-    ----------
-    high : np.ndarray
-        High price array
-    low : np.ndarray
-        Low price array
-    close : np.ndarray
-        Close price array
-    period : int, default 14
-        ATR calculation period
-
-    Returns
-    -------
-    np.ndarray
-        ATR values with NaN for warmup period
-    """
-    n = len(high)
-    tr = np.zeros(n)
-    atr = np.full(n, np.nan)
-
-    # Calculate True Range
-    for i in range(1, n):
-        hl = high[i] - low[i]
-        hc = abs(high[i] - close[i - 1])
-        lc = abs(low[i] - close[i - 1])
-        tr[i] = max(hl, hc, lc)
-
-    # Calculate ATR
-    atr[period] = np.mean(tr[1 : period + 1])
-
-    for i in range(period + 1, n):
-        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
-
-    return atr
-
-
-@jit(nopython=True, cache=True)
 def calculate_stochastic_numba(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, k_period: int = 14, d_period: int = 3
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -417,7 +374,6 @@ __all__ = [
     "calculate_sma_numba",
     "calculate_ema_numba",
     "calculate_rsi_numba",
-    "calculate_atr_numba",
     "calculate_stochastic_numba",
     "calculate_rolling_autocorr_numba",
     "calculate_adx_numba",

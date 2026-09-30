@@ -135,6 +135,16 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   checkpoints into it (a hidden `global.yaml` default); tracking is now off
   unless `tracking.backend` is set, and local runs reference artifacts instead
   of copying them.
+- Labels and backtest used different ATRs: the labeler seeded its Wilder EMA
+  with the first bar's range and labeled bars the backtester had no ATR for,
+  the backtester was hard-wired to ATR(14), and the regime detectors and
+  features each had their own copy. One canonical Wilder ATR
+  (`src/core/utils/atr.py`: `wilder_atr`, `true_range`; TA-Lib definition,
+  NaN until `period` true ranges exist) now feeds the labeler, the
+  backtester's barriers and derived cost (`BacktestConfig.atr_period`,
+  wired from `labeling.atr_period`), the volatility regime, the regime ADX's
+  true range and the ATR features (unchanged values). The first `atr_period`
+  bars are labeled invalid (-99).
 
 ### Removed
 - Dead serving/monitoring chain, aspirational config layer, phantom types and

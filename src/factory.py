@@ -1630,6 +1630,8 @@ class MLFactory:
             bt_kwargs["barrier_k_up"] = k_up
             bt_kwargs["barrier_k_down"] = k_down
             bt_kwargs["max_holding_period"] = max_bars
+            # Same Wilder ATR (wilder_atr, same period) as the labels' barriers
+            bt_kwargs["atr_period"] = self.config.data.labeling.atr_period
             # Same cost term the labeler added (persisted with the data
             # checkpoint; None only for checkpoints that predate it — the
             # backtester then derives it causally per signal bar: price
