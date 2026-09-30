@@ -24,15 +24,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import platform
+import re
 import subprocess
 import sys
 from datetime import datetime
 from importlib import metadata
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 RUN_MANIFEST_FILE = "run_manifest.json"
 RUN_MANIFEST_VERSION = 1
@@ -87,15 +91,62 @@ def file_sha256(path: str | Path) -> str:
 
 
 def data_source_fingerprint(path: str | Path | None) -> dict[str, Any]:
-    """Path, size and SHA-256 of the input data file (all None without a file)."""
-    if path is None or not Path(path).is_file():
-        return {"path": str(path) if path else None, "size_bytes": None, "sha256": None}
+    """
+    Path, size and SHA-256 of the input data.
+
+    A file is hashed directly. A directory (e.g. a partitioned parquet
+    dataset) is hashed over its files in sorted relative-path order: the
+    digest covers every file's path and content, so adding, renaming or
+    changing a partition changes it. A missing path yields None fields and a
+    warning (the run fails on load right after).
+    """
+    if path is None:
+        return {"path": None, "size_bytes": None, "sha256": None}
     resolved = Path(path).resolve()
-    return {
-        "path": str(resolved),
-        "size_bytes": resolved.stat().st_size,
-        "sha256": file_sha256(resolved),
-    }
+    if resolved.is_file():
+        return {
+            "path": str(resolved),
+            "size_bytes": resolved.stat().st_size,
+            "sha256": file_sha256(resolved),
+        }
+    if resolved.is_dir():
+        files = sorted(
+            p
+            for p in resolved.rglob("*")
+            if p.is_file()
+            and not any(part.startswith(".") for part in p.relative_to(resolved).parts)
+        )
+        digest = hashlib.sha256()
+        for file in files:
+            entry = f"{file.relative_to(resolved).as_posix()}\0{file_sha256(file)}\n"
+            digest.update(entry.encode())
+        return {
+            "path": str(resolved),
+            "size_bytes": sum(f.stat().st_size for f in files),
+            "sha256": digest.hexdigest(),
+            "n_files": len(files),
+        }
+    logger.warning(f"Data path {resolved} does not exist: the run manifest has no data hash")
+    return {"path": str(resolved), "size_bytes": None, "sha256": None}
+
+
+# scheme://user:password@host -> scheme://***@host
+_URI_USERINFO = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)[^/@\s]+@")
+
+
+def redact_secrets(value: Any) -> Any:
+    """Copy of ``value`` with credentials in URIs (``scheme://user:pass@``) masked.
+
+    Applied to everything the manifest and the tracker record (config,
+    tracking URI, command line), which may be shared or uploaded.
+    """
+    if isinstance(value, str):
+        return _URI_USERINFO.sub(r"\g<scheme>***@", value)
+    if isinstance(value, dict):
+        return {k: redact_secrets(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [redact_secrets(v) for v in value]
+    return value
 
 
 def _git(args: list[str], cwd: Path) -> str | None:
@@ -252,16 +303,18 @@ class RunManifest:
     ) -> RunManifest:
         """Collect the provenance and write the manifest with ``status: running``."""
         provenance = json_safe(
-            {
-                "config_hash": config_hash,
-                "config": config,
-                "seed": seed,
-                "git": git_state(),
-                "packages": package_versions(),
-                "environment": runtime_environment(),
-                "torch": torch_environment(),
-                "data_source": data_source_fingerprint(data_path),
-            }
+            redact_secrets(
+                {
+                    "config_hash": config_hash,
+                    "config": config,
+                    "seed": seed,
+                    "git": git_state(),
+                    "packages": package_versions(),
+                    "environment": runtime_environment(),
+                    "torch": torch_environment(),
+                    "data_source": data_source_fingerprint(data_path),
+                }
+            )
         )
         content: dict[str, Any] = {
             "manifest_version": RUN_MANIFEST_VERSION,
@@ -324,6 +377,26 @@ class RunManifest:
 
     # -- updates --------------------------------------------------------------
 
+    def resume(self, *, from_stage: int, config_hash: str) -> None:
+        """
+        Reopen a finished or crashed run for ``resume_from_checkpoint``.
+
+        The original provenance stays (it describes the checkpointed stages);
+        this invocation's code and environment go into a ``resumes`` entry.
+        """
+        self.content.setdefault("resumes", []).append(
+            {
+                "started_at": _now(),
+                "from_stage": from_stage,
+                "config_hash": config_hash,
+                "previous_status": self.content.get("status"),
+                "git": git_state(),
+                "packages": package_versions(),
+            }
+        )
+        self.content.update(status="running", finished_at=None, error=None)
+        self.write()
+
     def record(self, section: str, values: dict[str, Any]) -> None:
         """Merge ``values`` into a mutable section (``data``, ``tracking``) and write."""
         if section in ("provenance", "provenance_sha256"):
@@ -356,7 +429,7 @@ class RunManifest:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_name(f".{self.path.name}.tmp")
         with open(tmp, "w") as f:
-            json.dump(json_safe(self.content), f, indent=2, allow_nan=False)
+            json.dump(json_safe(redact_secrets(self.content)), f, indent=2, allow_nan=False)
             f.write("\n")
         os.replace(tmp, self.path)
 
@@ -371,6 +444,7 @@ __all__ = [
     "git_state",
     "json_safe",
     "package_versions",
+    "redact_secrets",
     "runtime_environment",
     "torch_environment",
     "verify_provenance",

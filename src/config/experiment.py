@@ -331,8 +331,13 @@ class ExperimentConfig:
             value = getattr(self.training, name)
             if value is not None and value < 0:
                 raise ValueError(f"training.{name} must be >= 0 or None, got {value}")
-        if self.random_seed < 0:
-            raise ValueError(f"random_seed must be >= 0, got {self.random_seed}")
+        from src.core.reproducibility import MAX_RANDOM_SEED
+
+        if not 0 <= self.random_seed <= MAX_RANDOM_SEED:
+            raise ValueError(
+                f"random_seed must be in [0, {MAX_RANDOM_SEED}] (derived per-fold and "
+                f"per-feature seeds must stay below 2**32), got {self.random_seed}"
+            )
         if self.tracking.backend not in TRACKING_BACKENDS:
             raise ValueError(
                 f"tracking.backend must be one of {TRACKING_BACKENDS}, "

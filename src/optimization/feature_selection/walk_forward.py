@@ -34,7 +34,7 @@ from sklearn.metrics import log_loss, make_scorer
 from src.core.reproducibility import sequential_prediction
 
 from .config import FeatureSelectorConfig
-from .ranking import quantize_importance
+from .ranking import IMPORTANCE_NOISE_FLOOR, quantize_importance
 from .ranking import top_features as rank_top_features
 from .result import FeatureSelectionResult
 
@@ -507,7 +507,10 @@ class WalkForwardFeatureSelector:
         )
         for c in multi:
             # Quantized: float noise between near-tied members must not order them
-            own = quantize_importance(pd.Series({f: own_all[f] for f in cluster_members[c]}))
+            own = quantize_importance(
+                pd.Series({f: own_all[f] for f in cluster_members[c]}),
+                noise_floor=IMPORTANCE_NOISE_FLOOR,
+            )
             span = own.max() - own.min()
             rank01 = (own - own.min()) / span if span > 0 else own * 0.0
             importance[cluster_members[c]] += _WITHIN_CLUSTER_TIEBREAK * rank01

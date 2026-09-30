@@ -22,7 +22,11 @@ from src.core.reproducibility import sequential_prediction
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
-from ..common import map_classes_to_labels, map_labels_to_classes
+from ..common import (
+    full_class_probabilities,
+    map_classes_to_labels,
+    map_labels_to_classes,
+)
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -137,8 +141,9 @@ class RandomForestModel(BaseModel):
         # Compute log loss
         train_proba = self._proba(X_train)
         val_proba = self._proba(X_val)
-        train_loss = float(log_loss(y_train_sk, train_proba))
-        val_loss = float(log_loss(y_val_sk, val_proba))
+        classes = np.arange(self._n_classes)  # _proba is full width
+        train_loss = float(log_loss(y_train_sk, train_proba, labels=classes))
+        val_loss = float(log_loss(y_val_sk, val_proba, labels=classes))
 
         self._is_fitted = True
 
@@ -219,9 +224,9 @@ class RandomForestModel(BaseModel):
             raise RuntimeError("Model is not fitted")
         sequential_prediction(self._model)  # also for models saved before this fix
         n_threads = min(effective_n_jobs(self._config.get("n_jobs", -1)), len(X) // 1000 or 1)
-        if n_threads <= 1:
-            return np.asarray(self._model.predict_proba(X))
         model = self._model
+        if n_threads <= 1:
+            return full_class_probabilities(model.predict_proba(X), model.classes_, self._n_classes)
 
         def predict_rows(rows: np.ndarray) -> np.ndarray:
             return model.predict_proba(X.iloc[rows] if hasattr(X, "iloc") else X[rows])
@@ -229,7 +234,7 @@ class RandomForestModel(BaseModel):
         chunks = np.array_split(np.arange(len(X)), n_threads)
         with ThreadPoolExecutor(max_workers=n_threads) as pool:
             parts = list(pool.map(predict_rows, chunks))
-        return np.vstack(parts)
+        return full_class_probabilities(np.vstack(parts), model.classes_, self._n_classes)
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""

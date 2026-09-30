@@ -20,7 +20,7 @@ from sklearn.inspection import permutation_importance
 
 from src.core.reproducibility import sequential_prediction
 
-from .ranking import rank_by_importance
+from .ranking import IMPORTANCE_NOISE_FLOOR, rank_by_importance
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ def compute_regime_importance(
         combined = combined.clip(lower=0)  # Safety
         combined = pd.DataFrame({"current": combined, "new": imp_full}).max(axis=1)
 
-    combined = rank_by_importance(combined)
+    combined = rank_by_importance(combined, noise_floor=IMPORTANCE_NOISE_FLOOR)
 
     logger.info(
         f"  Regime-conditional selection: {len(per_regime)} regimes analyzed, "

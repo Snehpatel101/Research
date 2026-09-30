@@ -53,9 +53,36 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   features. Forests now predict in a fixed tree order (row-parallel for the
   `random_forest` model); LightGBM runs with `deterministic=True` on CPU.
 - Feature rankings let float noise and set iteration order (PYTHONHASHSEED)
-  break ties: importances are now quantized to 12 significant digits and ties
+  break ties: every score is now rounded to 12 significant digits of its own
+  magnitude (variance rankings spanning many orders of magnitude keep their
+  order), permutation-importance noise around 0 is folded to 0, ties are
   broken by feature name (`optimization/feature_selection/ranking.py`), and
   stable-feature counts are built in sorted order.
+- Classifiers fitted without one of the classes (e.g. labels {-1, +1} only)
+  returned fewer probability columns, and argmax over them gave a column
+  position instead of a class; every model now returns `n_classes` columns in
+  class order (`full_class_probabilities`).
+- The standalone evaluators (`ml cv`, `ml walk-forward`, `ml cpcv-pbo`) and
+  regime-conditional selection ignored the run seed; they take `--seed` /
+  `random_seed` now. `random_seed` is bounded below 2**32 minus the offsets
+  derived seeds add.
+- Tracking failures (tracking server down, quota) could fail a training run or
+  leave a model unsaved; tracker calls in the Trainer are best-effort, models
+  are saved before any metric is logged, and a child run always ends. The
+  MLflow tracker records directories (checkpoints) by reference instead of
+  uploading them. Credentials in URIs are masked in the run manifest and in
+  tracked parameters.
+
+### Changed
+- Checkpoint resume is keyed by `ExperimentConfig.config_hash()` (settings
+  that change results). Editing tracking, verbosity or names no longer
+  invalidates checkpoints. A resume against checkpoints written with
+  different settings is refused with an error instead of silently clearing
+  them; `resume_from_checkpoint(restart_on_config_change=True)` discards them
+  explicitly. Checkpoints written before this change still resume.
+- A resumed run keeps its original `run_manifest.json` provenance and appends a
+  `resumes` entry (time, stage, code and package versions of the resume).
+  Partitioned (directory) datasets are fingerprinted file by file.
 - Every `Trainer` silently logged a local tracking run and copied its model
   checkpoints into it (a hidden `global.yaml` default); tracking is now off
   unless `tracking.backend` is set, and local runs reference artifacts instead

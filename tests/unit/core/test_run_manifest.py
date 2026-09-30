@@ -19,6 +19,7 @@ from src.core.run_manifest import (
     git_state,
     json_safe,
     package_versions,
+    redact_secrets,
     verify_provenance,
 )
 from tests.helpers import REPO_ROOT
@@ -187,3 +188,70 @@ class TestVerificationAndReference:
         assert ref["config_hash"] == "abc123"
         assert ref["data_sha256"] == file_sha256(data)
         assert set(ref) >= {"git_commit", "git_dirty"}
+
+
+class TestDirectoryData:
+    def test_partitioned_dataset_hashed_in_sorted_order(self, tmp_path: Path) -> None:
+        root = tmp_path / "dataset"
+        (root / "year=2024").mkdir(parents=True)
+        (root / "year=2024" / "part-1.parquet").write_bytes(b"one")
+        (root / "year=2024" / "part-0.parquet").write_bytes(b"zero")
+        (root / ".hidden").write_bytes(b"ignored")
+        fp = data_source_fingerprint(root)
+        assert fp["n_files"] == 2
+        assert fp["size_bytes"] == 7
+        assert fp["sha256"] is not None
+        # Content change in one partition changes the digest
+        (root / "year=2024" / "part-1.parquet").write_bytes(b"ONE")
+        assert data_source_fingerprint(root)["sha256"] != fp["sha256"]
+
+    def test_missing_path_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        fp = data_source_fingerprint(tmp_path / "nope.parquet")
+        assert fp["sha256"] is None
+        assert "does not exist" in caplog.text
+
+
+class TestRedaction:
+    def test_credentials_masked_everywhere(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "sys.argv", ["ml", "run", "--tracking-uri", "https://bob:pw@mlflow.example.com"]
+        )
+        manifest = RunManifest.begin(
+            tmp_path / "run",
+            run_id="r",
+            name="exp",
+            config={"tracking": {"tracking_uri": "postgresql://u:secret@db:5432/mlflow"}},
+            config_hash="h",
+            seed={"random_seed": 1, "deterministic": False},
+            data_path=None,
+        )
+        manifest.record("tracking", {"uri": "https://bob:pw@mlflow.example.com"})
+        text = manifest.path.read_text()
+        assert "secret" not in text and "bob:pw" not in text
+        assert "postgresql://***@db:5432/mlflow" in text
+        assert verify_provenance(json.loads(text))
+
+    def test_redact_secrets_leaves_plain_values(self) -> None:
+        value = {"a": ["file:///data/x.parquet", 3, None], "b": "no uri here"}
+        assert redact_secrets(value) == value
+
+
+class TestResume:
+    def test_resume_keeps_provenance_and_appends_entry(self, tmp_path: Path) -> None:
+        manifest = _begin(tmp_path)
+        manifest.record("data", {"n_rows": 2500, "start": "2024-01-02T09:30:00"})
+        manifest.finish(success=False, error=RuntimeError("crash"))
+        original = json.loads(manifest.path.read_text())
+
+        reopened = RunManifest.load(manifest.path)
+        reopened.resume(from_stage=2, config_hash="abc123")
+        content = json.loads(reopened.path.read_text())
+        assert content["provenance"] == original["provenance"]
+        assert content["provenance_sha256"] == original["provenance_sha256"]
+        assert content["started_at"] == original["started_at"]
+        assert content["data"] == {"n_rows": 2500, "start": "2024-01-02T09:30:00"}
+        assert content["status"] == "running" and content["error"] is None
+        (entry,) = content["resumes"]
+        assert entry["from_stage"] == 2
+        assert entry["previous_status"] == "failed"
+        assert set(entry) >= {"started_at", "git", "packages", "config_hash"}

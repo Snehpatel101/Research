@@ -19,6 +19,7 @@ import pandas as pd
 
 from src.core.constants import OHLCV_COLUMNS
 from src.core.label_spans import LabelSpans
+from src.core.reproducibility import sequential_prediction
 from src.data.adapters import PreparedData
 from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
@@ -970,11 +971,12 @@ class TrainingOpsMixin:
             if len(np.unique(meta_labels_train[tr_idx])) < 2:
                 continue  # a fold with one class cannot fit a classifier
             fold_meta = self._create_meta_model(meta_model_name)
-            fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx])
+            sequential_prediction(fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx]))
             meta_proba_oof[va_idx] = fold_meta.predict_proba(X_meta_train[va_idx])[:, 1]
 
         meta_model = self._create_meta_model(meta_model_name)
-        meta_model.fit(X_meta_train, meta_labels_train)
+        # Bit-reproducible probabilities: forests predict in a fixed tree order
+        sequential_prediction(meta_model.fit(X_meta_train, meta_labels_train))
         p_win_val = meta_model.predict_proba(X_meta_val)[:, 1]
 
         # Stage 5: Evaluate the bets on validation — precision and net outcome of

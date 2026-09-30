@@ -31,6 +31,12 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Components derive their own seeds as run seed + small offsets (per fold,
+# cluster, feature, bootstrap draw); NumPy's legacy RNG and scikit-learn need
+# seeds < 2**32, so the run seed leaves this much headroom below that bound.
+SEED_OFFSET_HEADROOM = 1_000_000
+MAX_RANDOM_SEED = 2**32 - 1 - SEED_OFFSET_HEADROOM
+
 
 @dataclass
 class ReproducibilityConfig:
@@ -124,8 +130,8 @@ def set_all_seeds(seed: int, deterministic: bool = False) -> ReproducibilityInfo
     """
     global _seed_state
 
-    if seed < 0:
-        raise ValueError(f"Seed must be non-negative, got {seed}")
+    if not 0 <= seed <= MAX_RANDOM_SEED:
+        raise ValueError(f"Seed must be in [0, {MAX_RANDOM_SEED}], got {seed}")
 
     # Set Python random seed
     random.seed(seed)
@@ -376,6 +382,7 @@ def get_worker_init_fn(seed: int):
 
 
 __all__ = [
+    "MAX_RANDOM_SEED",
     "ReproducibilityConfig",
     "ReproducibilityInfo",
     "set_all_seeds",

@@ -25,7 +25,11 @@ from sklearn.metrics import accuracy_score, f1_score, log_loss
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
-from ..common import map_classes_to_labels, map_labels_to_classes
+from ..common import (
+    full_class_probabilities,
+    map_classes_to_labels,
+    map_labels_to_classes,
+)
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -196,7 +200,9 @@ class LogisticModel(BaseModel):
         if self._model is None:
             raise RuntimeError("Model is not fitted")
 
-        probabilities = self._model.predict_proba(X)
+        probabilities = full_class_probabilities(
+            self._model.predict_proba(X), self._model.classes_, self._n_classes
+        )
         class_predictions_sk = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_sklearn(class_predictions_sk)
         confidence = np.max(probabilities, axis=1)
@@ -216,8 +222,9 @@ class LogisticModel(BaseModel):
         if self._model is None:
             raise RuntimeError("Model is not fitted")
 
-        result: np.ndarray = self._model.predict_proba(X)
-        return result
+        return full_class_probabilities(
+            self._model.predict_proba(X), self._model.classes_, self._n_classes
+        )
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""

@@ -14,11 +14,13 @@ from .class_weights import (
 from .label_mapping import (
     CLASS_TO_LABEL,
     LABEL_TO_CLASS,
+    full_class_probabilities,
     map_classes_to_labels,
     map_labels_to_classes,
 )
 
 __all__ = [
+    "full_class_probabilities",
     # Label mapping
     "LABEL_TO_CLASS",
     "CLASS_TO_LABEL",

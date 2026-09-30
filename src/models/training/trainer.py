@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import secrets
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -369,22 +369,38 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         )
         return get_tracker(tracker_config)
 
+    def _track(self, action: str, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Run one tracker call best-effort: a tracking failure (server down,
+        network, quota) is a warning, never a failed or unsaved model."""
+        try:
+            return call(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001 - tracking is observability, not training
+            logger.warning(f"Experiment tracking: could not {action}: {e}")
+            return None
+
     @contextmanager
     def _tracking_run(self, tags: dict[str, str]) -> Iterator[None]:
         """One tracker run around a training call: config params in, status out.
 
         The run ends FINISHED when the body returns and FAILED when it raises,
-        so a crashed training never leaves its run marked RUNNING.
+        so a crashed training never leaves its run marked RUNNING. Every
+        tracker call is best-effort (``_track``).
         """
-        tracking_run_id = self.tracker.start_run(run_name=self.run_id, tags=tags)
-        logger.info(f"Started experiment tracking run: {tracking_run_id}")
-        self.tracker.log_params(flatten_params(self.config.to_dict()))
+        run_id = self._track(
+            "start the run", self.tracker.start_run, run_name=self.run_id, tags=tags
+        )
+        if run_id is not None:
+            logger.info(f"Started experiment tracking run: {run_id}")
+            self._track(
+                "log parameters", self.tracker.log_params, flatten_params(self.config.to_dict())
+            )
+        status = "FAILED"
         try:
             yield
-        except BaseException:
-            self.tracker.end_run(status="FAILED")
-            raise
-        self.tracker.end_run(status="FINISHED")
+            status = "FINISHED"
+        finally:
+            if run_id is not None:
+                self._track("end the run", self.tracker.end_run, status=status)
 
     def _setup_output_dir(self) -> None:
         """Create output directory structure."""
@@ -787,9 +803,8 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         if test_metrics:
             flat_metrics["test_accuracy"] = test_metrics.get("accuracy", 0)
             flat_metrics["test_macro_f1"] = test_metrics.get("macro_f1", 0)
-        self.tracker.log_metrics(flat_metrics)
 
-        # Save artifacts
+        # Save artifacts (before any tracker call: the model never depends on it)
         if not skip_save:
             self._save_artifacts(
                 training_metrics,
@@ -807,10 +822,19 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             # Generate checksums for all artifacts (must be last)
             self._save_checksums()
 
-            # Log artifacts to tracker
-            self.tracker.log_artifact(self.output_path / "config", "config")
-            self.tracker.log_artifact(self.output_path / "metrics", "metrics")
-            self.tracker.log_artifact(self.output_path / "checkpoints", "model")
+        self._track("log metrics", self.tracker.log_metrics, flat_metrics)
+        if not skip_save:
+            for subdir, kind in (
+                ("config", "config"),
+                ("metrics", "metrics"),
+                ("checkpoints", "model"),
+            ):
+                self._track(
+                    f"log {kind} artifacts",
+                    self.tracker.log_artifact,
+                    self.output_path / subdir,
+                    kind,
+                )
 
         total_time = time.time() - start_time
 
@@ -839,7 +863,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             f"time={total_time:.1f}s"
         )
 
-        self.tracker.log_metrics({"total_time_seconds": total_time})
+        self._track("log metrics", self.tracker.log_metrics, {"total_time_seconds": total_time})
         return results
 
     def run_prepared(
@@ -964,9 +988,8 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             "val_precision": eval_metrics["precision"],
             "val_recall": eval_metrics["recall"],
         }
-        self.tracker.log_metrics(flat_metrics)
 
-        # Save artifacts if not skipped
+        # Save artifacts if not skipped (before any tracker call)
         if not skip_save:
             self._save_artifacts(
                 training_metrics=training_metrics,
@@ -974,6 +997,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 predictions=val_predictions,
             )
             self._save_model()
+        self._track("log metrics", self.tracker.log_metrics, flat_metrics)
 
         total_time = time.time() - start_time
 
@@ -998,6 +1022,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             f"time={total_time:.1f}s"
         )
 
-        self.tracker.log_metrics({"total_time_seconds": total_time})
+        self._track("log metrics", self.tracker.log_metrics, {"total_time_seconds": total_time})
 
         return results

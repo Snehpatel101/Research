@@ -215,7 +215,11 @@ class MLflowTracker(ExperimentTracker):
         artifact_type: str | None = None,
     ) -> None:
         """
-        Upload a file or directory to the run's artifact store.
+        Upload a file to the run's artifact store; record a directory by reference.
+
+        Directories (model checkpoints, metric folders) are not uploaded: they
+        can be gigabytes and already live in the run's output directory. Their
+        resolved path is set as tag ``artifact_path.<type or name>``.
 
         Args:
             path: Path to artifact
@@ -236,7 +240,7 @@ class MLflowTracker(ExperimentTracker):
 
         try:
             if path.is_dir():
-                self._client.log_artifacts(self._run_id, str(path), artifact_path=artifact_type)
+                self.set_tags({f"artifact_path.{artifact_type or path.name}": str(path.resolve())})
             else:
                 self._client.log_artifact(self._run_id, str(path), artifact_path=artifact_type)
             logger.debug(f"Logged artifact: {path}")

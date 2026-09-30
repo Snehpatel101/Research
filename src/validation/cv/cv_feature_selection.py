@@ -44,6 +44,7 @@ def run_cv_with_per_fold_feature_selection(
     cv: PurgedKFold | None = None,
     tuning_trials: int = 50,
     label_spans: LabelSpans | None = None,
+    seed: int = 42,
 ) -> dict[str, Any]:
     """
     Run CV with per-fold feature selection to prevent leakage.
@@ -71,6 +72,7 @@ def run_cv_with_per_fold_feature_selection(
         tuning_trials: Number of Optuna trials for per-fold tuning
         label_spans: Label spans of the rows of ``X`` (bar positions); inner tuning
             folds purge on them
+        seed: Seeds mutual-information ranking and per-fold tuning
 
     ``X`` is unscaled: every fold scales its features with the model's scaler fit on
     that fold's fit rows only (early-stopping tail and validation rows are transformed).
@@ -111,7 +113,7 @@ def run_cv_with_per_fold_feature_selection(
             X_train_fold.values,
             y_train_fold.values,
             discrete_features=False,
-            random_state=42,
+            random_state=seed,
         )
 
         # Select top N features based on MI scores from training data only
@@ -152,6 +154,7 @@ def run_cv_with_per_fold_feature_selection(
                 cv=inner_cv,
                 n_trials=max(10, tuning_trials // 3),  # Fewer trials for inner tuning
                 scale_per_fold=True,
+                seed=seed,
             )
             tuning_result = tuner.tune(
                 X_train_selected,

@@ -91,7 +91,7 @@ def install_fake_mlflow(monkeypatch: pytest.MonkeyPatch) -> FakeMlflowStore:
             store.runs[run_id]["artifacts"].append((Path(local_path).name, artifact_path))
 
         def log_artifacts(self, run_id: str, local_dir: str, artifact_path=None) -> None:
-            store.runs[run_id]["artifacts"].append((Path(local_dir).name, artifact_path))
+            raise AssertionError("directories are recorded by reference, never uploaded")
 
         def set_terminated(self, run_id: str, status: str) -> None:
             store.runs[run_id]["status"] = status
@@ -253,7 +253,9 @@ class TestMLflowTracker:
         tracker.set_tags({"artifact.deploy": "/deploy"})
         tracker.end_run(status="FAILED")
         run = store.runs[run_id]
-        assert run["artifacts"] == [("manifest.json", "config"), (tmp_path.name, "dir")]
+        # Files are uploaded; directories (checkpoints can be GBs) only referenced
+        assert run["artifacts"] == [("manifest.json", "config")]
+        assert run["tags"]["artifact_path.dir"] == str(tmp_path.resolve())
         assert run["tags"]["artifact.deploy"] == "/deploy"
         assert run["status"] == "FAILED"
 
@@ -306,7 +308,7 @@ class TestTrainerTracking:
         assert run["params"]["random_seed"] == "11"
         assert run["params"]["model_config.random_state"] == "11"
         assert "val_macro_f1" in run["metrics"]
-        assert ("checkpoints", "model") in run["artifacts"]
+        assert run["tags"]["artifact_path.model"].endswith("checkpoints")
         assert result.trainer.model.config["random_state"] == 11
 
     def test_failed_training_marks_run_failed(
@@ -324,3 +326,106 @@ class TestTrainerTracking:
             )
         (run,) = LocalTracker.list_runs(tmp_path / "tracking")
         assert run["status"] == "FAILED"
+
+
+class _FlakyTracker(DisabledTracker):
+    """A tracker whose server fails on the chosen calls (review F4)."""
+
+    def __init__(self, failing: set[str]) -> None:
+        super().__init__(TrackerConfig())
+        self.failing = failing
+        self.calls: list[tuple[str, Any]] = []
+
+    def _maybe_fail(self, name: str, payload: Any = None) -> None:
+        self.calls.append((name, payload))
+        if name in self.failing:
+            raise ConnectionError(f"tracking server down during {name}")
+
+    def start_run(self, run_name=None, run_id=None, tags=None) -> str:  # type: ignore[override]
+        self._maybe_fail("start_run")
+        return super().start_run(run_name, run_id, tags)
+
+    def end_run(self, status: str = "FINISHED") -> None:
+        self._maybe_fail("end_run", status)
+        super().end_run(status)
+
+    def log_params(self, params: dict[str, Any]) -> None:
+        self._maybe_fail("log_params")
+
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
+        self._maybe_fail("log_metrics")
+
+    def log_artifact(self, path: Path | str, artifact_type: str | None = None) -> None:
+        self._maybe_fail("log_artifact")
+
+
+class TestTrackingFailuresNeverFailTraining:
+    def _train_with(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tracker: Any) -> Any:
+        import src.models.training.trainer as trainer_module
+
+        monkeypatch.setattr(trainer_module, "get_tracker", lambda config: tracker)
+        return _train_xgboost(tmp_path, tracking_backend="local")
+
+    def test_every_call_failing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        tracker = _FlakyTracker(
+            {"start_run", "log_params", "log_metrics", "log_artifact", "end_run"}
+        )
+        result = self._train_with(monkeypatch, tmp_path, tracker)
+        assert result.metrics, "training completed"
+        saved = list(result.trainer.output_path.joinpath("checkpoints").rglob("*"))
+        assert saved, "the model was saved despite the tracker"
+
+    def test_metrics_failing_still_ends_run_finished(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        tracker = _FlakyTracker({"log_params", "log_metrics", "log_artifact"})
+        result = self._train_with(monkeypatch, tmp_path, tracker)
+        assert result.metrics
+        assert tracker.calls[0][0] == "start_run"
+        assert tracker.calls[-1] == ("end_run", "FINISHED")
+        assert list(result.trainer.output_path.joinpath("checkpoints").rglob("*"))
+
+    def test_training_error_ends_run_failed_even_if_logging_fails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from src.models.training.trainer import Trainer
+
+        def boom(self: Trainer, *args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("training exploded")
+
+        monkeypatch.setattr(Trainer, "_run", boom)
+        tracker = _FlakyTracker({"log_params"})
+        with pytest.raises(RuntimeError, match="exploded"):
+            self._train_with(monkeypatch, tmp_path, tracker)
+        assert tracker.calls[-1] == ("end_run", "FAILED")
+
+    def test_model_saved_before_first_metrics_call(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from src.models.training.trainer import Trainer
+
+        order: list[str] = []
+        real_save = Trainer._save_model
+
+        def recording_save(self: Trainer) -> None:
+            order.append("save_model")
+            real_save(self)
+
+        monkeypatch.setattr(Trainer, "_save_model", recording_save)
+        tracker = _FlakyTracker(set())
+        real_log = tracker.log_metrics
+
+        def recording_log(metrics: dict[str, float], step: int | None = None) -> None:
+            order.append("log_metrics")
+            real_log(metrics, step)
+
+        tracker.log_metrics = recording_log  # type: ignore[method-assign]
+        self._train_with(monkeypatch, tmp_path, tracker)
+        assert order.index("save_model") < order.index("log_metrics")
+
+
+def test_params_redact_uri_credentials() -> None:
+    flat = flatten_params(
+        {"tracking": {"tracking_uri": "https://alice:s3cret@mlflow.example.com/api"}}
+    )
+    assert flat == {"tracking.tracking_uri": "https://***@mlflow.example.com/api"}

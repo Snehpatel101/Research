@@ -147,3 +147,25 @@ def map_classes_to_labels(y: np.ndarray | pd.Series, n_classes: int = 3) -> np.n
 
     # Vectorized mapping: 0 -> -1, 1 -> 0, 2 -> 1
     return (arr - 1).astype(np.int32)
+
+
+def full_class_probabilities(
+    probabilities: np.ndarray, fitted_classes: np.ndarray | list, n_classes: int
+) -> np.ndarray:
+    """
+    ``(n, n_classes)`` probabilities with column ``i`` = class index ``i``.
+
+    A classifier fitted on data missing a class (e.g. training labels
+    {-1, +1} only) returns one column per class it saw, in the order of its
+    ``classes_``. Taking ``argmax`` over those columns yields a column
+    position, not a class. Absent classes get probability 0 (the model has
+    no evidence for them), so every model's output width is the run's class
+    count and ``argmax`` is a class index.
+    """
+    proba = np.asarray(probabilities, dtype=np.float64)
+    classes = np.asarray(fitted_classes).astype(int)
+    if proba.shape[1] == n_classes and np.array_equal(classes, np.arange(n_classes)):
+        return proba
+    full = np.zeros((len(proba), n_classes), dtype=np.float64)
+    full[:, classes] = proba
+    return full

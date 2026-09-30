@@ -20,7 +20,10 @@ from src.optimization.feature_selection.filtering import (
     filter_low_variance,
     select_decorrelated_by_rank,
 )
-from src.optimization.feature_selection.ranking import rank_by_importance
+from src.optimization.feature_selection.ranking import (
+    IMPORTANCE_NOISE_FLOOR,
+    rank_by_importance,
+)
 from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 
 if TYPE_CHECKING:
@@ -169,7 +172,8 @@ class FeatureSelectionMixin:
             mean_importance = rank_by_importance(
                 pd.Series(
                     {f: np.mean(scores) if scores else 0.0 for f, scores in all_importances.items()}
-                )
+                ),
+                noise_floor=IMPORTANCE_NOISE_FLOOR,
             )
 
             logger.info(
@@ -378,7 +382,12 @@ class FeatureSelectionMixin:
                         break
 
                 if label_col is not None:
-                    result = compute_regime_importance(df, feature_names, label_col=label_col)
+                    result = compute_regime_importance(
+                        df,
+                        feature_names,
+                        label_col=label_col,
+                        random_state=self.config.random_state,
+                    )
                     if result is not None:
                         regime_ranking, per_regime = result
                         # Blend: 70% MDA + 30% regime importance (union boost)
@@ -389,7 +398,9 @@ class FeatureSelectionMixin:
                                 regime_ranking.loc[common].max() + 1e-9
                             )
                             blended = 0.7 * mda_norm + 0.3 * reg_norm
-                            ranking = rank_by_importance(blended)
+                            ranking = rank_by_importance(
+                                blended, noise_floor=IMPORTANCE_NOISE_FLOOR
+                            )
                             logger.info(
                                 f"  Regime-conditional: blended {len(per_regime)} regimes "
                                 f"into ranking ({len(common)} features)"

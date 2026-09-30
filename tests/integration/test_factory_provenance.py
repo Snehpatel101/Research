@@ -155,3 +155,151 @@ class TestDeployManifestReference:
         deploy_dir, manifest = self._deploy_dir(tmp_path)
         manifest.path.unlink()
         assert validate_deploy_artifact(deploy_dir)["valid"]
+
+
+class TestFailureBookkeeping:
+    def test_seeding_failure_recorded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import src.core.reproducibility as reproducibility
+
+        def broken(seed: int, deterministic: bool = False):
+            raise RuntimeError("cannot seed")
+
+        monkeypatch.setattr(reproducibility, "set_all_seeds", broken)
+        cfg = _config(tmp_path)
+        with pytest.raises(RuntimeError, match="cannot seed"):
+            MLFactory(cfg, verbose=0, enable_checkpoints=False).run()
+        assert _manifest(cfg)["error"] == {"type": "RuntimeError", "message": "cannot seed"}
+
+    def test_manifest_write_failure_keeps_the_original_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def broken_finish(self: RunManifest, **kwargs) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(RunManifest, "finish", broken_finish)
+        with pytest.raises(FileNotFoundError):
+            MLFactory(_config(tmp_path), verbose=0, enable_checkpoints=False).run()
+
+    def test_seed_bound(self, tmp_path: Path) -> None:
+        from src.core.reproducibility import MAX_RANDOM_SEED
+
+        with pytest.raises(ValueError, match="random_seed"):
+            ExperimentConfig(run_id="r", output_dir=tmp_path, random_seed=2**32 - 1)
+        ExperimentConfig(run_id="r", output_dir=tmp_path, random_seed=MAX_RANDOM_SEED)
+
+
+class TestResume:
+    """Checkpoints are keyed by config_hash() only (review F2)."""
+
+    def _checkpointed(self, tmp_path: Path, stored_hash: str | None = None) -> ExperimentConfig:
+        cfg = _config(tmp_path)
+        factory = MLFactory(cfg, verbose=0, enable_checkpoints=True)
+        assert factory._checkpoint_manager is not None
+        factory._checkpoint_manager.save_checkpoint(
+            stage_name="data_pipeline",
+            stage_index=0,
+            artifacts={},
+            config_hash=stored_hash or cfg.config_hash(),
+        )
+        return cfg
+
+    def _resume(self, cfg: ExperimentConfig, monkeypatch: pytest.MonkeyPatch, **kwargs):
+        calls: list[bool] = []
+        monkeypatch.setattr(MLFactory, "run", lambda self, resume=False: calls.append(resume))
+        MLFactory(cfg, verbose=0, enable_checkpoints=True).resume_from_checkpoint(**kwargs)
+        return calls
+
+    def _reload(self, cfg: ExperimentConfig) -> ExperimentConfig:
+        return ExperimentConfig.from_yaml(Path(cfg.output_dir) / "experiment_config.yaml")
+
+    def test_tracking_only_edit_resumes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg = self._reload(self._checkpointed(tmp_path))
+        cfg.tracking = TrackingSection(backend="local")
+        cfg.verbose = 2
+        assert self._resume(cfg, monkeypatch) == [True]
+
+    def test_pre_117_checkpoint_resumes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import hashlib
+
+        cfg = _config(tmp_path)
+        legacy = {k: v for k, v in cfg.to_dict().items() if k not in ("deterministic", "tracking")}
+        old_hash = hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest()
+        cfg = self._checkpointed(tmp_path, stored_hash=old_hash)
+        assert self._resume(self._reload(cfg), monkeypatch) == [True]
+
+    def test_changed_experiment_refused_and_checkpoints_kept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg = self._reload(self._checkpointed(tmp_path))
+        cfg.training.models = ["xgboost", "logistic"]
+        with pytest.raises(ValueError, match="Cannot resume"):
+            self._resume(cfg, monkeypatch)
+        checkpoints = list((Path(cfg.output_dir) / "checkpoints").glob("*.json"))
+        assert checkpoints, "a refused resume must not delete checkpoints"
+
+    def test_explicit_restart_discards_checkpoints(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg = self._reload(self._checkpointed(tmp_path))
+        cfg.training.models = ["logistic"]
+        assert self._resume(cfg, monkeypatch, restart_on_config_change=True) == [False]
+        assert not list((Path(cfg.output_dir) / "checkpoints").glob("*.json"))
+
+    def test_resumed_run_keeps_original_provenance(self, tmp_path: Path) -> None:
+        cfg = _config(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            MLFactory(cfg, verbose=0, enable_checkpoints=True).run()
+        original = _manifest(cfg)
+        with pytest.raises(FileNotFoundError):
+            MLFactory(self._reload(cfg), verbose=0, enable_checkpoints=True).run(resume=True)
+        resumed = _manifest(cfg)
+        assert resumed["provenance_sha256"] == original["provenance_sha256"]
+        assert resumed["started_at"] == original["started_at"]
+        assert len(resumed["resumes"]) == 1
+        assert resumed["status"] == "failed"
+
+
+def test_regime_importance_receives_the_run_seed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regime-conditional selection is seeded with random_state (review F3)."""
+    from types import SimpleNamespace
+
+    import numpy as np
+    import pandas as pd
+
+    import src.optimization.feature_selection.regime_selection as regime_selection
+    from src.models.training import UnifiedTrainingOrchestrator
+
+    seen: dict[str, object] = {}
+
+    def spy(df, feature_names, label_col, **kwargs):
+        seen.update(kwargs)
+        return None
+
+    monkeypatch.setattr(regime_selection, "compute_regime_importance", spy)
+    cfg = ExperimentConfig(run_id="r", output_dir=tmp_path, random_seed=1234)
+    cfg.training.models = ["xgboost"]
+    cfg.training.horizons = [5]
+    pipeline_config = cfg.to_pipeline_config(cv_gaps=(15, 30))
+    pipeline_config.feature_selection = SimpleNamespace(  # type: ignore[attr-defined]
+        regime_conditional=True, mtf_max_per_timeframe=8
+    )
+    orchestrator = UnifiedTrainingOrchestrator(pipeline_config)
+    rng = np.random.default_rng(0)
+    features = [f"f{i}" for i in range(6)]
+    df = pd.DataFrame(rng.normal(size=(400, 6)), columns=features)
+    df["label_h5"] = rng.integers(-1, 2, 400)
+    monkeypatch.setattr(
+        orchestrator,
+        "_compute_mda_ranking",
+        lambda frame, names: pd.Series(np.linspace(1, 0, len(names)), index=names),
+    )
+    orchestrator._run_feature_selection_pipeline(df, features)
+    assert seen.get("random_state") == 1234

@@ -20,7 +20,11 @@ from typing import Any
 import numpy as np
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
-from ..common import map_classes_to_labels, map_labels_to_classes
+from ..common import (
+    full_class_probabilities,
+    map_classes_to_labels,
+    map_labels_to_classes,
+)
 from ..neural.numerical_stability import validate_training_inputs
 
 logger = logging.getLogger(__name__)
@@ -238,7 +242,9 @@ class CatBoostModel(BaseModel):
 
         if self._model is None:
             raise RuntimeError("Model not fitted")
-        probabilities = self._model.predict_proba(X)
+        probabilities = full_class_probabilities(
+            self._model.predict_proba(X), self._model.classes_, self._n_classes
+        )
         class_predictions_cat = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_cat(class_predictions_cat)
         confidence = np.max(probabilities, axis=1)
@@ -363,7 +369,9 @@ class CatBoostModel(BaseModel):
 
         if self._model is None:
             raise RuntimeError("Model not fitted")
-        probabilities = self._model.predict_proba(X)
+        probabilities = full_class_probabilities(
+            self._model.predict_proba(X), self._model.classes_, self._n_classes
+        )
         y_pred_cat = np.argmax(probabilities, axis=1)
         y_pred = self._convert_labels_from_cat(y_pred_cat)
 

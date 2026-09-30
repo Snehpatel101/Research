@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.config import TRACKING_BACKENDS
+from src.core.run_manifest import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,8 @@ def flatten_params(params: dict[str, Any], prefix: str = "") -> dict[str, Any]:
     Flatten nested dicts into dotted keys: ``{"a": {"b": 1}}`` -> ``{"a.b": 1}``.
 
     Trackers store parameters as a flat key -> scalar map; lists stay whole
-    values (a list of model names is one parameter).
+    values (a list of model names is one parameter). Credentials in URIs
+    (``scheme://user:pass@host``) are masked: parameters get uploaded.
     """
     flat: dict[str, Any] = {}
     for key, value in params.items():
@@ -76,7 +78,7 @@ def flatten_params(params: dict[str, Any], prefix: str = "") -> dict[str, Any]:
         if isinstance(value, dict) and value:
             flat.update(flatten_params(value, prefix=f"{name}."))
         else:
-            flat[name] = value
+            flat[name] = redact_secrets(value)
     return flat
 
 

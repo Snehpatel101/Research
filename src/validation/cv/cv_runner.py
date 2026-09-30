@@ -142,6 +142,7 @@ class CrossValidationRunner:
         tuning_trials: int = 50,
         feature_selection_inside_fold: bool = True,
         tune_per_fold: bool = False,
+        seed: int = 42,
     ) -> None:
         """
         Initialize CrossValidationRunner.
@@ -171,6 +172,9 @@ class CrossValidationRunner:
                   More accurate (HPs match actual features used), but slower
                   (n_folds * n_trials evaluations, e.g., 5*50=250).
 
+            seed: Seeds the tuner, per-fold feature selection and every
+                fold model (their ``random_state`` / ``random_seed``).
+
         Notes:
             Default behavior summary:
             1. tune_hyperparams=True: Tune once on all features (tune_per_fold=False)
@@ -187,6 +191,7 @@ class CrossValidationRunner:
         self.tuning_trials = tuning_trials
         self.feature_selection_inside_fold = feature_selection_inside_fold
         self.tune_per_fold = tune_per_fold
+        self.seed = seed
         self._label_spans_warning_shown = False
 
     def _warn_if_no_label_spans(self, label_spans: LabelSpans | None) -> None:
@@ -271,6 +276,7 @@ class CrossValidationRunner:
                 cv=self.cv,
                 n_trials=self.tuning_trials,
                 scale_per_fold=True,
+                seed=self.seed,
             )
             tuning_result = tuner.tune(X, y, weights, label_spans=label_spans)
             tuned_params = tuning_result.get("best_params", {})
@@ -281,7 +287,13 @@ class CrossValidationRunner:
             default_config = ModelRegistry.get_model_info(model_name).get("default_config", {})
         except ValueError:
             default_config = {}
-        config = {**default_config, **tuned_params}
+        # The run seed overrides the model defaults' own random_state
+        config = {
+            **default_config,
+            **tuned_params,
+            "random_state": self.seed,
+            "random_seed": self.seed,
+        }
 
         # ==================================================================
         # LEAKAGE-FREE FEATURE SELECTION AND OOF GENERATION
@@ -301,6 +313,7 @@ class CrossValidationRunner:
                 cv=self.cv,
                 tuning_trials=self.tuning_trials,
                 label_spans=label_spans,
+                seed=self.seed,
             )
             oof_pred = oof_result["oof_prediction"]
             selected_features = oof_result["selected_features"]
@@ -316,7 +329,7 @@ class CrossValidationRunner:
                     "causes data leakage. Use feature_selection_inside_fold=True."
                 )
                 selector = WalkForwardFeatureSelector(
-                    n_features_to_select=self.n_features_to_select
+                    n_features_to_select=self.n_features_to_select, random_state=self.seed
                 )
                 selection_result = selector.select_features_walkforward(X, y, cv_splits)
                 selected_features = selection_result.stable_features

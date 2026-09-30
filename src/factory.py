@@ -62,8 +62,8 @@ if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
     from src.models.tracking import ExperimentTracker
     from src.models.training.unified_orchestrator import TrainingRunResult
-from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
-from src.core.run_manifest import RunManifest
+from src.core.checkpoint import PipelineCheckpointManager
+from src.core.run_manifest import RUN_MANIFEST_FILE, RunManifest
 
 logger = logging.getLogger(__name__)
 
@@ -246,10 +246,11 @@ class MLFactory:
 
         # Initialize checkpoint manager
         self._checkpoint_manager: PipelineCheckpointManager | None = None
-        self._config_hash: str = ""
+        # Checkpoints are keyed by the ONE config identity: config_hash() (every
+        # setting that changes results; editing tracking or verbosity resumes)
+        self._config_hash: str = config.config_hash()
         if enable_checkpoints:
             self._checkpoint_manager = PipelineCheckpointManager(self.output_dir)
-            self._config_hash = compute_config_hash(config)
 
         # Cache for intermediate results (used during resume)
         self._cached_df: pd.DataFrame | None = None
@@ -308,11 +309,6 @@ class MLFactory:
         self._log(f"Starting ML Factory Experiment: {self.config.name}")
         self._log("=" * 60)
 
-        # Seeds first: nothing random may run before them
-        self._seed_everything()
-        # Provenance record (status "running" until the run ends)
-        manifest = self._begin_run_manifest()
-
         # Determine resume stage
         resume_from_stage = 0
         if resume and self._checkpoint_manager:
@@ -320,7 +316,15 @@ class MLFactory:
             if resume_from_stage > 0:
                 self._log(f"Resuming from stage {resume_from_stage}")
 
+        # Provenance record (status "running" until the run ends); a resumed
+        # run keeps the original provenance and appends a `resumes` entry
+        manifest = self._open_run_manifest(resume_from_stage if resume else None)
+
         try:
+            # Seeds first: nothing random may run before them. Inside the try
+            # so a failure here is still recorded in the manifest.
+            self._seed_everything()
+
             # Parent tracker run; trained models log child runs under it.
             # Fails fast (e.g. MLflow not installed) before any training.
             self._start_tracking(manifest)
@@ -407,7 +411,10 @@ class MLFactory:
             # BaseException: an interrupted run (Ctrl-C) is recorded as failed too
             duration = (datetime.now() - start_time).total_seconds()
             logger.exception("MLFactory experiment failed")
-            manifest.finish(success=False, error=e)
+            try:
+                manifest.finish(success=False, error=e)
+            except Exception:  # noqa: BLE001 - the run's own error must propagate
+                logger.exception("Could not record the failure in the run manifest")
             self._finish_tracking(None, success=False)
 
             result = ExperimentResult(
@@ -441,6 +448,23 @@ class MLFactory:
             f"  Seed: {self.config.random_seed} "
             f"(deterministic torch kernels: {'on' if self.config.deterministic else 'off'})"
         )
+
+    def _open_run_manifest(self, resume_from_stage: int | None) -> RunManifest:
+        """The run's manifest: a new one, or on resume the existing one.
+
+        A resumed run keeps the provenance the run started with (its config,
+        commit, packages and data fingerprint describe the checkpointed
+        stages) and appends a ``resumes`` entry for this invocation.
+        """
+        path = self.output_dir / RUN_MANIFEST_FILE
+        if resume_from_stage is not None and path.exists():
+            self._run_manifest = RunManifest.load(path)
+            self._run_manifest.resume(
+                from_stage=resume_from_stage, config_hash=self.config.config_hash()
+            )
+            self._log(f"  Run manifest: {path} (resumed from stage {resume_from_stage})")
+            return self._run_manifest
+        return self._begin_run_manifest()
 
     def _begin_run_manifest(self) -> RunManifest:
         """Write ``run_manifest.json`` (status running) with the run's provenance."""
@@ -568,19 +592,26 @@ class MLFactory:
         except Exception as e:  # noqa: BLE001 - tracking must not change the run outcome
             logger.warning(f"Experiment tracking could not record the run's end: {e}")
 
-    def resume_from_checkpoint(self) -> ExperimentResult:
+    def resume_from_checkpoint(self, restart_on_config_change: bool = False) -> ExperimentResult:
         """
         Resume experiment from the last successful checkpoint.
 
         This method checks for existing checkpoints and resumes from
-        the last successfully completed stage. If the configuration
-        has changed since the checkpoint was created, checkpoints are
-        cleared and execution starts fresh.
+        the last successfully completed stage. The checkpoints must have been
+        written under the same ``config.config_hash()`` (result-neutral
+        settings such as tracking may change). On a mismatch the resume is
+        refused, leaving the checkpoints intact, unless
+        ``restart_on_config_change`` discards them and starts over.
+
+        Args:
+            restart_on_config_change: Discard mismatching checkpoints and run
+                from scratch instead of refusing.
 
         Returns:
             ExperimentResult from the resumed run
 
         Raises:
+            ValueError: If the checkpoints belong to a different configuration
             ValueError: If checkpointing is not enabled
             Exception: If the resumed run fails
 
@@ -602,13 +633,38 @@ class MLFactory:
             self._log("No checkpoint found, starting fresh run")
             return self.run(resume=False)
 
-        # Validate config hasn't changed
-        if not self._checkpoint_manager.validate_config(self._config_hash):
-            self._log("Config changed since checkpoint, starting fresh")
+        # The checkpoints must come from the same experiment definition
+        if not self._checkpoint_manager.validate_config(
+            self._config_hash, self._legacy_checkpoint_hash()
+        ):
+            if not restart_on_config_change:
+                raise ValueError(
+                    f"Cannot resume {self.output_dir}: settings that change results differ "
+                    f"from the ones its checkpoints were written with (config hash "
+                    f"{self._config_hash[:12]}). Resume with the run's original "
+                    "experiment_config.yaml (tracking, verbosity and names may change), or "
+                    "pass restart_on_config_change=True to discard the checkpoints and "
+                    "start over."
+                )
+            self._log("Config changed since checkpoint: discarding checkpoints, starting fresh")
             self._checkpoint_manager.clear_checkpoints()
             return self.run(resume=False)
 
         return self.run(resume=True)
+
+    def _legacy_checkpoint_hash(self) -> str:
+        """Checkpoint hash of runs written before Phase 117.
+
+        They hashed the whole config dict (run identity included) as it was
+        before ``deterministic`` and ``tracking`` existed; accepted so those
+        runs still resume instead of being refused.
+        """
+        import hashlib
+
+        legacy = {
+            k: v for k, v in self.config.to_dict().items() if k not in ("deterministic", "tracking")
+        }
+        return hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest()
 
     def _get_resume_stage(self) -> int:
         """Get the stage to resume from based on checkpoints."""
