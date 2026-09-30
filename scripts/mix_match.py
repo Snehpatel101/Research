@@ -14,6 +14,7 @@ Usage:
     python scripts/mix_match.py modes-solo           # every model alone in each non-standard mode
     python scripts/mix_match.py binary               # binary labels x meta-learners x modes
     python scripts/mix_match.py all-in               # all base models in one ensemble
+    python scripts/mix_match.py mtf                  # the default feature set (MTF 15/60min on)
     python scripts/mix_match.py report               # render docs/MIX_AND_MATCH.md from results
     python scripts/mix_match.py custom xgboost,lstm --meta stacking --mode standard
     python scripts/mix_match.py custom xgboost,lstm \\
@@ -27,6 +28,8 @@ Options:
     --timeout S     per-run timeout in seconds (default 900)
     --out DIR       results directory (default experiments/mix_match)
     --data PATH     real OHLCV file (custom runs); --bar-timeframe 5min resamples it
+    --mtf           multi-timeframe features on (custom runs; other kinds keep them off
+                    for speed, except ``mtf``)
 """
 
 from __future__ import annotations
@@ -556,6 +559,18 @@ def build_specs(kind: str, args: argparse.Namespace) -> list[dict]:
             )
     elif kind == "all-in":
         specs.append({"name": "all_in", "models": BASE_MODELS, "meta": args.meta})
+    elif kind == "mtf":
+        # The default feature set: MTF on, so its ~1,500-bar warmup and the MTF
+        # columns go through training, deploy and the serve-parity checks
+        specs.append({"name": "mtf_standard", "models": CROSS_FAMILY, "mtf": True})
+        specs.append(
+            {
+                "name": "mtf_meta_labeling",
+                "models": ["xgboost"],
+                "mode": "meta_labeling",
+                "mtf": True,
+            }
+        )
     elif kind == "custom":
         models = args.models.split(",")
         specs.append(
@@ -564,6 +579,7 @@ def build_specs(kind: str, args: argparse.Namespace) -> list[dict]:
                 "data": args.data or None,
                 "bar_timeframe": args.bar_timeframe or None,
                 "binary": args.binary,
+                "mtf": args.mtf,
                 "models": models,
                 "meta": args.meta,
                 "mode": args.mode,
@@ -690,6 +706,7 @@ def main() -> None:
     parser.add_argument("--data", default="", help="OHLCV file to use instead of synthetic data")
     parser.add_argument("--bar-timeframe", default="", help="resample input bars, e.g. 5min")
     parser.add_argument("--binary", action="store_true", help="binary labels (move vs no move)")
+    parser.add_argument("--mtf", action="store_true", help="multi-timeframe features (custom)")
     parser.add_argument(
         "--set",
         action="append",

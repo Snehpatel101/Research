@@ -130,13 +130,16 @@ def test_feature_engineer_spec_round_trips() -> None:
     assert rebuilt.period_config == engineer.period_config
 
 
+# Default engineer (MTF on 15min/60min): ~1,500 bars of warmup, then scored bars
+N_BARS = 2500
+
+
 @pytest.fixture(scope="module")
 def trained_features(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict]:
-    raw = _ohlcv(1500, "5min")
+    raw = _ohlcv(N_BARS, "5min")
     engineer = FeatureEngineer(output_dir=tmp_path_factory.mktemp("fe"), timeframe="5min")
     featured, _report = engineer.engineer_features(raw.reset_index(), symbol="TEST")
-    pipeline = {"bar_timeframe": "5min", "engineer": engineer.to_spec()}
-    return featured.set_index("datetime"), pipeline
+    return featured.set_index("datetime"), engineer.pipeline_record("5min")
 
 
 def test_mtf_features_are_generated_for_each_higher_timeframe(trained_features) -> None:
@@ -152,7 +155,7 @@ def test_graph_reproduces_training_features_exactly(trained_features) -> None:
     columns = [c for c in featured.columns if c not in ("open", "high", "low", "close", "volume")]
     graph = PreprocessingGraph.from_feature_pipeline(pipeline, feature_columns=columns)
 
-    served = graph.transform(_ohlcv(1500, "5min"), skip_scaling=True)
+    served = graph.transform(_ohlcv(N_BARS, "5min"), skip_scaling=True)
 
     assert list(served.columns) == columns
     common = served.index.intersection(featured.index)
@@ -168,7 +171,7 @@ def test_graph_reproduces_training_features_exactly(trained_features) -> None:
 def test_graph_resamples_finer_bars_to_training_timeframe(trained_features) -> None:
     _featured, pipeline = trained_features
     graph = PreprocessingGraph.from_feature_pipeline(pipeline, feature_columns=["rsi_14"])
-    served = graph.transform(_ohlcv(3000, "1min"), skip_scaling=True)
+    served = graph.transform(_ohlcv(5 * N_BARS, "1min"), skip_scaling=True)
     assert detect_timeframe(pd.DataFrame(index=served.index)) == "5min"
 
 

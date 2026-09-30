@@ -224,7 +224,7 @@ def _graph(event_sampling: dict | None):
     from src.inference.preprocessing_graph import PreprocessingGraph
 
     engineer = FeatureEngineer(timeframe="5min", enable_mtf=False, enable_wavelets=False)
-    pipeline: dict = {"bar_timeframe": "5min", "engineer": engineer.to_spec()}
+    pipeline: dict = engineer.pipeline_record("5min")
     if event_sampling is not None:
         pipeline["event_sampling"] = event_sampling
     return PreprocessingGraph.from_feature_pipeline(pipeline, feature_columns=["rsi_14"])

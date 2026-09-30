@@ -26,6 +26,14 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.math_utils import (
+    EWM_SETTLE_TOLERANCE,
+    cascade_settle_bars,
+    span_alpha,
+    span_settle_bars,
+    wilder_settle_bars,
+)
+
 from .constants import (
     DEFAULT_MTF_MODE,
     DEFAULT_MTF_TIMEFRAMES,
@@ -209,6 +217,30 @@ class MTFFeatureGenerator:
             df_tf[f"{col}{tf_suffix}"] = df_tf[col]
 
         return df_tf
+
+    @staticmethod
+    def warmup_bars(tolerance: float = EWM_SETTLE_TOLERANCE) -> int:
+        """Higher-timeframe bars before MTF features stop depending on the series start.
+
+        Covers the longest indicator of :meth:`compute_mtf_indicators` (keep the
+        two in step): SMA-50, Bollinger-20, ATR-14 (rolling windows), EMA-9/21
+        and Wilder RSI-14 (pandas ``adjust=False`` EWMs, whose starting value
+        weighs (1 - alpha)^n after n bars whatever ``min_periods`` is), and the
+        MACD signal line (an EWM of EMA-12 - EMA-26, bounded by
+        ``cascade_settle_bars``) — plus the partial first bar of a resample and
+        the one-bar lag.
+        """
+        signal = span_alpha(9)
+        indicators = (
+            50,
+            20,
+            14 + 1,
+            span_settle_bars(21, tolerance),
+            wilder_settle_bars(14, tolerance),
+            cascade_settle_bars(span_alpha(26), signal, tolerance),
+            cascade_settle_bars(span_alpha(12), signal, tolerance),
+        )
+        return max(indicators) + 2
 
     def compute_mtf_indicators(self, df_tf: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """

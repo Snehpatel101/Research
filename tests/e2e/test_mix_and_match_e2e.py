@@ -83,3 +83,14 @@ def test_combination_trains_deploys_and_serves(
 
     assert "exception" not in record, record.get("traceback")
     assert record["ok"], record["problems"]
+
+
+def test_default_feature_set_with_mtf_trains_deploys_and_serves(
+    data_path: Path, tmp_path: Path
+) -> None:
+    """MTF on (the library default): its warmup and columns survive deploy + serve parity."""
+    spec = {"name": "mtf_default_features", "models": ["xgboost", "lstm"], "mtf": True}
+    record = harness.run_one(spec, data_path, tmp_path)
+
+    assert "exception" not in record, record.get("traceback")
+    assert record["ok"], record["problems"]

@@ -44,6 +44,34 @@ deployed bundle must reproduce the trained model's validation probabilities
 from raw bars, and features recomputed from raw OHLCV must equal the training
 features ([verification matrix](MIX_AND_MATCH.md)).
 
+**Warmup.** Features look back over a bounded window (session-reset OBV/VWAP,
+rolling windows) or an exponentially fading one (EMA-based indicators).
+`FeatureEngineer.warmup_bars()` derives from the feature definitions how many
+bars that takes (SMA-200, EWMs until their start weighs less than the spec's
+`ewm_settle_tolerance` = 1e-3, the wavelet windows, each MTF timeframe's
+indicators in base bars — 320 5-minute bars without MTF, 1,476 with 15/60-minute
+MTF). Training and serving apply the same rule: a bar is scored only once that
+many bars precede it and, for the session-reset features, once the bars they
+read (the scored bar and the 21 before it at 5 minutes) all lie past the
+input's first session. A session is a **calendar date of the bar timestamps**
+(naive UTC after cleaning), not an exchange session open. So every row a bundle
+returns from a short window equals, to within 1e-3 of each feature's spread,
+the row it returns from the full history. The exception is
+`metadata["event_flags"]` with CUSUM event sampling: the filter is path
+dependent, so its flags depend on where the history starts (see
+`PreprocessingGraph.event_flags`). The warmup is recorded in the bundle's
+`preprocessing_graph.json`; passing fewer bars raises a `ValueError` naming the
+raw bars needed (after resampling to the training bar timeframe), and training
+refuses data shorter than the warmup before computing features.
+
+**Feature engine version.** Bundles record the `FEATURE_ENGINE_VERSION` that
+computed their training features. Loading a bundle built by another version (or
+one that recorded none) raises, because the model would see differently computed
+inputs; retrain it, or pass `allow_engine_mismatch=True` to `load_bundle`,
+`load_deploy_artifact`, `ModelBundle.load` or `UniversalInferencePipeline.from_*`
+to serve it anyway (logged as an error). `validate_deploy_artifact` reports such
+bundles as invalid.
+
 ## What a run writes
 
 ```text
@@ -134,6 +162,11 @@ meta.positions             # side x P(win) on traded bars, 0 elsewhere
 meta.n_trades
 ```
 
+The primary inside the bundle is refit on all training rows, so on bars from
+the training range its probabilities are in-sample (more confident than the
+out-of-fold ones the meta-model learned from); judge the filter on bars after
+the training range.
+
 ### Several bundles at once
 
 `UniversalInferencePipeline` serves a set of bundles (mixed ranks) plus an
@@ -155,23 +188,24 @@ print(pipe.summary())
 
 ## Warmup
 
-Features are rolling statistics, so the first bars of any input window have no
-valid features and are dropped (the returned `timestamps` say which bars were
-predicted). How much history to pass:
+A bar is scored only once its features no longer depend on where the input
+starts — the same rule training applied to its own first bars (see *Warmup*
+above). The returned `timestamps` say which bars were scored. How much history
+to pass (at the training bar timeframe):
 
-| Needed by | Bars of history (at the training bar timeframe) |
+| Needed by | Bars of history |
 |---|---|
-| Most rolling features | ~200 |
-| MTF features (`data.mtf.enabled`, default on) | **≥ 500** — below that the MTF columns cannot be reproduced and prediction raises |
-| Wavelet features | ≥ 64 |
-| 3D / 4D models | plus `seq_len − 1` bars for the first window (60–128) |
-| Ensembles | the largest requirement among the base models (predictions are the bars every base model covers) |
+| Default features, no MTF, 5-minute bars | `warmup_bars` = 320 |
+| MTF features (`data.mtf.enabled`, default on; 15/60-minute) | 1,476 5-minute bars — the hourly MACD needs 123 hourly bars to forget its start |
+| 1-minute bars | periods scale ×5: 1,114 without MTF, 7,380 with 60-minute MTF |
+| Session-reset features (OBV, VWAP) | the scored bar and the `volume_sma` + 1 bars before it (21 at 5 minutes) must lie past the input's first calendar date |
+| 3D models | plus `seq_len − 1` bars for the first window |
+| Ensembles | the largest requirement among the base models |
 
-EMA-type and session-cumulative features converge rather than switch on, so
-more history than the minimum brings served features closer to the training
-values. In practice pass **1,000+ bars** and use the last row(s). If there is
-too little history, prediction fails loudly with the number of bars each
-feature family needs rather than returning skewed values.
+The exact number is `preprocessing_graph.json`'s `warmup_bars` (or
+`FeatureEngineer.warmup_bars()`). With too little history `predict_from_raw`
+raises a `ValueError` that names the minimum number of raw bars (e.g. five
+times as many 1-minute bars for a 5-minute model).
 
 For live use, keep a rolling buffer of recent raw bars and call
 `predict_from_raw` on it when a bar closes; the last row is the signal for that

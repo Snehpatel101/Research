@@ -60,7 +60,7 @@ def main() -> None:
     )
 
     # Serve: raw bars in, predictions out. Pass enough history for warmup
-    # (rolling features; MTF features need >= 500 bars when enabled).
+    # (320 bars here; 1,476 with MTF features enabled).
     artifact = load_deploy_artifact(result.deploy_path, horizon=5)
     raw = pd.read_parquet(data_path).iloc[-1000:]
     pred = artifact.predict_from_raw(raw)

@@ -619,19 +619,22 @@ class ModelBundle:
         return bundle_dir
 
     @classmethod
-    def load(cls, path: str | Path) -> ModelBundle:
+    def load(cls, path: str | Path, allow_engine_mismatch: bool = False) -> ModelBundle:
         """
         Load bundle from disk.
 
         Args:
             path: Path to bundle directory
+            allow_engine_mismatch: Serve a bundle whose features came from another
+                feature engine version (logged as an error) instead of refusing it.
 
         Returns:
             Loaded ModelBundle
 
         Raises:
             FileNotFoundError: If bundle doesn't exist
-            ValueError: If bundle is corrupted or incompatible
+            ValueError: If bundle is corrupted or incompatible, or its features
+                came from another feature engine version (see allow_engine_mismatch)
         """
         path = Path(path)
 
@@ -677,7 +680,9 @@ class ModelBundle:
             try:
                 from src.inference.preprocessing_graph import PreprocessingGraph
 
-                preprocessing_graph = PreprocessingGraph.load(graph_path)
+                preprocessing_graph = PreprocessingGraph.load(
+                    graph_path, allow_engine_mismatch=allow_engine_mismatch
+                )
                 # Set the scaler on the preprocessing graph
                 if preprocessing_graph is not None and scaler is not None:
                     preprocessing_graph.set_scaler(scaler)
@@ -906,6 +911,7 @@ class ModelBundle:
         self,
         raw_df: pd.DataFrame,
         skip_cleaning: bool = False,
+        min_rows: int = 1,
     ) -> pd.DataFrame:
         """
         Apply preprocessing to raw OHLCV data.
@@ -918,12 +924,15 @@ class ModelBundle:
             raw_df: DataFrame with raw OHLCV data. Must have columns:
                    [datetime, open, high, low, close, volume]
             skip_cleaning: If True, skip resampling (data already at target timeframe)
+            min_rows: Feature rows needed after the warmup (sequence length for
+                sequence models); fewer raises ValueError naming the raw bars needed
 
         Returns:
             DataFrame with features ready for model prediction
 
         Raises:
             RuntimeError: If no preprocessing graph is available
+            ValueError: If raw_df is too short for the training warmup
         """
         if self.preprocessing_graph is None:
             raise RuntimeError(
@@ -937,6 +946,7 @@ class ModelBundle:
             raw_df,
             skip_cleaning=skip_cleaning,
             skip_scaling=True,
+            min_rows=min_rows,
         )
 
         missing = [c for c in self.feature_columns if c not in features.columns]
@@ -1031,7 +1041,8 @@ class ModelBundle:
                 additional_dfs=additional_dfs,
                 skip_cleaning=skip_cleaning,
             )
-        features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
+        min_rows = max(self.metadata.sequence_length, 1) if self.metadata.requires_sequences else 1
+        features = self.preprocess(raw_df, skip_cleaning=skip_cleaning, min_rows=min_rows)
         return self._apply_adapter(features_2d=features)
 
     # -----------------------------------------------------------------

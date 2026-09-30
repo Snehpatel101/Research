@@ -218,6 +218,7 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
     - All referenced bundle paths exist
     - The referenced run manifest (when present) is the run's and still
       matches its recorded provenance digest
+    - Every bundle's features come from this code's feature engine version
     - Each bundle can be loaded (optional deep check)
 
     Args:
@@ -226,6 +227,8 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
     Returns:
         Dict with 'valid' (bool) and 'issues' (list[str]).
     """
+    from src.inference.preprocessing_graph import check_bundle_engine_versions
+
     deploy_dir = Path(deploy_dir)
     issues: list[str] = []
 
@@ -248,6 +251,11 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
                 issues.append(
                     f"H{horizon}/{entry.model_name}: bundle not found at {entry.bundle_path}"
                 )
+                continue
+            try:
+                check_bundle_engine_versions(bundle_path)
+            except ValueError as e:
+                issues.append(f"H{horizon}/{entry.model_name}: {e}")
 
     issues.extend(_run_manifest_issues(deploy_dir, manifest.run_manifest))
 
@@ -285,6 +293,7 @@ def load_deploy_artifact(
     deploy_dir: str | Path,
     horizon: int,
     model_name: str | None = None,
+    allow_engine_mismatch: bool = False,
 ) -> Any:
     """Load a deploy artifact bundle for prediction.
 
@@ -297,6 +306,8 @@ def load_deploy_artifact(
         deploy_dir: Path to deploy directory.
         horizon: Prediction horizon.
         model_name: Specific model (None = primary/ensemble).
+        allow_engine_mismatch: Serve a bundle whose features came from another
+            feature engine version (logged as an error) instead of refusing it.
 
     Returns:
         Model, ensemble, regime or meta-labeling bundle ready for prediction.
@@ -304,8 +315,12 @@ def load_deploy_artifact(
     Raises:
         FileNotFoundError: If deploy dir or bundle not found.
         KeyError: If horizon or model not in manifest.
+        ValueError: If the bundle was built by another feature engine version.
     """
-    return load_bundle(select_deploy_artifact(deploy_dir, horizon, model_name))
+    return load_bundle(
+        select_deploy_artifact(deploy_dir, horizon, model_name),
+        allow_engine_mismatch=allow_engine_mismatch,
+    )
 
 
 # =============================================================================
@@ -361,8 +376,12 @@ def describe_bundle(path: str | Path) -> BundleInfo | None:
     )
 
 
-def load_bundle(path: str | Path) -> Any:
-    """Load any bundle kind (model, ensemble, regime, meta-labeling) from its directory."""
+def load_bundle(path: str | Path, allow_engine_mismatch: bool = False) -> Any:
+    """Load any bundle kind (model, ensemble, regime, meta-labeling) from its directory.
+
+    A bundle whose features came from another feature engine version is refused
+    unless ``allow_engine_mismatch`` (see ``ModelBundle.load``).
+    """
     path = Path(path)
     info = describe_bundle(path)
     if info is None:
@@ -372,19 +391,19 @@ def load_bundle(path: str | Path) -> Any:
     if info.kind == "ensemble":
         from src.inference.ensemble_bundle import EnsembleBundle
 
-        return EnsembleBundle.load(path)
+        return EnsembleBundle.load(path, allow_engine_mismatch=allow_engine_mismatch)
     if info.kind == "regime":
         from src.inference.regime_bundle import RegimeBundle
 
-        return RegimeBundle.load(path)
+        return RegimeBundle.load(path, allow_engine_mismatch=allow_engine_mismatch)
     if info.kind == "meta_labeling":
         from src.inference.meta_labeling_bundle import MetaLabelingBundle
 
-        return MetaLabelingBundle.load(path)
+        return MetaLabelingBundle.load(path, allow_engine_mismatch=allow_engine_mismatch)
 
     from src.inference.bundle import ModelBundle
 
-    return ModelBundle.load(path)
+    return ModelBundle.load(path, allow_engine_mismatch=allow_engine_mismatch)
 
 
 __all__ = [

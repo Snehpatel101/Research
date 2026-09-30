@@ -19,8 +19,9 @@ uv venv .venv --python 3.11 && source .venv/bin/activate
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 uv pip install -e ".[dev,stats]"
 
-# One week of bundled MES 1-minute bars → 5-minute XGBoost model, backtested and deployed (<1 min)
-python -m src.cli run -d data/raw/MES_1m_1week.parquet --bar-timeframe 5min -m xgboost -h 5 --backtest
+# One week of bundled MES 1-minute bars → 5-minute XGBoost model, backtested and deployed (<1 min).
+# --no-mtf: multi-timeframe features need ~1,500 5-minute bars of warmup, more than a week holds
+python -m src.cli run -d data/raw/MES_1m_1week.parquet --bar-timeframe 5min --no-mtf -m xgboost -h 5 --backtest
 ```
 
 ```python
@@ -43,7 +44,8 @@ result = MLFactory(cfg).run()
 print(result.summary())
 
 artifact = load_deploy_artifact(result.deploy_path, horizon=5)   # the ensemble
-raw = pd.read_parquet("data/raw/MES_1m_1month.parquet").iloc[-5000:]
+# ~2,000 5-minute bars: the MTF features' ~1,500-bar warmup, then ~500 scored bars
+raw = pd.read_parquet("data/raw/MES_1m_1month.parquet").iloc[-10000:]
 pred = artifact.predict_from_raw(raw)   # same resampling, features, scaling, routing
 pred.class_predictions, pred.class_probabilities, pred.metadata["timestamps"]
 ```
