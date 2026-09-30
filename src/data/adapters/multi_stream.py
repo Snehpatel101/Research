@@ -33,6 +33,38 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_OHLCV_AGG = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+
+
+def resample_higher_timeframes(
+    bars: pd.DataFrame, timeframes: list[str]
+) -> dict[str, pd.DataFrame]:
+    """
+    The multi-stream model's higher-timeframe OHLCV streams, from its own bars.
+
+    Training (``MLFactory``) and serving (``ModelBundle``) both call this on the
+    bars at the training bar timeframe, so every stream is built from the same
+    rows. Each stream is lagged one bar: a row stamped T holds the higher-TF
+    bar that COMPLETED before T, never the still-forming one.
+
+    Args:
+        bars: OHLCV bars with a DatetimeIndex (the model's anchor stream).
+        timeframes: Higher timeframes to build.
+
+    Returns:
+        Dict of normalized timeframe key -> lagged OHLCV DataFrame.
+    """
+    streams: dict[str, pd.DataFrame] = {}
+    for tf in timeframes:
+        resampled = (
+            bars[list(_OHLCV_AGG)]
+            .resample(tf, closed="left", label="left")
+            .agg(_OHLCV_AGG)
+            .dropna()
+        )
+        streams[normalize_timeframe(tf)] = resampled.shift(1).dropna()
+    return streams
+
 
 @AdapterRegistry.register("multi_stream")
 class MultiStreamAdapter(BaseAdapter):
@@ -581,4 +613,5 @@ class MultiStreamAdapter(BaseAdapter):
 
 __all__ = [
     "MultiStreamAdapter",
+    "resample_higher_timeframes",
 ]

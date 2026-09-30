@@ -16,7 +16,7 @@ from src.models.registry import ModelRegistry
 from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
 from src.validation.cv.early_stopping_split import carve_early_stopping_split
 from src.validation.cv.oof_core import (
-    _get_prob_column_names,
+    build_oof_frame,
     held_out_fold_metrics,
     reindex_oof_to_rows,
 )
@@ -374,18 +374,15 @@ class OOFGenerationService:
                 f"{int(np.isnan(oof_preds).sum())} samples missing predictions."
             )
 
-        # Build result DataFrame with dynamic probability columns
-        prob_col_names = _get_prob_column_names(model_name, n_classes)
-        oof_data: dict[str, Any] = {
-            "datetime": range(n_samples),
-            "y_true": y,
-        }
-        for i, col_name in enumerate(prob_col_names):
-            oof_data[col_name] = oof_probs[:, i]
-        oof_data[f"{model_name}_pred"] = oof_preds
-        oof_data[f"{model_name}_confidence"] = oof_confidence
-        oof_data["fold_id"] = oof_fold_ids
-        oof_df = pd.DataFrame(oof_data)
+        oof_df = build_oof_frame(
+            model_name,
+            pd.RangeIndex(n_samples),
+            y,
+            oof_probs,
+            oof_preds,
+            oof_confidence,
+            oof_fold_ids,
+        )
 
         valid_indices = np.where(~np.isnan(oof_preds))[0]
 

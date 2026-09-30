@@ -98,7 +98,7 @@ class OOFGenerator:
         self.n_classes = n_classes
         self._core_generator = CoreOOFGenerator(cv)
         self._sequence_generator = SequenceOOFGenerator(cv)
-        self._stacking_builder = StackingDatasetBuilder()
+        self._stacking_builder = StackingDatasetBuilder(n_classes)
         self._validator = OOFValidator()
         self._io = OOFDatasetIO()
 

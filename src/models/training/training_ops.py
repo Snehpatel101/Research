@@ -23,7 +23,11 @@ from src.core.reproducibility import sequential_prediction
 from src.data.adapters import PreparedData
 from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
-from src.validation.cv.oof_core import merge_oof_predictions, reindex_oof_to_rows
+from src.validation.cv.oof_core import (
+    get_prob_column_names,
+    merge_oof_predictions,
+    reindex_oof_to_rows,
+)
 
 from .services import ModelTrainingRequest, OOFRequest
 
@@ -446,8 +450,6 @@ class TrainingOpsMixin:
 
         # Prepare data per-model so each model gets data matching its own
         # contract (rank, sequence length, feature mode, etc.).
-        class_names = ["short", "neutral", "long"]
-
         for model_name in self.config.models:
             # Walk-forward windows select features on their own training data
             # (B08 fix), so they see every feature column. They also fit their
@@ -624,27 +626,12 @@ class TrainingOpsMixin:
                         # prediction) and original_indices marks the valid rows.
                         # Consumers index it positionally with original_indices,
                         # so a compact frame would raise IndexError downstream.
-                        preds = pred_df[pred_col].values.astype(float)
-                        confidence = pred_df[conf_col].values.astype(float)
-                        y_true_oof = pred_df["y_true"].values.astype(float)
-
-                        prob_cols_wf = [
-                            c
-                            for c in pred_df.columns
-                            if c.startswith(f"{result_model_name}_prob_class")
-                        ]
-                        oof_data: dict[str, Any] = {
-                            f"{result_model_name}_pred": preds,
-                            f"{result_model_name}_confidence": confidence,
-                            "y_true": y_true_oof,
-                        }
-                        for i, col_wf in enumerate(prob_cols_wf):
-                            oof_col = (
-                                f"{result_model_name}_prob_{class_names[i]}"
-                                if i < len(class_names)
-                                else f"{result_model_name}_prob_class{i}"
-                            )
-                            oof_data[oof_col] = pred_df[col_wf].values
+                        # The walk-forward trainer emits the standard OOF frame
+                        # (build_oof_frame); keep its prediction columns
+                        prob_cols = get_prob_column_names(result_model_name, self.config.n_classes)
+                        oof_frame = pred_df[[pred_col, conf_col, "y_true", *prob_cols]].astype(
+                            float
+                        )
 
                         fold_info = []
                         for wr in wf_result.window_results:
@@ -663,7 +650,7 @@ class TrainingOpsMixin:
                         oof = reindex_oof_to_rows(
                             OOFPrediction(
                                 model_name=result_model_name,
-                                predictions=pd.DataFrame(oof_data),
+                                predictions=oof_frame,
                                 fold_info=fold_info,
                                 coverage=len(valid_indices) / n_all,
                                 original_indices=valid_indices,
@@ -885,6 +872,7 @@ class TrainingOpsMixin:
 
         from src.inference.meta_labeling_bundle import (
             NEUTRAL_LABEL,
+            ConstantBetFilter,
             build_meta_features,
             primary_sides,
         )
@@ -928,11 +916,15 @@ class TrainingOpsMixin:
         sided[covered] = primary_sides(oof_classes[covered])
         side_train = oof_classes[sided].astype(np.int64)
         meta_labels_train = (prepared.y_train[sided] == side_train).astype(int)
-        if meta_labels_train.size == 0 or np.unique(meta_labels_train).size < 2:
-            raise ValueError(
-                f"Meta-labeling needs primary bets that both win and lose: the primary "
-                f"took {meta_labels_train.size} sided OOF bets with win rate "
-                f"{meta_labels_train.mean() if meta_labels_train.size else float('nan'):.2f}"
+        # A filter needs bets that both win and lose; otherwise the observed win
+        # rate is all there is to learn (1.0 with no bets: nothing to filter)
+        degenerate = meta_labels_train.size == 0 or np.unique(meta_labels_train).size < 2
+        constant_win_rate = float(meta_labels_train.mean()) if meta_labels_train.size else 1.0
+        if degenerate:
+            logger.warning(
+                f"Meta-labeling: the primary took {meta_labels_train.size} sided OOF bets "
+                f"(win rate {constant_win_rate:.2f}); a classifier cannot be trained, so "
+                f"the bet filter is the constant win rate"
             )
 
         # Stage 3: Meta features from the primary's input + OOF probabilities
@@ -947,7 +939,8 @@ class TrainingOpsMixin:
         y_val = prepared.y_val
         logger.info(
             f"\n  STAGE 3: Meta-labels on {int(sided.sum())}/{int(covered.sum())} sided OOF "
-            f"bars (primary win rate {meta_labels_train.mean():.1%})"
+            f"bars (primary win rate "
+            f"{meta_labels_train.mean() if meta_labels_train.size else float('nan'):.1%})"
         )
 
         # Stage 4: Meta-model, plus cross-validated P(win) on the sided train bars,
@@ -964,19 +957,24 @@ class TrainingOpsMixin:
             )
         )
         meta_proba_oof = np.full(n_meta, np.nan)
-        index_frame = pd.DataFrame(index=range(n_meta))
-        for tr_idx, va_idx in cv.split(
-            index_frame, pd.Series(meta_labels_train), label_spans=sided_spans
-        ):
-            if len(np.unique(meta_labels_train[tr_idx])) < 2:
-                continue  # a fold with one class cannot fit a classifier
-            fold_meta = self._create_meta_model(meta_model_name)
-            sequential_prediction(fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx]))
-            meta_proba_oof[va_idx] = fold_meta.predict_proba(X_meta_train[va_idx])[:, 1]
-
-        meta_model = self._create_meta_model(meta_model_name)
-        # Bit-reproducible probabilities: forests predict in a fixed tree order
-        sequential_prediction(meta_model.fit(X_meta_train, meta_labels_train))
+        if degenerate:
+            meta_model: Any = ConstantBetFilter(constant_win_rate)
+            meta_proba_oof[:] = constant_win_rate
+        else:
+            index_frame = pd.DataFrame(index=range(n_meta))
+            for tr_idx, va_idx in cv.split(
+                index_frame, pd.Series(meta_labels_train), label_spans=sided_spans
+            ):
+                if len(np.unique(meta_labels_train[tr_idx])) < 2:
+                    continue  # a fold with one class cannot fit a classifier
+                fold_meta = self._create_meta_model(meta_model_name)
+                sequential_prediction(
+                    fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx])
+                )
+                meta_proba_oof[va_idx] = fold_meta.predict_proba(X_meta_train[va_idx])[:, 1]
+            meta_model = self._create_meta_model(meta_model_name)
+            # Bit-reproducible probabilities: forests predict in a fixed tree order
+            sequential_prediction(meta_model.fit(X_meta_train, meta_labels_train))
         p_win_val = meta_model.predict_proba(X_meta_val)[:, 1]
 
         # Stage 5: Evaluate the bets on validation — precision and net outcome of
@@ -1053,7 +1051,7 @@ class TrainingOpsMixin:
                 "kind": "meta_labeling",
                 "primary_model": primary_model_name,
                 "meta_model": meta_model,
-                "meta_model_name": meta_model_name,
+                "meta_model_name": "constant" if degenerate else meta_model_name,
                 "threshold": threshold,
             },
         )

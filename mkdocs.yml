@@ -1,0 +1,123 @@
+site_name: ML Factory
+site_description: >-
+  Config-driven factory for financial time-series models: raw OHLCV bars in,
+  a leakage-free, backtested, deployable model or ensemble out.
+repo_url: https://github.com/Snehpatel101/Research
+repo_name: Snehpatel101/Research
+edit_uri: edit/main/docs/
+copyright: MIT License
+
+docs_dir: docs
+site_dir: site
+strict: true
+
+# Historical audits and process reports stay in the repository for reference
+# but are not part of the published site.
+exclude_docs: |
+  archive/
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts: concepts.md
+  - Mix and match: mix-and-match.md
+  - Guides:
+      - Lopez de Prado options: afml-options.md
+      - Configuration: configuration.md
+      - CLI: cli.md
+      - Deploy and serve: deploy-and-serve.md
+      - Reproducibility and tracking: reproducibility.md
+      - Examples: examples.md
+      - Colab notebook: USER_GUIDE.md
+      - Remote validation: REMOTE_VALIDATION.md
+  - Verification matrix: MIX_AND_MATCH.md
+  - API reference:
+      - reference/index.md
+      - MLFactory: reference/factory.md
+      - ExperimentConfig: reference/config.md
+      - Deploy and bundles: reference/inference.md
+      - UniversalInferencePipeline: reference/universal-pipeline.md
+      - Backtesting: reference/backtesting.md
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            docstring_options:
+              warn_unknown_params: false
+              warn_missing_types: false
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            separate_signature: true
+            signature_crossrefs: false
+            merge_init_into_class: true
+            members_order: source
+            filters: ["!^_"]
+            heading_level: 2

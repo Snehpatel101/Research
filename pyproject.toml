@@ -76,6 +76,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.5",
+    "hypothesis>=6.100",
     "black>=25.1",
     "ruff>=0.15",
     "pyright>=1.1.400",
@@ -88,6 +89,12 @@ stats = [
 ]
 hmm = [
     "hmmlearn>=0.3.0",
+]
+# Documentation site (mkdocs.yml): `make docs`
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
 ]
 # Experiment tracking backend "mlflow" (tracking.backend in ExperimentConfig)
 mlflow = [
@@ -121,7 +128,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "slow: long-running test (> 30 s): trains models end to end; deselect with -m 'not slow'",
-    "unit: fast, isolated test (tests/unit/, applied automatically by directory)",
+    "unit: fast, isolated test (tests/unit/ and tests/property/, applied automatically by directory)",
     "integration: several components wired together (tests/integration/, automatic)",
     "e2e: full pipeline runs (tests/e2e/, automatic)",
 ]

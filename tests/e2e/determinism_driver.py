@@ -154,7 +154,7 @@ def feature_selection(data_path: Path, output_root: Path) -> None:
     factory = MLFactory(cfg, verbose=0, enable_checkpoints=False)
     factory._seed_everything()
     df, _ = factory.prepare_data()
-    orchestrator = UnifiedTrainingOrchestrator(factory._pipeline_config(n_rows=len(df)))
+    orchestrator = UnifiedTrainingOrchestrator(factory._pipeline_config(df=df))
     orchestrator._run_feature_selection_on_train_data(df)
     features = [c for c in df.columns if c in set(orchestrator._all_feature_names)]
     train = df.iloc[: int(len(df) * cfg.data.splits.train_ratio)]

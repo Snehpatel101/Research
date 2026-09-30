@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""
-Benchmark script for boosting-only voting ensemble latency.
+"""Benchmark inference latency of the boosting VotingEnsemble (sequential vs parallel).
 
-Measures inference latency for XGBoost + LightGBM + CatBoost ensemble
-in both sequential and parallel modes.
+Trains XGBoost + LightGBM + CatBoost on random data, then times each model's
+predict() and the ``voting`` ensemble with ``parallel=False`` and
+``parallel=True`` (thread pool across base models). Use it to decide which
+mode to serve with on a given machine; the [PASS]/[WARN] lines compare against
+a 100 ms p95 budget and a 1.3x parallel speedup.
 
 Usage:
     python scripts/benchmark_ensemble.py
     python scripts/benchmark_ensemble.py --n-samples 1000 --n-features 150
-    python scripts/benchmark_ensemble.py --warmup 5 --iterations 100
-
-Expected output:
-    Parallel mode should show ~40-60% latency reduction compared to sequential.
-    Target: < 10ms for single-sample inference, < 50ms for 1000 samples.
+    python scripts/benchmark_ensemble.py --warmup 5 --iterations 100 --single-sample
 """
 
 from __future__ import annotations
@@ -206,7 +204,11 @@ def main():
         n_samples=args.n_samples,
         n_features=args.n_features,
     )
-    X_test = np.random.randn(args.n_samples, args.n_features).astype(np.float32)
+    X_test = (
+        np.random.default_rng(0)
+        .standard_normal((args.n_samples, args.n_features))
+        .astype(np.float32)
+    )
 
     # Train models
     model_names = ["xgboost", "lightgbm", "catboost"]

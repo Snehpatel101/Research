@@ -4,6 +4,9 @@ Pytest configuration and shared fixtures.
 Layout: ``tests/unit/<area>/`` (fast, isolated, mirrors ``src/``), ``tests/integration/``
 (components wired together) and ``tests/e2e/`` (full pipeline runs). The directory sets the
 ``unit`` / ``integration`` / ``e2e`` marker automatically; tests over 30 s carry ``slow``.
+``tests/property/`` (hypothesis property-based tests of leakage / parity invariants) counts as
+``unit``. Hypothesis settings profile: ``HYPOTHESIS_PROFILE`` = ``dev`` (default) or ``ci``
+(an unknown name warns and falls back to ``dev``); per-test example budgets scale with it.
 Shared plain helpers live in ``tests/helpers.py``.
 """
 
@@ -16,7 +19,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-_LAYERS = ("unit", "integration", "e2e")
+from tests.property.strategies import load_hypothesis_profile
+
+# Directory under tests/ -> layer marker
+_LAYERS = {"unit": "unit", "property": "unit", "integration": "integration", "e2e": "e2e"}
+
+# Profiles (dev / ci) and per-test example budgets live with the property tests
+load_hypothesis_profile()
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -28,7 +37,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             continue
         parts = path.relative_to(tests_dir).parts
         if parts[0] in _LAYERS:
-            item.add_marker(getattr(pytest.mark, parts[0]))
+            item.add_marker(getattr(pytest.mark, _LAYERS[parts[0]]))
 
 
 @pytest.fixture

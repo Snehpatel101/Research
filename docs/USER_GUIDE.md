@@ -2,6 +2,11 @@
 
 **A complete guide to training ML trading ensembles using Google Colab with VS Code.**
 
+> This guide covers the Colab notebook (`notebooks/ml_factory_colab.ipynb`) and
+> its variables. For the Python API and CLI see [Getting started](getting-started.md);
+> every `ExperimentConfig` field is in the [configuration reference](configuration.md)
+> and the methodology in [Concepts](concepts.md).
+
 ---
 
 ## Table of Contents
@@ -17,6 +22,7 @@
    - [Optimization Settings](#optimization-settings)
    - [Ensemble Settings](#ensemble-settings)
    - [Evaluation Settings](#evaluation-settings)
+   - [Feature Governance (opt-in diagnostics)](#feature-governance-opt-in-diagnostics)
 4. [Complete Config Reference Table](#complete-config-reference-table)
 5. [Tips and Best Practices](#tips-and-best-practices)
 6. [Troubleshooting](#troubleshooting)
@@ -53,6 +59,8 @@
 ---
 
 ## Setup Options
+
+<a id="option-a-vs-code--colab-extension-recommended"></a>
 
 ### Option A: VS Code + Colab Extension (Recommended)
 
@@ -454,6 +462,75 @@ How to size trades.
 | `"volatility"` | Medium | Size based on volatility |
 | `"confidence"` | Medium | Size based on model confidence |
 | `"kelly"` | High | Optimal growth (aggressive) |
+
+---
+
+### Feature Governance (opt-in diagnostics)
+
+Feature selection picks the features; governance tells you how much to trust
+that pick. It is **off by default**, runs after selection, and **never changes
+the selected features** (a run with the report on trains exactly the same models
+as one with it off). It only reads the TRAIN split, and every ranking inside it
+uses the same purged, label-span-aware cross-validation as the selection itself.
+
+It is configured in the experiment YAML (or `ExperimentConfig`), not in the
+notebook variables above:
+
+```yaml
+data:
+  features:
+    governance:
+      report: true            # master switch (default false)
+      bootstrap_stability: true
+      label_perturbation: true
+      registry: true
+      n_bootstrap: 8          # random contiguous blocks of the train rows
+      stability_threshold: 0.6
+      window_fraction: 0.5    # block length as a share of the train rows
+      barrier_scales: [0.75, 1.25]   # triple-barrier widths for label variants
+      max_degraded_runs: 3    # failing runs before the registry retires a feature
+      # registry_path: null   # default: next to the run directories
+```
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `report` | `false` | Write the report and update the registry |
+| `bootstrap_stability` | `true` | Replays the real selection (ranking, budget, filters, decorrelation, per-model cut) on `n_bootstrap` random blocks and counts how often each feature is kept |
+| `label_perturbation` | `true` | Relabels the train rows with barriers scaled by `barrier_scales` and flags features whose importance rank moves more than a x1.0 control relabel does |
+| `registry` | `true` | Keeps a cross-run lifecycle per feature (see below) |
+| `registry_path` | `null` | Registry file; default `<runs dir>/feature_registry_<SYMBOL>_<context>.json` |
+| `n_bootstrap` | `8` | Blocks for the stability estimate |
+| `stability_threshold` | `0.6` | Share of blocks a feature must be kept in to count as stable |
+| `window_fraction` | `0.5` | Block length as a share of the train rows |
+| `barrier_scales` | `[0.75, 1.25]` | Multipliers on the label's upper and lower barrier |
+| `max_degraded_runs` | `3` | Consecutive failing runs before a feature is marked retired |
+
+**Cost:** about `n_bootstrap + 3` extra feature rankings, so it is worth turning
+on for the runs you intend to keep, not for every quick experiment.
+
+**Output:** `<output_dir>/feature_governance/h{h}.json` (h = the horizon the
+selection ranked on). Read the `flags` section first: `selected_unstable` lists
+selected features the pipeline does not consistently keep on other slices of the
+train data (per model in `selected_unstable_by_model`), and
+`selected_label_fragile` lists selected features whose importance depends on the
+exact barrier widths. Each entry under `features` has the live MDA importance,
+`selection_frequency` (overall and per model), the `stable` / `label_robust`
+verdicts and a composite score.
+
+**Registry lifecycle:** each feature moves `candidate -> selected -> active`
+as runs keep selecting it, `active -> degraded` when a run drops it or finds it
+unstable, and `degraded -> retired` after `max_degraded_runs` failing runs in a
+row. Retirement is a recommendation: nothing is removed automatically, and a
+retired feature that a later run selects again is listed under
+`registry.retired_but_selected`. Lifecycles only advance between runs with the
+same setup (symbol, bar timeframe, ranking horizon, MTF timeframes, model set);
+the default registry file name includes a fingerprint of it, and an explicit
+`registry_path` shared across different setups is skipped with a message rather
+than misread as feature decay. Re-running the same run id, or resuming a run, does
+not advance the registry twice, and concurrent runs sharing a registry are
+serialised with a file lock.
+
+Changing any `governance` setting does not invalidate saved checkpoints.
 
 ---
 

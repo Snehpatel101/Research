@@ -61,6 +61,25 @@ def primary_sides(class_predictions: np.ndarray) -> np.ndarray:
     return np.asarray(class_predictions) != NEUTRAL_LABEL
 
 
+class ConstantBetFilter:
+    """Meta-model for a primary whose bets cannot train a classifier.
+
+    When the primary's sided OOF bets are all wins, all losses, or absent,
+    there is nothing to discriminate; the honest filter is the observed win
+    rate (1.0 with no bets, so the filter passes whatever the primary does).
+    """
+
+    def __init__(self, win_rate: float) -> None:
+        self.win_rate = float(win_rate)
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> ConstantBetFilter:  # noqa: ARG002
+        return self
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        p = np.full(len(X), self.win_rate)
+        return np.column_stack([1.0 - p, p])
+
+
 def build_meta_features(model_input: np.ndarray, primary_probabilities: np.ndarray) -> np.ndarray:
     """Meta-model input: primary model input, primary class probabilities, confidence.
 
@@ -79,9 +98,12 @@ def build_meta_features(model_input: np.ndarray, primary_probabilities: np.ndarr
         raise ValueError(
             f"primary_probabilities must be (n_samples={n}, n_classes), got {probs.shape}"
         )
+    inputs = np.asarray(model_input, dtype=np.float32)
+    # Explicit width: reshape(0, -1) is ambiguous when the primary bets on no rows.
+    n_inputs = int(np.prod(inputs.shape[1:], dtype=np.int64))
     return np.hstack(
         [
-            np.asarray(model_input, dtype=np.float32).reshape(n, -1),
+            inputs.reshape(n, n_inputs),
             probs,
             probs.max(axis=1, keepdims=True),
         ]
@@ -219,6 +241,9 @@ class MetaLabelingBundle:
         X, timestamps = self.primary_bundle.raw_to_input(raw_df, skip_cleaning=skip_cleaning)
         result = self.predict(X, calibrate=calibrate)
         result.metadata["timestamps"] = timestamps
+        flags = self.primary_bundle.event_flags(raw_df, timestamps, skip_cleaning=skip_cleaning)
+        if flags is not None:
+            result.metadata["is_event"] = flags
         return result
 
     def _apply_filter(self, primary: PredictionResult, p_win: np.ndarray) -> PredictionResult:

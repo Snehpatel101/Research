@@ -18,7 +18,7 @@
 
 - Item 16: Added `logloss_unweighted` and `logloss_weighted` to `compute_classification_metrics()` (src/models/metrics.py). Both weighted (balanced class weights) and unweighted log_loss now flow through to ExperimentResult.metrics. TrainingMetrics extended with optional val_logloss fields.
 - Item 17: Added binary classification mode — `LabelingConfig(binary_mode=True)` remaps triple-barrier labels {-1,0,+1} to {0,1} (0=no move, 1=significant move). Dynamic label mapping in label_mapping.py (n_classes=2/3). n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added.
-- All 17 audit items from AUDIT_2026-02-26.md now fully addressed (items 1-13 in Phases 80-83, items 14-15 at notebook level, items 16-17 in Phase 84).
+- All 17 audit items from docs/archive/AUDIT_2026-02-26.md now fully addressed (items 1-13 in Phases 80-83, items 14-15 at notebook level, items 16-17 in Phase 84).
 
 ## Phase 85: Full Audit Fixes — 8-Agent Audit + 7 Fixes (2026-02-28) - COMPLETE
 
@@ -2782,7 +2782,7 @@ NO PRE-COMPUTED PARQUETS - notebook is self-contained.
 
 ### Financial Improvements Available
 
-See `IMPROVEMENTS.md` for 25 research-backed improvements ranked by Sharpe impact:
+See `docs/archive/IMPROVEMENTS.md` for 25 research-backed improvements ranked by Sharpe impact:
 - **Critical (#1-4):** +20-40% Sharpe potential
 - **High (#5-11):** +15-25% Sharpe potential
 - **Medium (#12-19):** +10-15% Sharpe potential

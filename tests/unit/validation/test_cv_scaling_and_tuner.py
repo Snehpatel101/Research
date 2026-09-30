@@ -54,7 +54,7 @@ def _oof(unit_scale: float, *, select_features: bool) -> np.ndarray:
         n_features_to_select=3,
     )
     result = runner.run(_container(unit_scale))[("logistic", HORIZON)]
-    return result.oos_predictions.iloc[:, 0].to_numpy(dtype=float)
+    return result.oos_predictions["logistic_pred"].to_numpy(dtype=float)
 
 
 @pytest.mark.parametrize("select_features", [True, False])

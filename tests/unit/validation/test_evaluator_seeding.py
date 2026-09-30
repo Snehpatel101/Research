@@ -65,6 +65,8 @@ def test_runner_seeds_fold_models_over_the_model_default(monkeypatch: pytest.Mon
     y = pd.Series(rng.choice([-1, 0, 1], size=300))
 
     class Container:
+        n_classes = 3
+
         def get_sklearn_arrays(self, split: str, return_df: bool = False):
             return X, y, None
 
@@ -83,6 +85,7 @@ def test_runner_seeds_fold_models_over_the_model_default(monkeypatch: pytest.Mon
     assert captured["seed"] == 9
     assert captured["config"]["random_state"] == 9
     assert captured["config"]["random_seed"] == 9
+    assert captured["config"]["n_classes"] == 3
 
 
 @pytest.mark.parametrize("command", ["cv", "walk-forward", "cpcv-pbo"])

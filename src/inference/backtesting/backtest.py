@@ -151,6 +151,11 @@ class BacktestConfig:
         risk_per_trade: Risk per trade for position sizing
         kelly_fraction: Kelly fraction for Kelly sizing
         target_volatility: Target volatility for vol-targeted sizing
+        bet_max_contracts / bet_n_classes / bet_step_size: AFML probability
+            sizing (``position_sizing="probability"``): contracts at full
+            size, outcome count K (3 = short/neutral/long), and the size
+            discretization step (0 = none). The probability fed to the sizer
+            is each prediction's ``confidence``.
         min_holding_period: Minimum bars before a SIGNAL-driven exit (stops,
             take-profits, time and forced exits are always honored)
         max_holding_period: Maximum bars to hold, counted from the signal bar
@@ -167,9 +172,9 @@ class BacktestConfig:
         barrier_k_up / barrier_k_down: Triple-barrier ATR multipliers from the
             training config (0.0 = legacy 2% stop, no take-profit)
         barrier_cost_in_atr: Cost term added to both multipliers, exactly as
-            the labeler does. None = derive it with the labeler's helper
-            (round-trip cost in price units / median ATR of the price data);
-            0.0 = plain k * ATR barriers.
+            the labeler does. None = derive it causally per signal bar (round-trip
+            cost in price units / expanding median ATR up to that bar, the
+            labeler's cost helpers); 0.0 = plain k * ATR barriers.
     """
 
     initial_equity: float = 100000.0
@@ -188,6 +193,9 @@ class BacktestConfig:
     kelly_fraction: float = 0.25
     target_volatility: float = 0.10
     fixed_contracts: int = 1
+    bet_max_contracts: int = 5
+    bet_n_classes: int = 3
+    bet_step_size: float = 0.0
     min_holding_period: int = 1
     max_holding_period: int = 0
     max_drawdown_threshold: float = 0.10
@@ -205,7 +213,7 @@ class BacktestConfig:
     # 0.0 = not set, uses legacy hardcoded logic for backward compat
     barrier_k_up: float = 0.0  # Upper barrier ATR multiplier
     barrier_k_down: float = 0.0  # Lower barrier ATR multiplier
-    barrier_cost_in_atr: float | None = None  # None = derive like the labeler
+    barrier_cost_in_atr: float | None = None  # None = derive causally per signal bar
 
     # Session-end forced close: close all positions at session end
     # False = legacy behavior (positions can be held overnight)
@@ -427,6 +435,8 @@ class _Bars:
     lows: np.ndarray
     closes: np.ndarray
     atr: np.ndarray
+    # Causal per-bar barrier cost term (None = the explicit config value applies)
+    barrier_cost: np.ndarray | None
     fills: np.ndarray
     can_enter: np.ndarray
     session_end: np.ndarray
@@ -476,9 +486,9 @@ class Backtester:
             cost_calculator: Cost calculator (created from config if not provided)
             position_sizer: Position sizer (created from config if not provided)
         """
+        self.config = config or BacktestConfig()
         self.predictions = self._validate_predictions(predictions)
         self.prices = self._validate_prices(prices)
-        self.config = config or BacktestConfig()
 
         # Create cost calculator
         if cost_calculator is None:
@@ -501,6 +511,9 @@ class Backtester:
                 target_volatility=self.config.target_volatility,
                 point_value=self.config.point_value,
                 contracts=self.config.fixed_contracts,
+                bet_max_contracts=self.config.bet_max_contracts,
+                bet_n_classes=self.config.bet_n_classes,
+                bet_step_size=self.config.bet_step_size,
             )
         else:
             self.position_sizer = position_sizer
@@ -512,7 +525,8 @@ class Backtester:
             enable_adverse_selection=True,
         )
 
-        # Barrier cost term, resolved once so labels and backtest agree
+        # Barrier cost term: the labeling run's value when given (label parity);
+        # otherwise derived per signal bar from prices known at that bar
         self._barrier_cost_in_atr = self._resolve_barrier_cost_in_atr()
 
         # State variables (reset at the start of every run())
@@ -528,6 +542,8 @@ class Backtester:
         self._flatten_at_bar: int | None = None
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+        # Entry signals skipped because the sizer returned zero contracts
+        self._zero_size_signals = 0
 
         # Running Kelly statistics from completed trades
         self._kelly_win_rate: float = 0.5
@@ -544,7 +560,7 @@ class Backtester:
         """Map canonical position_sizing values to local PositionSizingMethod values.
 
         ExperimentConfig.evaluation.position_sizing uses short names like
-        "fixed", "kelly", "volatility", "confidence".  The local position sizer
+        "fixed", "kelly", "volatility", "confidence", "probability".  The local position sizer
         (position_sizing.py) expects "fixed_contracts", "kelly",
         "volatility_targeted", "bet_sizing", etc.  This method bridges the two.
         """
@@ -558,23 +574,33 @@ class Backtester:
         return mapping.get(value, value)
 
     def _resolve_barrier_cost_in_atr(self) -> float:
-        """Cost term of the barrier multipliers, computed like the labeler's.
+        """Explicit cost term of the barrier multipliers (0.0 when derived per bar).
 
         An explicit ``barrier_cost_in_atr`` (the factory passes the labeling
-        run's value) wins. Otherwise the labeler's own helper converts the
-        symbol's round-trip cost (price units) into ATR units with the median
-        ATR of the price data — the same global calibration the labeler
-        applies to its dataset.
+        run's value) wins and applies to every trade. When it is None the
+        cost is derived causally per signal bar (``_derived_barrier_cost``),
+        so this scalar is only the fallback 0.0.
         """
-        if not self.config.uses_barriers:
+        if not self.config.uses_barriers or self.config.barrier_cost_in_atr is None:
             return 0.0
-        if self.config.barrier_cost_in_atr is not None:
-            return float(self.config.barrier_cost_in_atr)
-        from src.data.labeling.triple_barrier import compute_cost_in_atr
+        return float(self.config.barrier_cost_in_atr)
 
-        prices = self.prices.sort_values("timestamp")
-        atr = self._compute_atr(prices).to_numpy(dtype=float)
-        return compute_cost_in_atr(self.config.contract_symbol, atr)
+    def _derived_barrier_cost(self, atr: pd.Series) -> np.ndarray | None:
+        """Causal per-bar cost term, or None when barriers are off or a cost is explicit.
+
+        ``cost_in_atr[i] = round-trip cost in price / expanding median ATR up
+        to bar i`` (the labeler's cost helpers), so a trade's barriers never
+        depend on bars after its signal bar.
+        """
+        if not self.config.uses_barriers or self.config.barrier_cost_in_atr is not None:
+            return None
+        from src.data.labeling.triple_barrier import (
+            expanding_cost_in_atr,
+            transaction_cost_in_price,
+        )
+
+        cost = transaction_cost_in_price(self.config.contract_symbol)
+        return expanding_cost_in_atr(cost, atr.to_numpy(dtype=float))
 
     def _validate_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validate and normalize predictions DataFrame."""
@@ -605,7 +631,17 @@ class Backtester:
         if "confidence" not in df.columns and "probability" in df.columns:
             df["confidence"] = df["probability"]
         if "confidence" not in df.columns:
-            df["confidence"] = 1.0
+            if self._resolve_sizing_method(self.config.position_sizing) == "probability":
+                # Full size for a prediction without a probability would be a
+                # silent default; NaN sizes to 0 contracts (no bet)
+                logger.warning(
+                    "position_sizing='probability' needs a 'confidence' (or 'probability') "
+                    "column with the predicted probability of the chosen side; none given, "
+                    "so no position will be opened"
+                )
+                df["confidence"] = np.nan
+            else:
+                df["confidence"] = 1.0
 
         if "label" not in df.columns:
             df["label"] = np.nan
@@ -654,7 +690,11 @@ class Backtester:
         """
         rows_before = len(self.predictions)
         prices = self.prices.sort_values("timestamp", kind="stable").reset_index(drop=True)
-        prices["atr"] = self._compute_atr(prices).to_numpy(dtype=float)
+        atr = self._compute_atr(prices)
+        prices["atr"] = atr.to_numpy(dtype=float)
+        derived_cost = self._derived_barrier_cost(atr)
+        if derived_cost is not None:
+            prices["barrier_cost"] = derived_cost
 
         matched = self.predictions["timestamp"].isin(prices["timestamp"])
         if not matched.any():
@@ -754,8 +794,12 @@ class Backtester:
         atr: float | None = None,
         signal_bar: int | None = None,
         monitor_from_bar: int | None = None,
+        cost_in_atr: float | None = None,
     ) -> None:
         """Open a new position filled at ``price`` on bar ``bar_idx``.
+
+        ``cost_in_atr`` is the barrier cost term known at the signal bar
+        (default: the explicit configured value, 0.0 when none).
 
         Barrier distances come from ``barrier_distances`` — the labeler's
         helper — so the stop / take-profit sit ``(k + cost_in_atr) * ATR``
@@ -771,7 +815,8 @@ class Backtester:
         up_dist = down_dist = 0.0
         if use_barriers:
             assert atr is not None
-            up_dist, down_dist = barrier_distances(atr, k_up, k_down, self._barrier_cost_in_atr)
+            cost = self._barrier_cost_in_atr if cost_in_atr is None else cost_in_atr
+            up_dist, down_dist = barrier_distances(atr, k_up, k_down, cost)
             # Barrier-aware stop distance (matches training semantics)
             stop_dist = down_dist if direction == 1 else up_dist
         else:
@@ -783,6 +828,7 @@ class Backtester:
         )
 
         if contracts <= 0:
+            self._zero_size_signals += 1
             return
 
         # Calculate stop loss and take profit
@@ -1068,6 +1114,11 @@ class Backtester:
                 if "atr" in data.columns
                 else self._compute_atr(data).to_numpy(dtype=float)
             ),
+            barrier_cost=(
+                data["barrier_cost"].to_numpy(dtype=float)
+                if "barrier_cost" in data.columns
+                else None
+            ),
             fills=fills,
             can_enter=can_enter,
             session_end=session_end,
@@ -1088,6 +1139,7 @@ class Backtester:
         self._flatten_at_bar = None
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+        self._zero_size_signals = 0
         self._kelly_active = False
         self._kelly_win_rate = 0.5
         self._kelly_avg_win = 100.0
@@ -1195,6 +1247,7 @@ class Backtester:
             atr=signal_atr,
             signal_bar=s,
             monitor_from_bar=monitor_from,
+            cost_in_atr=None if bars.barrier_cost is None else float(bars.barrier_cost[s]),
         )
 
     def _start_halt(self, j: int, ts: datetime, reason: HaltReason, value: float) -> None:
@@ -1272,10 +1325,17 @@ class Backtester:
         delay = cfg.resolved_signal_delay
         timing = cfg.fill_timing
 
+        # Reported cost term: explicit value, or the last (fully calibrated) derived one
+        cost_reported = (
+            float(bars.barrier_cost[-1])
+            if bars.barrier_cost is not None and n_bars
+            else self._barrier_cost_in_atr
+        )
+
         if cfg.uses_barriers:
             logger.info(
                 f"Barrier-aligned backtest: k_up={cfg.barrier_k_up:.2f}, "
-                f"k_down={cfg.barrier_k_down:.2f}, cost_in_atr={self._barrier_cost_in_atr:.4f}, "
+                f"k_down={cfg.barrier_k_down:.2f}, cost_in_atr={cost_reported:.4f}, "
                 f"max_holding={cfg.max_holding_period}"
             )
 
@@ -1390,12 +1450,18 @@ class Backtester:
             "short_trades": sum(1 for t in self._trades if t.direction == -1),
             "execution_model": cfg.execution_model.value,
             "signal_delay_bars": delay,
-            "barrier_cost_in_atr": self._barrier_cost_in_atr,
+            "barrier_cost_in_atr": cost_reported,
             "n_halts": len(self._halts),
             "halted_at": str(self._halts[0].timestamp) if self._halts else None,
             "halts_by_reason": halts_by_reason,
             "bars_halted": bars_halted,
+            "zero_size_signals": self._zero_size_signals,
         }
+        if self._zero_size_signals:
+            logger.info(
+                f"{self._zero_size_signals} entry signals opened no position: the position "
+                f"sizer ({cfg.position_sizing}) returned zero contracts"
+            )
 
         return BacktestResult(
             equity_curve=equity_curve,

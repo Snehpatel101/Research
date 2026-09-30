@@ -225,13 +225,34 @@ class TestResume:
     def test_pre_117_checkpoint_resumes(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import copy
         import hashlib
 
         cfg = _config(tmp_path)
-        legacy = {k: v for k, v in cfg.to_dict().items() if k not in ("deterministic", "tracking")}
+        # Written independently of the factory: what the integration-era
+        # checkpoint.compute_config_hash stored (json of to_dict() minus
+        # data.features.governance), for a config without the Phase 117 fields.
+        legacy = copy.deepcopy(cfg.to_dict())
+        del legacy["deterministic"], legacy["tracking"]
+        legacy["data"]["features"].pop("governance")
         old_hash = hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest()
         cfg = self._checkpointed(tmp_path, stored_hash=old_hash)
         assert self._resume(self._reload(cfg), monkeypatch) == [True]
+
+    def test_pre_117_checkpoint_of_other_experiment_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import hashlib
+
+        cfg = _config(tmp_path)
+        other = cfg.to_dict()
+        other["training"]["models"] = ["logistic"]
+        del other["deterministic"], other["tracking"]
+        other["data"]["features"].pop("governance")
+        old_hash = hashlib.sha256(json.dumps(other, sort_keys=True).encode()).hexdigest()
+        cfg = self._reload(self._checkpointed(tmp_path, stored_hash=old_hash))
+        with pytest.raises(ValueError, match="Cannot resume"):
+            self._resume(cfg, monkeypatch)
 
     def test_changed_experiment_refused_and_checkpoints_kept(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -83,6 +83,9 @@ class TestConfigHash:
             lambda c: setattr(c.training, "models", ["xgboost", "logistic"]),
             lambda c: setattr(c.data, "symbol", "MGC"),
             lambda c: setattr(c.training.optuna, "n_trials", 5),
+            # Opt-in AFML options change the samples/features, so they are hashed
+            lambda c: setattr(c.data.features.frac_diff, "enabled", True),
+            lambda c: setattr(c.data.labeling, "event_sampling", "cusum"),
         ],
     )
     def test_changes_with_result_affecting_fields(self, mutate) -> None:
@@ -90,6 +93,13 @@ class TestConfigHash:
         base = cfg.config_hash()
         mutate(cfg)
         assert cfg.config_hash() != base
+
+    def test_ignores_feature_governance_diagnostics(self) -> None:
+        cfg = _config()
+        base = cfg.config_hash()
+        cfg.data.features.governance.report = True
+        cfg.data.features.governance.n_bootstrap = 3
+        assert cfg.config_hash() == base
 
 
 class TestReachesPipelineConfig:

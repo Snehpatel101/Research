@@ -99,3 +99,45 @@ def test_stacking_binary_probabilities_shape():
     # Probabilities should sum to ~1
     row_sums = result.class_probabilities.sum(axis=1)
     np.testing.assert_allclose(row_sums, 1.0, atol=1e-5)
+
+
+def test_training_diversity_analysis_uses_the_pipeline_class_count(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    import src.models.ensemble.diversity as diversity
+    from src.models.training.feature_selection import FeatureSelectionMixin
+    from src.validation.cv.oof_core import OOFPrediction, build_oof_frame
+
+    built: list[int] = []
+
+    class RecordingAnalyzer(diversity.DiversityAnalyzer):
+        def __init__(self, **kwargs) -> None:
+            built.append(kwargs["n_classes"])
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(diversity, "DiversityAnalyzer", RecordingAnalyzer)
+
+    n = 200
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 2, n)
+    X = pd.DataFrame({"f": np.zeros(n)})
+
+    def oof(name: str) -> OOFPrediction:
+        p1 = np.clip(y * 0.6 + rng.uniform(0, 0.4, n), 0, 1)
+        probs = np.column_stack([1 - p1, p1])
+        preds = probs.argmax(axis=1).astype(float)
+        frame = build_oof_frame(name, X.index, y, probs, preds, probs.max(axis=1), np.zeros(n))
+        return OOFPrediction(model_name=name, predictions=frame, fold_info=[], coverage=1.0)
+
+    stub = SimpleNamespace(
+        config=SimpleNamespace(n_classes=2, horizons=[5]),
+        _oof_predictions={"xgboost": oof("xgboost"), "lightgbm": oof("lightgbm")},
+    )
+    aligned = SimpleNamespace(model_names=["xgboost", "lightgbm"], common_indices=np.arange(n))
+    metrics = FeatureSelectionMixin._analyze_ensemble_diversity(
+        stub, aligned, pd.DataFrame({"label_h5": y})  # type: ignore[arg-type]
+    )
+    assert built == [2]
+    assert metrics and np.isfinite(metrics["diversity_score"])

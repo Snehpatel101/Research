@@ -22,6 +22,7 @@ Example:
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from datetime import datetime
@@ -44,11 +45,38 @@ logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 
-# Top-level fields that name, place or report a run without changing its
-# results; excluded from ExperimentConfig.config_hash
+# A number written in scientific notation without a dot, e.g. 1e-5 or 2E-3
+_SCIENTIFIC_FLOAT = re.compile(r"[+-]?\d+[eE][+-]?\d+")
+
+# Settings (dotted paths into to_dict()) that name, place or report a run
+# without changing what it computes; excluded from ExperimentConfig.config_hash.
+# The feature-governance diagnostics are read-only with respect to the data,
+# features, labels and models, so they are neutral too (changing them never
+# invalidates a checkpoint). Everything else is result-affecting, including the
+# opt-in AFML options (data.labeling.event_sampling, data.features.frac_diff).
 RESULT_NEUTRAL_FIELDS = frozenset(
-    {"name", "description", "run_id", "output_dir", "verbose", "tracking"}
+    {
+        "name",
+        "description",
+        "run_id",
+        "output_dir",
+        "verbose",
+        "tracking",
+        "data.features.governance",
+    }
 )
+
+
+def _drop_paths(tree: dict[str, Any], paths: frozenset[str], prefix: str = "") -> dict[str, Any]:
+    """Copy of a nested dict without the dotted ``paths``."""
+    kept: dict[str, Any] = {}
+    for key, value in tree.items():
+        path = f"{prefix}{key}"
+        if path in paths:
+            continue
+        kept[key] = _drop_paths(value, paths, f"{path}.") if isinstance(value, dict) else value
+    return kept
+
 
 # Derived embargo: one trading day. CME equity/metal futures trade ~23h a day,
 # so 1440 minutes of bars spans one session at any bar timeframe.
@@ -88,6 +116,13 @@ def _dataclass_from_dict(cls: type[_T], raw: dict[str, Any], where: str) -> _T: 
     for name, value in raw.items():
         if name not in known:
             continue
+        # YAML 1.1 (PyYAML) reads 1e-5 / 2e-3 — no dot — as a string
+        if (
+            isinstance(value, str)
+            and "float" in str(known[name].type)
+            and _SCIENTIFIC_FLOAT.fullmatch(value.strip())
+        ):
+            value = float(value)
         factory = known[name].default_factory
         if isinstance(factory, type) and is_dataclass(factory):
             if value is None:
@@ -210,14 +245,43 @@ class TrainingSection:
     meta_learner: str = "ridge_meta"
 
 
+# Accepted evaluation.position_sizing values: the short names plus the
+# backtester's own method names
+POSITION_SIZING_CHOICES = (
+    "fixed",
+    "kelly",
+    "volatility",
+    "confidence",
+    "probability",
+    "fixed_contracts",
+    "fixed_fractional",
+    "volatility_targeted",
+    "equal_weight",
+    "bet_sizing",
+    "drawdown_adjusted",
+)
+
+
 @dataclass
 class EvaluationSection:
     """
     Evaluation-related configuration section.
+
+    Attributes:
+        position_sizing: Backtest position sizing. ``"fixed"`` (default, one
+            contract), ``"kelly"``, ``"volatility"``, ``"confidence"``
+            (meta-labeling bet sizing) or ``"probability"`` (AFML ch. 10: size
+            from the predicted probability of the chosen side —
+            ``2 * Phi((p - 1/K) / sqrt(p (1 - p))) - 1`` of ``bet_max_contracts``).
+        bet_max_contracts: ``"probability"`` sizing: contracts at full size
+        bet_step_size: ``"probability"`` sizing: discretization step of the
+            size in (0, 1] (AFML 10.3); 0 = none
     """
 
     run_backtest: bool = False
     position_sizing: str = "fixed"
+    bet_max_contracts: int = 5
+    bet_step_size: float = 0.0
 
     # Transaction cost overrides (passed to BacktestConfig)
     commission_per_contract: float | None = None
@@ -241,12 +305,13 @@ class TrackingSection:
     Experiment tracking: one parent run per ``MLFactory.run`` plus one child
     run per trained model.
 
-    - ``backend``: "none" (default), "local" or "mlflow"
-    - ``tracking_uri``: local = directory the runs are written to (default
-      ``<output root>/tracking``, shared by every run under that root);
-      mlflow = tracking server URI or store (default: MLflow's own default,
-      ``MLFLOW_TRACKING_URI`` or ``./mlruns``)
-    - ``experiment_name``: tracker experiment (default: ``ExperimentConfig.name``)
+    Attributes:
+        backend: Tracking backend: "none" (default), "local" or "mlflow"
+            (mlflow needs the ``mlflow`` extra)
+        tracking_uri: local = directory the runs are written to (default
+            ``<output root>/tracking``); mlflow = tracking server URI or store
+            (default: ``MLFLOW_TRACKING_URI`` or ``./mlruns``)
+        experiment_name: Tracker experiment (default: ``ExperimentConfig.name``)
     """
 
     backend: str = "none"
@@ -343,6 +408,29 @@ class ExperimentConfig:
                 f"tracking.backend must be one of {TRACKING_BACKENDS}, "
                 f"got {self.tracking.backend!r}"
             )
+
+    def validate(self) -> list[str]:
+        """Config problems that would only surface deep inside a run (empty = valid).
+
+        Covers the labeling (barriers, event sampling), fractional-differentiation
+        and position-sizing options. ``MLFactory`` raises on a non-empty result.
+        """
+        issues = self.data.labeling.validate() + self.data.features.validate()
+        sizing = str(self.evaluation.position_sizing).lower()
+        if sizing not in POSITION_SIZING_CHOICES:
+            issues.append(
+                f"evaluation.position_sizing must be one of {list(POSITION_SIZING_CHOICES)}, "
+                f"got {self.evaluation.position_sizing!r}"
+            )
+        if self.evaluation.bet_max_contracts < 1:
+            issues.append(
+                f"evaluation.bet_max_contracts must be >= 1, got {self.evaluation.bet_max_contracts}"
+            )
+        if not 0.0 <= self.evaluation.bet_step_size <= 1.0:
+            issues.append(
+                f"evaluation.bet_step_size must be in [0, 1], got {self.evaluation.bet_step_size}"
+            )
+        return issues
 
     @property
     def symbol(self) -> str:
@@ -476,15 +564,14 @@ class ExperimentConfig:
         SHA-256 of every setting that can change a run's results.
 
         Two runs with the same hash, input data and code produce the same
-        output. Fields that only name, place or report the run
+        output. Settings that only name, place or report the run
         (``RESULT_NEUTRAL_FIELDS``: name, description, run_id, output_dir,
-        verbose, tracking) are excluded, so re-running an experiment under a
-        new run ID keeps its hash.
+        verbose, tracking, the feature-governance diagnostics) are excluded, so
+        re-running an experiment under a new run ID keeps its hash.
         """
         from src.core.run_manifest import canonical_json_sha256
 
-        definition = {k: v for k, v in self.to_dict().items() if k not in RESULT_NEUTRAL_FIELDS}
-        return canonical_json_sha256(definition)
+        return canonical_json_sha256(_drop_paths(self.to_dict(), RESULT_NEUTRAL_FIELDS))
 
     def tracking_experiment_name(self) -> str:
         """Tracker experiment the run is logged to (``tracking.experiment_name`` or ``name``)."""
@@ -576,6 +663,7 @@ class ExperimentConfig:
         cv_gaps: tuple[int, int] | None = None,
         bar_timeframe: str | None = None,
         n_rows: int | None = None,
+        split_embargo_bars: int | None = None,
         tracking_parent_run_id: str | None = None,
     ) -> Any:
         """
@@ -587,6 +675,9 @@ class ExperimentConfig:
                 they are resolved here via ``resolve_cv_gaps``.
             bar_timeframe: Training bar timeframe, for the derived embargo.
             n_rows: Rows of the labeled training frame, for the embargo cap.
+            split_embargo_bars: Embargo of the chronological val/test gap in bars
+                when it differs from the CV embargo (event sampling: the CV
+                embargo counts event samples). None = the CV embargo.
             tracking_parent_run_id: Tracker run of the factory; every trained
                 model logs a child run under it.
 
@@ -603,6 +694,17 @@ class ExperimentConfig:
         # Binary mode: 2 classes instead of 3
         _n_classes = 2 if self.data.labeling.binary_mode else 3
 
+        governance = self.data.features.governance
+        label_barriers: dict[str, dict[str, float]] = {}
+        if governance.report and governance.label_perturbation:
+            for horizon in self.training.horizons:
+                k_up, k_down, max_bars, _source = self.resolve_barrier_params(horizon)
+                label_barriers[str(horizon)] = {
+                    "k_up": k_up,
+                    "k_down": k_down,
+                    "max_bars": max_bars,
+                }
+
         return PipelineConfig(
             symbol=self.data.symbol,
             data_path=str(self.data.data_path) if self.data.data_path else "",
@@ -616,6 +718,7 @@ class ExperimentConfig:
             n_splits=self.training.n_splits,
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
+            split_embargo_bars=split_embargo_bars,
             sample_weighting=self.training.sample_weighting,
             # Chronological split ratios (purge/embargo gaps sit between them)
             train_ratio=self.data.splits.train_ratio,
@@ -668,6 +771,11 @@ class ExperimentConfig:
             calibration_method=self.training.calibration.method,
             # Classification mode
             n_classes=_n_classes,
+            # Opt-in feature-governance diagnostics (never changes the selection)
+            atr_period=self.data.labeling.atr_period,
+            bar_timeframe=bar_timeframe or self.data.bar_timeframe,
+            governance=governance.to_dict(),
+            label_barriers=label_barriers,
         )
 
 

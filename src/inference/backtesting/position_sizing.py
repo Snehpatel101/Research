@@ -6,10 +6,12 @@ This module provides various position sizing methods:
 - Fixed Fractional: Risk a fixed percentage per trade
 - Volatility-Targeted: Scale position by inverse volatility
 - Equal Weight: Simple equal allocation
+- Probability bet sizing: AFML ch. 10 size from the predicted class probability
 """
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
@@ -28,6 +30,7 @@ class PositionSizingMethod(StrEnum):
     FIXED_CONTRACTS = "fixed_contracts"
     BET_SIZING = "bet_sizing"  # Phase 4G: Variable sizing from model confidence
     DRAWDOWN_ADJUSTED = "drawdown_adjusted"
+    PROBABILITY = "probability"  # AFML ch. 10: size from the predicted-class probability
 
 
 class BasePositionSizer(ABC):
@@ -453,6 +456,99 @@ class BetSizingPositioner(BasePositionSizer):
             return 0
 
 
+def afml_bet_size(
+    probability: float,
+    n_classes: int = 3,
+    step_size: float = 0.0,
+    max_size: float = 1.0,
+) -> float:
+    """Bet size in ``[0, max_size]`` from the probability of the chosen side (AFML 10.2).
+
+    With ``p`` the predicted probability of the side taken among ``n_classes``
+    outcomes, the test statistic ``z = (p - 1/K) / sqrt(p (1 - p))`` (zero when
+    the model is no better than a uniform guess) maps to a size
+    ``2 * Phi(z) - 1`` in ``[0, 1)``: no bet at ``p <= 1/K``, monotonically
+    growing with ``p``, approaching 1 as ``p -> 1``.
+
+    Args:
+        probability: Predicted probability of the chosen side.
+        n_classes: Number of outcomes K (3 for {short, neutral, long}, 2 binary).
+        step_size: Discretization step of the size (AFML 10.3): the size is
+            rounded to the nearest multiple, which damps jitter from tiny
+            probability changes. 0 disables discretization.
+        max_size: Cap on the (discretized) size.
+
+    Returns:
+        Size as a fraction of the maximum position.
+    """
+    if n_classes < 2:
+        raise ValueError(f"n_classes must be >= 2, got {n_classes}")
+    if step_size < 0 or step_size > 1:
+        raise ValueError(f"step_size must be in [0, 1], got {step_size}")
+    if not 0.0 < max_size <= 1.0:
+        raise ValueError(f"max_size must be in (0, 1], got {max_size}")
+    p = float(probability)
+    if not math.isfinite(p) or p <= 1.0 / n_classes:
+        return 0.0
+    if p >= 1.0:
+        size = 1.0
+    else:
+        z = (p - 1.0 / n_classes) / math.sqrt(p * (1.0 - p))
+        # 2 * Phi(z) - 1 == erf(z / sqrt(2))
+        size = math.erf(z / math.sqrt(2.0))
+    if step_size > 0:
+        size = math.floor(size / step_size + 0.5) * step_size
+    return float(min(max(size, 0.0), max_size))
+
+
+@dataclass
+class ProbabilityBetSizer(BasePositionSizer):
+    """
+    AFML ch. 10 position sizing from the model's predicted probability.
+
+    The number of contracts is ``round(afml_bet_size(p) * max_contracts)``:
+    zero when the probability of the chosen side is at or below ``1/K``, all
+    ``max_contracts`` as the probability approaches 1. The probability is the
+    model's (or the meta-labeling bundle's) probability of the side it takes,
+    passed as ``probability`` — the backtester feeds it the prediction's
+    ``confidence``, the probability of the predicted class. A probability that
+    is missing or not finite means no bet (never full size). Factory backtests
+    supply the uncalibrated maximum class probability (a vote share for a hard
+    ``voting_meta``): overconfident models size up too eagerly, so calibrate
+    the probabilities first when they come from your own pipeline.
+
+    Attributes:
+        max_contracts: Contracts at full size (size 1.0)
+        n_classes: Number of outcomes K (3 = short/neutral/long, 2 = binary)
+        step_size: Discretization step of the size in (0, 1]; 0 = none
+        max_size: Cap on the size as a fraction of ``max_contracts``
+    """
+
+    max_contracts: int = 5
+    n_classes: int = 3
+    step_size: float = 0.0
+    max_size: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.max_contracts < 1:
+            raise ValueError(f"max_contracts must be >= 1, got {self.max_contracts}")
+        # Validate the remaining parameters once, at construction
+        afml_bet_size(0.5, self.n_classes, self.step_size, self.max_size)
+
+    def size_fraction(self, probability: float) -> float:
+        """Bet size in [0, max_size] for the probability of the chosen side."""
+        return afml_bet_size(probability, self.n_classes, self.step_size, self.max_size)
+
+    def calculate_position_size(
+        self,
+        account_equity: float,
+        probability: float = 0.5,
+        **kwargs: Any,
+    ) -> int:
+        """Contracts to trade for the predicted probability of the chosen side."""
+        return int(math.floor(self.size_fraction(probability) * self.max_contracts + 0.5))
+
+
 @dataclass
 class DrawdownAdjustedSizer(BasePositionSizer):
     """
@@ -534,6 +630,10 @@ class PositionSizerConfig:
     bet_sizing_strategy: str = "binary"
     bet_sizing_threshold: float = 0.5
     bet_sizing_max_size: float = 1.0
+    # AFML probability sizing (ProbabilityBetSizer)
+    bet_max_contracts: int = 5
+    bet_n_classes: int = 3
+    bet_step_size: float = 0.0
 
 
 def create_position_sizer(
@@ -602,6 +702,14 @@ def create_position_sizer(
             point_value=point_value,
         )
 
+    elif method == PositionSizingMethod.PROBABILITY:
+        return ProbabilityBetSizer(
+            max_contracts=kwargs.get("bet_max_contracts", 5),
+            n_classes=kwargs.get("bet_n_classes", 3),
+            step_size=kwargs.get("bet_step_size", 0.0),
+            max_size=kwargs.get("bet_max_size", 1.0),
+        )
+
     elif method == PositionSizingMethod.DRAWDOWN_ADJUSTED:
         inner_method = kwargs.pop("inner_method", "fixed_fractional")
         inner_sizer = create_position_sizer(method=inner_method, **kwargs)
@@ -628,6 +736,8 @@ __all__ = [
     "EqualWeight",
     "FixedContracts",
     "BetSizingPositioner",  # Phase 4G
+    "ProbabilityBetSizer",
+    "afml_bet_size",
     "DrawdownAdjustedSizer",
     "PositionSizerConfig",
     "create_position_sizer",

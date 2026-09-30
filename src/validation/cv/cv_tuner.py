@@ -63,6 +63,7 @@ class TimeSeriesOptunaTuner:
         purge_bars: int | None = None,
         scale_per_fold: bool = False,
         seed: int = 42,
+        n_classes: int = 3,
     ) -> None:
         """
         Args:
@@ -74,7 +75,9 @@ class TimeSeriesOptunaTuner:
                 already scaled by the training pipeline.
             seed: Seeds the TPE sampler and every trial's model, so the same
                 seed replays the same trials.
+            n_classes: Label classes the trial models are built for (2 = binary).
         """
+        self.n_classes = n_classes
         self.model_name = model_name
         self.cv = cv
         if purge_bars is None:
@@ -297,7 +300,7 @@ class TimeSeriesOptunaTuner:
                 w_train = w_arr[fit_idx] if w_arr is not None else None
 
                 # Train and evaluate - inject max_epochs if configured
-                model_params = apply_model_seed(dict(params), self.seed)
+                model_params = apply_model_seed({**params, "n_classes": self.n_classes}, self.seed)
                 if self.max_epochs is not None:
                     model_params["max_epochs"] = self.max_epochs
                     model_params["early_stopping_patience"] = max(1, self.max_epochs // 2)

@@ -71,3 +71,43 @@ def test_timeframe_keys_are_normalized(tmp_path, timeframe: str) -> None:
     raw = _raw_minutes(240)
     dfs = _factory(tmp_path, ["patchtst"], [timeframe])._generate_additional_dfs(raw)
     assert dfs is not None and list(dfs) == ["60min"]
+
+
+def _bars(n: int, freq: str) -> pd.DataFrame:
+    raw = _raw_minutes(n * int(pd.Timedelta(freq).total_seconds() // 60))
+    agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    return raw.resample(freq, closed="left", label="left").agg(agg).dropna()
+
+
+def test_streams_not_coarser_than_the_bars_are_dropped(tmp_path, caplog) -> None:
+    factory = _factory(tmp_path, ["patchtst"], ["5min", "15min", "60min"])
+    bars = _bars(64, "15min")
+
+    with caplog.at_level("WARNING"):
+        dfs = factory._generate_additional_dfs(bars, "15min")
+
+    assert dfs is not None and list(dfs) == ["60min"]
+    assert factory._multi_stream_timeframes("15min") == ["15min", "60min"]
+    assert "['5min']" in caplog.text  # finer than the bars: dropped with a warning
+    # A timeframe equal to the bars is the anchor stream itself
+    same = _factory(tmp_path, ["patchtst"], ["5min", "15min"])
+    assert same._multi_stream_timeframes("5min") == ["5min", "15min"]
+
+
+def test_serving_builds_the_training_streams_from_the_anchor_bars(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from src.inference.bundle import ModelBundle
+
+    factory = _factory(tmp_path, ["patchtst"], ["5min", "60min"])
+    bars = _bars(64, "15min")  # training bars, resampled from finer raw input
+    trained = factory._generate_additional_dfs(bars, "15min")
+    assert trained is not None
+
+    stub = SimpleNamespace(
+        metadata=SimpleNamespace(model_name="patchtst", extra={"mtf_timeframes": list(trained)})
+    )
+    served = ModelBundle._generate_mtf_dataframes(stub, bars)  # type: ignore[arg-type]
+    assert list(served) == list(trained)
+    for key, frame in trained.items():
+        pd.testing.assert_frame_equal(served[key], frame)

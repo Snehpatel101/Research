@@ -124,6 +124,10 @@ class PipelineConfig:
     # ExperimentConfig.resolve_cv_gaps derives both from the label span and bar
     # timeframe for factory runs; label-end columns in the training frame make
     # every CV purge follow each label's actual resolution bar on top.
+    split_embargo_bars: int | None = None
+    # Embargo in BARS of the full frame for the chronological val/test gap.
+    # None = ``embargo_bars``. With event sampling ``embargo_bars`` is in SAMPLES
+    # (the CV works on event rows) while the split works on bars.
 
     sample_weighting: str = "uniqueness"
     # Default training sample weights when the frame carries label-end columns:
@@ -180,6 +184,18 @@ class PipelineConfig:
     # MTF timeframes: ["5min", "15min", "60min"]
 
     compute_mtf_features: bool = True  # Whether to compute MTF features
+
+    # Opt-in feature-governance diagnostics (FeatureGovernanceConfig.to_dict()).
+    # Empty/report=False = off. Never changes the selected features.
+    governance: dict[str, Any] = field(default_factory=dict)
+    # Resolved triple-barrier params per horizon ({"20": {"k_up", "k_down", "max_bars"}}),
+    # filled by ExperimentConfig when governance label perturbation is on so the
+    # diagnostics can relabel with scaled barriers. Keys are strings (JSON-safe).
+    label_barriers: dict[str, dict[str, float]] = field(default_factory=dict)
+
+    # Training bar timeframe (e.g. "5min"); None = input bars as-is. Context only:
+    # identifies the experiment for the governance registry.
+    bar_timeframe: str | None = None
 
     # Window length for sequence models; None = each model's contract length
     sequence_length: int | None = None

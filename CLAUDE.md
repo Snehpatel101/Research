@@ -108,12 +108,12 @@ All 16 base models mix and match (any subset × 5 meta-learners × 4 training mo
 
 ```bash
 # Linting (required - must pass)
-ruff check src/
-ruff check src/ --fix  # Auto-fix what's possible
+ruff check src/ tests/ scripts/
+ruff check src/ tests/ scripts/ --fix  # Auto-fix what's possible
 
 # Formatting (required)
-black src/
-black --check src/  # Check without modifying
+black src/ tests/ scripts/
+black --check src/ tests/ scripts/  # Check without modifying
 
 # Type checking (required - 0 errors)
 pyright
@@ -385,7 +385,7 @@ src/
 - Added `logloss_unweighted` and `logloss_weighted` to compute_classification_metrics() (flows to ExperimentResult.metrics)
 - Binary classification mode: `LabelingConfig(binary_mode=True)` remaps {-1,0,+1} → {0,1} (no move vs significant move)
 - Dynamic label mapping (n_classes=2/3), n_classes threaded ExperimentConfig → PipelineConfig
-- All 17 audit items from AUDIT_2026-02-26.md now fully addressed
+- All 17 audit items from docs/archive/AUDIT_2026-02-26.md now fully addressed
 - 7 files + notebook modified, 212/212 tests still passing
 
 **Phase 85: COMPLETE — Full Audit Fixes (8-agent audit + 7 fixes)**
@@ -524,26 +524,29 @@ src/
 - Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
 - 12 new test files, 317/317 tests passing (was 223), ruff + black clean
 
-**Phase 102: COMPLETE — Robustness Improvements (Bootstrap + Label Perturbation + Param Sensitivity, 4 files, 18 new tests)**
+**Phase 102: COMPLETE — Robustness Improvements (Bootstrap + Label Perturbation + Param Sensitivity, 4 files, 18 new tests) — reworked in Phase 117**
 - `BootstrapFeatureStability` — N bootstrap resamples, measure feature selection frequency in top-K, flag unstable features
 - `LabelPerturbationTester` — rank features under multiple label variants (different barrier params), flag features with >threshold rank change
 - `ParameterSensitivityTester` — rank features under parameter variants (different feature computation params), flag high-CV features
+- **Phase 117:** `BootstrapFeatureStability` rewritten as block-subsample stability of the REAL selection, `LabelPerturbationTester` rewritten (x1.0 control relabel), both wired as opt-in diagnostics (`data.features.governance`); `ParameterSensitivityTester` / `param_sensitivity.py` deleted
 - New files: `bootstrap_stability.py`, `label_perturbation.py`, `param_sensitivity.py` in `src/optimization/feature_selection/`
 - Orphaned modules (purged_selector.py, optimization.py) confirmed already deleted in Phase C12
 - 4 files modified, 440/440 tests passing (18 new), ruff + black clean
 
-**Phase 101: COMPLETE — Ticker Portability + Economic Value Scoring (E8+E9, 4 files, 20 new tests) — PHASE E COMPLETE**
+**Phase 101: COMPLETE — Ticker Portability + Economic Value Scoring (E8+E9, 4 files, 20 new tests) — PHASE E COMPLETE (both modules deleted in Phase 117)**
 - E8: `TickerPortabilityTester` — cross-symbol feature importance comparison via permutation importance, portability ratio scoring, handles mismatched feature sets
 - E9: `EconomicValueScorer` — leave-one-out marginal Sharpe contribution per feature, slow-path complement to fast-path robustness scorer (E3)
 - New files: `ticker_portability.py` in `src/validation/`, `economic_value.py` in `src/optimization/feature_selection/`
 - **Phase E (Feature Governance) is now fully complete: E1-E9 all implemented**
+- **Phase 117:** `ticker_portability.py` and `economic_value.py` deleted (shuffled-split leakage, no honest economic signal); see DECISIONS.md #3
 - 4 files modified, 422/422 tests passing (20 new), ruff + black clean
 
-**Phase 100: COMPLETE — Feature Lifecycle + Registry + Drawdown Sizer (E6+E7, 5 files, 44 new tests)**
+**Phase 100: COMPLETE — Feature Lifecycle + Registry + Drawdown Sizer (E6+E7, 5 files, 44 new tests) — lifecycle/registry merged and wired in Phase 117**
 - E6: `FeatureLifecycleState` enum (CANDIDATE/SELECTED/ACTIVE/DEGRADED/RETIRED) + `FeatureLifecycle` class with validated transitions, history tracking, consecutive degradation counting, retirement recommendation
 - E7: `FeatureRegistry` with JSON persistence — register/update/query features by state, save/load round-trip, `FeatureRecord` dataclass with scores and transition history
 - `DrawdownAdjustedSizer` wrapping any `BasePositionSizer` — smooth scaling via `scale = max(min_scale, 1 - (dd/threshold)^power)` instead of binary circuit breaker. Quadratic default (power=2), supports linear/cubic.
 - New files: `lifecycle.py`, `registry.py` in `src/optimization/feature_selection/`; edited `position_sizing.py`
+- **Phase 117:** the `FeatureLifecycle` class is gone (one transition table in `lifecycle.py`); `FeatureRegistry.record_run` advances lifecycles across runs (idempotent per run id, per experiment context, file-locked) from the opt-in governance report
 - 5 files modified, 402/402 tests passing (44 new), ruff + black clean
 
 **Phase 99: COMPLETE — Advanced Feature Governance (E3 + CUSUM + FracDiff, 5 files, 22 new tests)**

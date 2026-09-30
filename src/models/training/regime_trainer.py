@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.label_spans import INVALID_LABEL
 from src.core.utils.json_utils import NumpyEncoder
 
 from .regime_detector import (
@@ -361,8 +362,11 @@ class RegimeAwareTrainer:
             mask = regime_result.get_mask(regime_label)
             train_mask = mask[: len(prepared.y_train)].to_numpy()
 
-            # Check minimum samples
-            n_train = int(train_mask.sum())
+            # Check minimum samples — labeled rows only: -99 rows (warmup, end of
+            # data, every non-event bar under event sampling) are dropped before
+            # training, so they must not count toward the minimum
+            labeled = prepared.y_train != INVALID_LABEL
+            n_train = int((train_mask & labeled).sum())
             if n_train < self.config.regime_min_samples:
                 logger.warning(
                     f"Skipping {regime_label}: insufficient samples "
@@ -418,7 +422,7 @@ class RegimeAwareTrainer:
                     regime=regime_label,
                     model_name=model_name,
                     n_samples=n_train,
-                    sample_fraction=n_train / len(prepared.y_train),
+                    sample_fraction=n_train / max(int(labeled.sum()), 1),
                     metrics=trained.metrics,
                     trainer=trainer,
                     training_time_seconds=trained.training_time_seconds,
@@ -569,7 +573,7 @@ class RegimeAwareTrainer:
                 result = RegimeModelResult(
                     regime="combined",
                     model_name=model_name,
-                    n_samples=len(prepared.y_train),
+                    n_samples=int((prepared.y_train != INVALID_LABEL).sum()),
                     sample_fraction=1.0,
                     metrics=metrics,
                     trainer=trainer,

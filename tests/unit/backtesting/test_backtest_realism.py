@@ -22,6 +22,7 @@ from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 from src.data.labeling.triple_barrier import (
     barrier_distances,
     compute_cost_in_atr,
+    expanding_cost_in_atr,
     transaction_cost_in_price,
 )
 from src.data.pipeline.config.barriers_config import get_total_trade_cost
@@ -318,12 +319,14 @@ class TestBarrierParity:
         assert cost_in_atr == pytest.approx(expected, rel=1e-12)
 
     def test_backtest_derives_same_cost_term(self, labeled_walk):
-        """barrier_cost_in_atr=None -> the labeler's helper on the price data."""
+        """barrier_cost_in_atr=None -> the labeler's helpers, causally (expanding median ATR)."""
         prices, _labels, _atr, cost_in_atr = labeled_walk
         bt = _parity_backtester(prices, np.zeros(len(prices)), None)
-        assert bt._barrier_cost_in_atr > 0
-        # Same helper; medians differ only by the ATR warm-up bars
-        assert bt._barrier_cost_in_atr == pytest.approx(cost_in_atr, rel=0.02)
+        result = bt.run()
+        derived = result.stats["barrier_cost_in_atr"]
+        assert derived > 0
+        # Same helper; the final expanding median approximates the global one
+        assert derived == pytest.approx(cost_in_atr, rel=0.02)
 
     @pytest.mark.parametrize("bar", [60, 150, 333])
     def test_stop_and_tp_equal_label_barriers(self, labeled_walk, bar):
@@ -349,6 +352,35 @@ class TestBarrierParity:
         assert pos.stop_loss == pytest.approx(entry - (K_DOWN + cost_in_atr) * atr[bar], rel=1e-9)
         assert pos.take_profit - entry == pytest.approx(up)
         assert entry - pos.stop_loss == pytest.approx(down)
+
+    @pytest.mark.parametrize("bar", [30, 150, 333])
+    def test_derived_cost_is_the_signal_bars_value(self, labeled_walk, bar):
+        """barrier_cost_in_atr=None: each trade's barriers use the cost known at its signal bar."""
+        prices, _labels, _atr, _cost = labeled_walk
+        signal = np.zeros(len(prices))
+        signal[bar] = 1
+        bt = _parity_backtester(prices, signal, None)
+        # The backtester's ATR (NaN during its warm-up, unlike the labeler's)
+        atr = bt._compute_atr(prices).to_numpy(dtype=float)
+        per_bar = expanding_cost_in_atr(transaction_cost_in_price("MES"), atr)
+        cost = per_bar[bar]
+        # The final (fully calibrated) cost would place the barriers elsewhere
+        assert cost > 0
+        assert cost != pytest.approx(per_bar[-1], rel=1e-3)
+        seen = {}
+        original = bt._open_position
+
+        def spy(*args, **kwargs):
+            original(*args, **kwargs)
+            seen["pos"] = bt._current_position
+
+        bt._open_position = spy  # type: ignore[method-assign]
+        bt.run()
+        pos = seen["pos"]
+        entry = prices["close"].iloc[bar]
+        assert pos.entry_price == pytest.approx(entry)
+        assert pos.take_profit == pytest.approx(entry + (K_UP + cost) * atr[bar], rel=1e-9)
+        assert pos.stop_loss == pytest.approx(entry - (K_DOWN + cost) * atr[bar], rel=1e-9)
 
     def test_trade_outcome_matches_label(self, labeled_walk):
         """Long from bar i under the label's rules exits the way label[i] says."""
