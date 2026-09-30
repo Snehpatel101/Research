@@ -11,7 +11,7 @@ constraints: ## Export uv.lock as pip constraints (constraints.txt) for the CPU-
 
 install: constraints ## Create .venv (Python 3.11, CPU torch) and install the package, pinned to uv.lock
 	uv venv .venv --python 3.11
-	uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+	uv pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match -c constraints.txt
 	uv pip install -e . -c constraints.txt
 
 install-dev: install ## Install with development dependencies + git hooks

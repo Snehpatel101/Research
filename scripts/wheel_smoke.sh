@@ -33,7 +33,7 @@ fi
 bash "$root/scripts/lock_constraints.sh" >"$work/constraints.txt"
 uv venv "$work/venv" --python "${PYTHON:-3.11}"
 export VIRTUAL_ENV="$work/venv"
-uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c "$work/constraints.txt"
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match -c "$work/constraints.txt"
 uv pip install "$work"/dist/*.whl -c "$work/constraints.txt"
 
 cd "$work"  # the source tree must not be importable from here

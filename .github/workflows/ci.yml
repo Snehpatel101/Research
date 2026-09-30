@@ -54,7 +54,7 @@ jobs:
         run: |
           bash scripts/lock_constraints.sh > constraints.txt
           uv venv
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match -c constraints.txt
           uv pip install -e ".[dev,stats]" -c constraints.txt
 
       - name: Lint
@@ -114,7 +114,7 @@ jobs:
         run: |
           bash scripts/lock_constraints.sh > constraints.txt
           uv venv
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match -c constraints.txt
           uv pip install -e ".[docs]" -c constraints.txt
 
       - name: Generated pages are up to date
@@ -146,7 +146,7 @@ jobs:
         run: |
           bash scripts/lock_constraints.sh > constraints.txt
           uv venv
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match -c constraints.txt
           uv pip install -e ".[dev,stats]" -c constraints.txt
 
       - name: End-to-end tests
