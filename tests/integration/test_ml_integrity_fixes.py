@@ -471,6 +471,7 @@ class TestBacktestPredictionGaps:
 
 
 def test_label_cost_uses_training_rows_only() -> None:
+    from src.core.utils.atr import wilder_atr
     from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
     from src.data.labeling.triple_barrier import compute_cost_in_atr
 
@@ -496,7 +497,6 @@ def test_label_cost_uses_training_rows_only() -> None:
         labeler = TripleBarrierLabeler(config)
         return float(labeler.compute_labels(df, horizon=12).metadata["cost_in_atr"][0])
 
-    labeler = TripleBarrierLabeler(TripleBarrierConfig(atr_column=None))
-    atr = np.asarray(labeler.compute_atr(df), dtype=float)
+    atr = wilder_atr(df["high"], df["low"], df["close"], TripleBarrierConfig().atr_period)
     assert cost(0.7) == pytest.approx(compute_cost_in_atr("MES", atr[:700]))
     assert cost(0.7) > cost(1.0)  # later volatility no longer shrinks the cost term

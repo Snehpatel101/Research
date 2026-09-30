@@ -13,9 +13,9 @@ import pandas as pd
 
 
 class TestComputeATR:
-    """Test _compute_atr produces correct ATR values with known data."""
+    """The backtester's ATR column has the canonical Wilder values."""
 
-    def test_compute_atr_known_values(self):
+    def test_atr_known_values(self):
         from src.inference.backtesting.backtest import BacktestConfig, Backtester
 
         # Build a 20-bar dataset with known high/low/close
@@ -46,16 +46,14 @@ class TestComputeATR:
         config = BacktestConfig(initial_equity=100000.0, enable_market_hours_filter=False)
         bt = Backtester(predictions=preds_df, prices=prices_df, config=config)
         data = bt._align_data()
-        atr = bt._compute_atr(data, period=14)
+        atr = data["atr"].to_numpy(dtype=float)
 
-        # True range for every bar (after the first):
-        #   max(high-low, |high-prev_close|, |low-prev_close|)
-        #   = max(20, 10, 10) = 20
-        # First bar TR = high - low = 20 (no prev_close)
-        # ATR(14) = rolling mean of TR with min_periods=1
-        # After warm-up all values should be exactly 20.0
+        # True range for every bar after the first:
+        #   max(high-low, |high-prev_close|, |low-prev_close|) = max(20, 10, 10) = 20
+        # Wilder ATR(14): NaN until 14 true ranges exist, then exactly 20.0
         assert len(atr) == n
-        assert abs(atr.iloc[-1] - 20.0) < 1e-6
+        assert np.isnan(atr[:14]).all()
+        np.testing.assert_allclose(atr[14:], 20.0, rtol=0, atol=1e-12)
 
 
 class TestBarrierStopTP:

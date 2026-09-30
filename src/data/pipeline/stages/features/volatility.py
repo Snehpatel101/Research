@@ -11,9 +11,11 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.atr import wilder_atr
+
 from ._helpers import np_shift1 as _np_shift1
 from .constants import get_annualization_factor
-from .numba_functions import calculate_atr_numba, calculate_ema_numba
+from .numba_functions import calculate_ema_numba
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ def add_atr(
     logger.info(f"Adding ATR features with periods: {periods}")
 
     for period in periods:
-        atr = calculate_atr_numba(df["high"].values, df["low"].values, df["close"].values, period)
+        atr = wilder_atr(df["high"].values, df["low"].values, df["close"].values, period)
         # ANTI-LOOKAHEAD: shift(1) ensures ATR at bar[t] uses data up to bar[t-1]
         df[f"atr_{period}"] = _np_shift1(atr)
 
@@ -152,7 +154,7 @@ def add_keltner_channels(
     logger.info(f"Adding Keltner Channels with period: {period}")
 
     ema_raw = calculate_ema_numba(df["close"].values, period)
-    atr_raw = calculate_atr_numba(df["high"].values, df["low"].values, df["close"].values, period)
+    atr_raw = wilder_atr(df["high"].values, df["low"].values, df["close"].values, period)
 
     # ANTI-LOOKAHEAD: shift(1) ensures KC at bar[t] uses data up to bar[t-1]
     ema = _np_shift1(ema_raw)

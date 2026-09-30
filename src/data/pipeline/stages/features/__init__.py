@@ -106,7 +106,6 @@ from .moving_averages import (
 # Numba functions
 from .numba_functions import (
     calculate_adx_numba,
-    calculate_atr_numba,
     calculate_ema_numba,
     calculate_rsi_numba,
     calculate_sma_numba,
@@ -206,7 +205,6 @@ __all__ = [
     "calculate_sma_numba",
     "calculate_ema_numba",
     "calculate_rsi_numba",
-    "calculate_atr_numba",
     "calculate_stochastic_numba",
     "calculate_adx_numba",
     # Price features

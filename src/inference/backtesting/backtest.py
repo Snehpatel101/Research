@@ -58,6 +58,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.utils.atr import wilder_atr
+
 if TYPE_CHECKING:
     from src.config.symbol import SymbolConfig
 
@@ -175,6 +177,9 @@ class BacktestConfig:
             the labeler does. None = derive it causally per signal bar (round-trip
             cost in price units / expanding median ATR up to that bar, the
             labeler's cost helpers); 0.0 = plain k * ATR barriers.
+        atr_period: Wilder ATR period (``wilder_atr``) of the barriers, the
+            derived cost and volatility-scaled slippage; the labeler's
+            ``atr_period``, so both use the same ATR
     """
 
     initial_equity: float = 100000.0
@@ -214,6 +219,7 @@ class BacktestConfig:
     barrier_k_up: float = 0.0  # Upper barrier ATR multiplier
     barrier_k_down: float = 0.0  # Lower barrier ATR multiplier
     barrier_cost_in_atr: float | None = None  # None = derive causally per signal bar
+    atr_period: int = 14  # Labeler's atr_period (canonical wilder_atr)
 
     # Session-end forced close: close all positions at session end
     # False = legacy behavior (positions can be held overnight)
@@ -231,6 +237,8 @@ class BacktestConfig:
                 f"{self.execution_model.value} orders before the signal bar's close "
                 f"(minimum {self.min_signal_delay} for this execution model)"
             )
+        if self.atr_period < 1:
+            raise ValueError(f"atr_period must be >= 1, got {self.atr_period}")
         if self.drawdown_cooloff_bars < 0:
             raise ValueError(
                 f"drawdown_cooloff_bars must be >= 0, got {self.drawdown_cooloff_bars}"
@@ -585,7 +593,7 @@ class Backtester:
             return 0.0
         return float(self.config.barrier_cost_in_atr)
 
-    def _derived_barrier_cost(self, atr: pd.Series) -> np.ndarray | None:
+    def _derived_barrier_cost(self, atr: np.ndarray) -> np.ndarray | None:
         """Causal per-bar cost term, or None when barriers are off or a cost is explicit.
 
         ``cost_in_atr[i] = round-trip cost in price / expanding median ATR up
@@ -600,7 +608,7 @@ class Backtester:
         )
 
         cost = transaction_cost_in_price(self.config.contract_symbol)
-        return expanding_cost_in_atr(cost, atr.to_numpy(dtype=float))
+        return expanding_cost_in_atr(cost, atr)
 
     def _validate_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validate and normalize predictions DataFrame."""
@@ -690,8 +698,8 @@ class Backtester:
         """
         rows_before = len(self.predictions)
         prices = self.prices.sort_values("timestamp", kind="stable").reset_index(drop=True)
-        atr = self._compute_atr(prices)
-        prices["atr"] = atr.to_numpy(dtype=float)
+        atr = self._atr(prices)
+        prices["atr"] = atr
         derived_cost = self._derived_barrier_cost(atr)
         if derived_cost is not None:
             prices["barrier_cost"] = derived_cost
@@ -760,27 +768,9 @@ class Backtester:
             probability=confidence if confidence is not None else 0.5,
         )
 
-    def _compute_atr(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
-        """Compute ATR(period) from aligned price data.
-
-        Args:
-            data: Merged DataFrame with high, low, close columns
-            period: ATR lookback period (default 14)
-
-        Returns:
-            Series of ATR values aligned with data index
-        """
-        high = data["high"].astype(float)
-        low = data["low"].astype(float)
-        close = data["close"].astype(float)
-
-        prev_close = close.shift(1)
-        tr = pd.concat(
-            [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
-            axis=1,
-        ).max(axis=1)
-        # Wilder's EMA (alpha = 1/period) — matches labeling ATR
-        return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    def _atr(self, data: pd.DataFrame) -> np.ndarray:
+        """Canonical Wilder ATR of the bars (the labeler's, NaN during warm-up)."""
+        return wilder_atr(data["high"], data["low"], data["close"], self.config.atr_period)
 
     def _open_position(
         self,
@@ -1109,11 +1099,7 @@ class Backtester:
             closes=closes,
             # Full-series ATR from _align_data (bars before the first
             # prediction included); computed here only for frames without it
-            atr=(
-                data["atr"].to_numpy(dtype=float)
-                if "atr" in data.columns
-                else self._compute_atr(data).to_numpy(dtype=float)
-            ),
+            atr=(data["atr"].to_numpy(dtype=float) if "atr" in data.columns else self._atr(data)),
             barrier_cost=(
                 data["barrier_cost"].to_numpy(dtype=float)
                 if "barrier_cost" in data.columns

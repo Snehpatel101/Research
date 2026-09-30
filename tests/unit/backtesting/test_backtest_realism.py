@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.core.utils.atr import wilder_atr
 from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 from src.data.labeling.triple_barrier import (
     barrier_distances,
@@ -294,7 +295,8 @@ def labeled_walk() -> tuple[pd.DataFrame, np.ndarray, np.ndarray, float]:
     )
     result = labeler.compute_labels(prices, horizon=MAX_BARS)
     cost_in_atr = float(result.metadata["cost_in_atr"][0])
-    return prices, result.labels, labeler.compute_atr(prices), cost_in_atr
+    atr = wilder_atr(prices["high"], prices["low"], prices["close"], 14)
+    return prices, result.labels, atr, cost_in_atr
 
 
 def _parity_backtester(prices, signal, cost_in_atr, model=ExecutionModel.MARKET_ON_CLOSE):
@@ -360,8 +362,9 @@ class TestBarrierParity:
         signal = np.zeros(len(prices))
         signal[bar] = 1
         bt = _parity_backtester(prices, signal, None)
-        # The backtester's ATR (NaN during its warm-up, unlike the labeler's)
-        atr = bt._compute_atr(prices).to_numpy(dtype=float)
+        # The backtester's ATR: the canonical Wilder ATR the labeler uses
+        atr = bt._atr(prices)
+        np.testing.assert_array_equal(atr, _atr)
         per_bar = expanding_cost_in_atr(transaction_cost_in_price("MES"), atr)
         cost = per_bar[bar]
         # The final (fully calibrated) cost would place the barriers elsewhere

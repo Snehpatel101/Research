@@ -13,6 +13,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.atr import wilder_atr
+
 from .base import (
     RegimeDetector,
     RegimeType,
@@ -21,42 +23,6 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-def calculate_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int) -> np.ndarray:
-    """
-    Calculate Average True Range.
-
-    Pure function for ATR calculation without external dependencies.
-
-    Args:
-        high: High prices
-        low: Low prices
-        close: Close prices
-        period: ATR period
-
-    Returns:
-        ATR values with NaN for warmup period
-    """
-    n = len(high)
-    tr = np.zeros(n)
-    atr = np.full(n, np.nan)
-
-    # Calculate True Range
-    for i in range(1, n):
-        hl = high[i] - low[i]
-        hc = abs(high[i] - close[i - 1])
-        lc = abs(low[i] - close[i - 1])
-        tr[i] = max(hl, hc, lc)
-
-    # Calculate ATR using EMA-style smoothing
-    if period < n:
-        atr[period] = np.mean(tr[1 : period + 1])
-
-        for i in range(period + 1, n):
-            atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
-
-    return atr
 
 
 class VolatilityRegimeDetector(RegimeDetector):
@@ -159,9 +125,7 @@ class VolatilityRegimeDetector(RegimeDetector):
         else:
             if self.atr_column:
                 logger.debug(f"ATR column '{self.atr_column}' not found, computing from OHLC")
-            atr = calculate_atr(
-                df["high"].values, df["low"].values, df["close"].values, self.atr_period
-            )
+            atr = wilder_atr(df["high"], df["low"], df["close"], self.atr_period)
 
         # Calculate rolling percentiles
         atr_series = pd.Series(atr, index=df.index)
@@ -190,5 +154,4 @@ class VolatilityRegimeDetector(RegimeDetector):
 
 __all__ = [
     "VolatilityRegimeDetector",
-    "calculate_atr",
 ]

@@ -38,6 +38,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.utils.atr import wilder_atr
 from src.data.labeling.base import LabelingResult, LabelingStrategy, LabelingType
 
 # Try to import numba, fall back to pure Python if unavailable
@@ -631,33 +632,6 @@ class TripleBarrierLabeler(LabelingStrategy):
             return base_cols + [self.config.atr_column]
         return base_cols
 
-    def compute_atr(self, df: pd.DataFrame) -> np.ndarray:
-        """
-        Compute Average True Range (ATR) inline.
-
-        Used when ATR column is not present in the DataFrame.
-        """
-        high = df["high"].values
-        low = df["low"].values
-        close = df["close"].values
-        prev_close = np.roll(close, 1)
-        prev_close[0] = close[0]
-
-        tr1 = high - low
-        tr2 = np.abs(high - prev_close)
-        tr3 = np.abs(low - prev_close)
-
-        true_range = np.maximum(np.maximum(tr1, tr2), tr3)
-
-        # Wilder's EMA (alpha = 1/period) for ATR
-        alpha = 1.0 / self.config.atr_period
-        atr = np.zeros_like(true_range)
-        atr[0] = true_range[0]
-        for i in range(1, len(true_range)):
-            atr[i] = alpha * true_range[i] + (1 - alpha) * atr[i - 1]
-
-        return np.asarray(atr)
-
     def _compute_volatility_scaling(self, df: pd.DataFrame) -> np.ndarray:
         """
         Compute volatility scaling factor for adaptive barriers.
@@ -753,7 +727,9 @@ class TripleBarrierLabeler(LabelingStrategy):
             atr = df[self.config.atr_column].values
         else:
             logger.info("  ATR column not found, computing inline")
-            atr = self.compute_atr(df)
+            # Canonical Wilder ATR (the backtester's): NaN on the first
+            # atr_period bars, which the barrier loop labels -99 (invalid)
+            atr = wilder_atr(df["high"], df["low"], df["close"], self.config.atr_period)
 
         # Apply adaptive scaling if enabled
         if self.config.use_adaptive_barriers:

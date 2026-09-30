@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.core.utils.atr import wilder_atr
 from src.data.labeling.triple_barrier import (
     TripleBarrierConfig,
     TripleBarrierLabeler,
@@ -53,22 +54,6 @@ def _make_ohlcv(
     )
 
 
-def _compute_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:
-    """Simple EMA-based ATR computation."""
-    high = df["high"].values
-    low = df["low"].values
-    close = df["close"].values
-    prev_close = np.roll(close, 1)
-    prev_close[0] = close[0]
-    tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))
-    alpha = 2.0 / (period + 1)
-    atr = np.zeros_like(tr)
-    atr[0] = tr[0]
-    for i in range(1, len(tr)):
-        atr[i] = alpha * tr[i] + (1 - alpha) * atr[i - 1]
-    return atr
-
-
 # ---------------------------------------------------------------------------
 # Core label correctness
 # ---------------------------------------------------------------------------
@@ -82,7 +67,7 @@ class TestUptrend:
         # Strongly trending up: ~0.5% per bar
         close = 4500.0 * np.cumprod(1 + np.full(n, 0.005))
         df = _make_ohlcv(close, spread=0.0005, rng=rng)
-        atr = _compute_atr(df)
+        atr = wilder_atr(df["high"], df["low"], df["close"], 14)
         labels, _, _, _, _ = _triple_barrier_python(
             close=df["close"].values,
             high=df["high"].values,
@@ -104,7 +89,7 @@ class TestDowntrend:
         n = 500
         close = 4500.0 * np.cumprod(1 + np.full(n, -0.005))
         df = _make_ohlcv(close, spread=0.0005, rng=rng)
-        atr = _compute_atr(df)
+        atr = wilder_atr(df["high"], df["low"], df["close"], 14)
         labels, _, _, _, _ = _triple_barrier_python(
             close=df["close"].values,
             high=df["high"].values,
@@ -127,7 +112,7 @@ class TestFlatMarket:
         # Very flat: tiny noise
         close = 4500.0 + rng.normal(0, 0.01, n).cumsum()
         df = _make_ohlcv(close, spread=0.0001, rng=rng)
-        atr = _compute_atr(df)
+        atr = wilder_atr(df["high"], df["low"], df["close"], 14)
         labels, _, _, _, _ = _triple_barrier_python(
             close=df["close"].values,
             high=df["high"].values,
@@ -172,7 +157,7 @@ class TestInvalidLastBars:
         max_bars = 20
         close = 4500.0 * np.cumprod(1 + rng.normal(0, 0.002, n))
         df = _make_ohlcv(close, rng=rng)
-        atr = _compute_atr(df)
+        atr = wilder_atr(df["high"], df["low"], df["close"], 14)
         labels, _, _, _, _ = _triple_barrier_python(
             close=df["close"].values,
             high=df["high"].values,
