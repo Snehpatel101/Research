@@ -1,7 +1,36 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 116 complete (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
-**Last Updated:** 2026-09-29
+**Status:** All phases through 117 complete; Phase 117 has two items in flight (#15, #16 below). Next: Phase 118. (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
+**Last Updated:** 2026-09-30
+
+---
+
+## Phase 117: Best-in-Class Repo — COMPLETE (2026-09-30)
+
+| # | Task | Location | Status |
+|:-:|------|----------|:------:|
+| 1 | One pipeline: CLI (`run data status models cv walk-forward cpcv-pbo version`) on MLFactory; PipelineRunner stack, feature store, `train`/`resume` CLI deleted (DECISIONS #13); shared `sanitize_bars` for train + serve; `ml cv` per-fold scaling + label-span purging; tuner embargo on a copy | `src/cli/`, `src/factory.py` (`prepare_data`, `build_evaluation_containers`), `src/validation/cv/evaluation_data.py`, `src/data/pipeline/stages/clean/sanitize.py`, `tests/e2e/test_cli_e2e.py` | ✅ |
+| 2 | Delete unused public API + 5-D Optuna island (DECISIONS #5, #14); `PipelineConfig.load` drops unknown keys with a warning | `src/core/`, `src/inference/`, `src/optimization/`, `src/validation/` | ✅ |
+| 3 | Tests: behavioral only, `tests/{unit,integration,e2e}`, `tests/helpers.py`, layer markers, single-definition AST guard (DECISIONS #11) | `tests/`, `tests/unit/test_single_definitions.py` | ✅ |
+| 4 | Feature governance as opt-in diagnostics (`data.features.governance`), stability replays the real selection, x1.0 control relabel, lifecycle + registry merged, idempotent/locked registry (DECISIONS #3) | `src/models/training/feature_governance.py`, `src/optimization/feature_selection/{bootstrap_stability,label_perturbation,lifecycle,registry}.py`, `tests/unit/optimization/test_feature_governance.py` | ✅ |
+| 5 | Seeded runs (`set_all_seeds`, `deterministic`, `--seed`), `run_manifest.json`, cross-interpreter determinism test, `tracking` config (local / MLflow extra), one `config_hash()`, resume refuses mismatching checkpoints (`restart_on_config_change`), full-width class probabilities | `src/factory.py`, `src/config/experiment.py`, `src/core/{reproducibility,run_manifest,checkpoint}.py`, `src/models/tracking/`, `src/models/common/label_mapping.py`, `tests/e2e/test_determinism_e2e.py`, `tests/integration/test_factory_provenance.py` | ✅ |
+| 6 | Harness 4D prediction parity; batched TFT variable selection + 1.0→2.0 checkpoint converter; binary `ml cv` + tuner (`n_classes`); 4D bar-timeframe streams shared by training and serving; one OOF frame builder | `scripts/mix_match.py`, `src/models/neural/tft_model.py`, `src/validation/cv/{cv_feature_selection,oof_core}.py`, `src/data/adapters/multi_stream.py` | ✅ |
+| 7 | Hypothesis property tests (causality, purging, carve, labels, backtest, streaming parity, config, sanitizer); causal derived barrier cost in the backtester | `tests/property/`, `src/inference/backtesting/backtest.py`, `src/data/labeling/triple_barrier.py` (`expanding_cost_in_atr`) | ✅ |
+| 8 | CUSUM event sampling (`data.labeling.event_sampling`, train-only auto threshold frozen in the bundle, backtest on event bars, `is_event` at serve), fractional differentiation (`data.features.frac_diff`, fixed-window FFD, train-fitted `d` frozen in the `FeatureEngineer` spec), AFML probability bet sizing (`evaluation.position_sizing: probability`); all opt-in, defaults unchanged. Review fixes: event-unit CV embargo covering the bar embargo, val/test embargo kept in bars, fits on the bars before the first walk-forward test window | `src/data/features/{cusum_filter,frac_diff}.py`, `src/data/labeling/event_sampling.py`, `src/data/pipeline/stages/features/frac_diff_features.py`, `src/inference/backtesting/position_sizing.py`, `src/factory.py`, `tests/e2e/test_event_frac_bet_e2e.py` | ✅ |
+| 9 | One canonical Wilder ATR for labels, backtest barriers/cost/slippage, volatility regime, regime ADX and ATR features; first `atr_period` bars invalid | `src/core/utils/atr.py`, `src/data/labeling/triple_barrier.py`, `src/inference/backtesting/backtest.py`, `src/data/pipeline/stages/{features,regime}/volatility.py`, `tests/unit/labeling/test_label_backtest_atr_parity.py` | ✅ |
+| 10 | Meta-labeling `ConstantBetFilter` + fixed-width meta features + safe-pickle persistence; `event_flags` on regime/meta bundles; calibrated probabilities clipped into [0, 1] | `src/inference/{meta_labeling_bundle,regime_bundle}.py`, `src/models/ensemble/calibrated_meta.py` | ✅ |
+| 11 | Docs site (mkdocs-material + mkdocstrings, strict), generated config/CLI pages with stale check, link checker, `examples/` (3 scripts), 46 process docs archived, LICENSE/CHANGELOG/CONTRIBUTING | `docs/`, `mkdocs.yml`, `examples/`, `scripts/{gen_config_docs,gen_cli_docs,check_md_links}.py` | ✅ |
+| 12 | CI hardening: 3.11/3.12 matrix, lock-pinned installs (CPU torch, PyPI fallback index), `uv lock --check`, wheel smoke, dependabot, `global.yaml` shipped in the package; `uv.lock` refreshed (pandas 3, torch 2.14) | `.github/workflows/ci.yml`, `.github/dependabot.yml`, `scripts/{lock_constraints.sh,wheel_smoke.sh}`, `Makefile`, `src/config/global.yaml`, `uv.lock` | ✅ |
+| 13 | `scripts/` pruned (15 deleted) and linted; dead path modules deleted; CLI tests independent of the CI terminal | `scripts/`, `tests/unit/cli/conftest.py` | ✅ |
+| 14 | Root docs: COMPLETION, CLAUDE status, PLAN/TASKS mirror, DIRECTION.md rewrite, DECISIONS | root | ✅ |
+| 15 | Serving warmup + engine-version guards (one warmup rule, `FEATURE_ENGINE_VERSION` checked at load, short-input errors); carries the meta-labeling serve-parity commit `d392af5` (history-independent OBV / wavelet z-scores) | branch `worktree-agent-ab2567ed1d93b61b9` | 🔄 in flight |
+| 16 | Feature-selection switches: each selection knob wired into the live selection or removed | `src/optimization/feature_selection/config.py`, `src/models/training/feature_selection.py`, `src/config/data.py` | 🔄 in flight |
+| 17 | Optional thin serving extra + Dockerfile | — | ➡ Phase 120 |
+| 18 | Validated config schema (`validate-config`, JSON schema) | `src/config/` | ➡ Phase 120 |
+| 19 | Import-cycle break (lazy facades, DECISIONS #10) + package rename `src` → `mlfactory`, public API | package-wide | ➡ Phase 120 |
+| 20 | Final adversarial review; full mix-and-match sweep; land on `main`; delete merged agent branches | root | ⬜ after #15-16 |
+
+**Verify:** `make check`; `pytest -m slow -n 2`; `python scripts/mix_match.py <kind> --resume` for every kind; `python scripts/check_md_links.py`.
 
 ---
 
@@ -138,6 +167,9 @@ See **COMPLETION.md** for full task details and implementation information.
 | 93 | 5/5 tasks (all complete) | Per-symbol ADX regime thresholds (MES=20, MGC=23, MNQ=25), get_regime_config(), PipelineConfig auto-wire, parameterized ADX in both trend modules. 223/223 tests pass. | 2026-03-01 |
 | 98-113 | multi-session (all complete) | Feature Governance E1-E9 (timeframe budget, regime selection, robustness scoring, CUSUM, FracDiff, lifecycle, registry, portability, economic value) + THEETASKLIST Adversarial Audit Remediation (leakage/accuracy/memory fixes, 39-fix 8-phase remediation). 473/473 tests pass. See CLAUDE.md/COMPLETION.md. | 2026-03-24 to 2026-03-25 |
 | 114 | 17 correctness fixes + cleanup + verification infra (all complete) | Barrier/backtest parity, binary-mode completion, config-seam fixes, 21,193-line dead code deletion (124 files), pyright baseline (1,234→0), ~125 new tests. ~600/~600 tests pass. | 2026-08-20 |
+| 115 | 19/19 tasks (all complete) | Mix-and-match: any subset × 5 meta-learners × 4 modes through deploy + `predict_from_raw`, prediction parity verified | 2026-09-29 |
+| 116 | 23/23 tasks (all complete) | Correctness audit (24 defects), dead-code sweep, uv CI. 848 tests | 2026-09-29 |
+| 117 | 14/20 done, 2 in flight, 3 moved to Phase 120, 1 release step | One pipeline, determinism + manifest + tracking, property tests, AFML options, canonical ATR, docs site, CI hardening. 1,267 tests (~1,140 fast) | 2026-09-30 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -147,36 +179,17 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-### Phase 117: Best-in-Class Repo — IN PROGRESS (PM-approved)
-
-| # | Task | Location | Status |
-|:-:|------|----------|:------:|
-| 1 | One pipeline: CLI (`run data status models cv walk-forward cpcv-pbo version`) on MLFactory; PipelineRunner stack, feature store, `train` CLI deleted; shared `sanitize_bars` for train + serve; `ml cv` per-fold scaling; tuner embargo on a copy | `src/cli/`, `src/factory.py`, `src/validation/cv/evaluation_data.py`, `src/data/pipeline/stages/clean/sanitize.py`, `tests/e2e/test_cli_e2e.py` | ✅ merged (integration) |
-| 2 | Delete unused public API + 5-D Optuna island (DECISIONS #5, #14); `PipelineConfig.load` drops unknown keys with a warning | `src/core/`, `src/inference/`, `src/optimization/` | ✅ merged (integration) |
-| 3 | Tests: behavioral only, `tests/{unit,integration,e2e}`, `tests/helpers.py`, layer markers, single-definition AST guard (DECISIONS #11) | `tests/` | ✅ merged (integration) |
-| 4 | Feature governance as opt-in diagnostics (`data.features.governance`), registry with lifecycle (DECISIONS #3) | `src/models/training/feature_governance.py`, `src/optimization/feature_selection/{bootstrap_stability,label_perturbation,registry}.py` | 🔄 review fixes |
-| 5 | Seeded runs, `run_manifest.json`, determinism test, `tracking` config (MLflow extra) | `src/factory.py`, `src/config/experiment.py`, `src/core/reproducibility.py` | 🔄 |
-| 6 | Harness 4D prediction parity; batched TFT variable selection; binary `ml cv` | `scripts/mix_match.py`, `src/models/neural/tft_model.py`, `src/validation/cv/cv_feature_selection.py` | 🔄 |
-| 7 | Hypothesis property tests (causality, purging, carve, labels, backtest, streaming parity, config, sanitizer) | `tests/property/` | 🔄 |
-| 8 | CUSUM event sampling (`data.labeling.event_sampling`, train-only auto threshold frozen in the bundle, backtest on event bars, `is_event` at serve), fractional differentiation (`data.features.frac_diff`, fixed-window FFD, train-fitted `d` frozen in the `FeatureEngineer` spec), AFML probability bet sizing (`evaluation.position_sizing: probability`); all opt-in, defaults unchanged | `src/data/features/{cusum_filter,frac_diff}.py`, `src/data/labeling/event_sampling.py`, `src/data/pipeline/stages/features/frac_diff_features.py`, `src/inference/backtesting/position_sizing.py`, `src/factory.py`, `tests/e2e/test_event_frac_bet_e2e.py` | ✅ |
-| 9 | Optional thin serving extra + Dockerfile | `src/cli/`, new serve module | ⬜ |
-| 10 | Validated config (pydantic v2, JSON schema, `validate-config`) | `src/config/` | ⬜ |
-| 11 | Import-cycle break (lazy facades, DECISIONS #10) + package rename `src` → `mlfactory`, public API, entry-point model registry | package-wide | ⬜ |
-| 12 | Docs site (mkdocs-material + mkdocstrings, `make docs` strict, CI `docs` job), generated config/CLI pages (`scripts/gen_{config,cli}_docs.py`, stale check in CI), link checker, `examples/` (3 scripts, CPU minutes), 46 process docs archived to `docs/archive/`, `docs/MIX_AND_MATCH.md` regenerated (the matrix itself is not rerun in CI: it takes hours) | `docs/`, `mkdocs.yml`, `examples/`, `scripts/`, `.github/workflows/ci.yml` | 🔄 review |
-| 13 | CI hardening: 3.11/3.12 matrix, wheel build + import smoke, `uv lock --check`, dependabot | `.github/` | ⬜ |
-| 14 | DIRECTION.md rewrite; final adversarial review; full mix-and-match sweep; land on `main`; delete merged agent branches | root | ⬜ |
-
-**Verify:** `make check`; `pytest -m slow -n 2`; `python scripts/mix_match.py <kind> --resume` for every kind.
+Phase 117 is complete apart from tasks #15-16 (in flight) and #20 (release step).
 
 ### Roadmap after Phase 117 (see CLEANUP_PLAN.md for goals and exit criteria)
 
 | Phase | Tasks |
 |-------|-------|
-| 118 Prove it on real data | Benchmark command + leaderboard (MES/MGC, fixed periods, realistic epochs/tuning); baselines (always-neutral, buy-and-hold, momentum); futures roll audit; scheduled benchmark regression job |
+| 118 Prove it on real data | Benchmark command + leaderboard (MES/MGC, fixed periods, realistic epochs/tuning), one `run_manifest.json` per row; baselines (always-neutral, buy-and-hold, momentum); futures roll audit; A/B of the opt-in AFML options vs defaults; scheduled benchmark regression job |
 | 119 Scale & speed | Lazy windowed datasets for 3D/4D; `--dry-run` memory/time estimator; CPCV + pruning + DSR-gated tuning at scale; GPU profiling |
-| 120 Production readiness | Streaming inference with incremental feature state + latency test; drift monitoring vs training snapshot; paper-trading replay harness; bet sizing + risk layer |
-| 122 L2 order book (when depth data exists) | Book ingest + bar alignment (strictly before close); imbalance/microprice/spread/depth/OFI features; inference replay; benchmark vs bar-only |
-| 121 Breadth | Multi-symbol pooled training; benchmark-justified new models (TimesNet, TiDE, state-space, quantile heads); experiment comparison report |
+| 120 Production readiness | Streaming inference with incremental feature state + latency test (on top of the 117 warmup/engine guards); drift monitoring vs training snapshot; paper-trading replay harness; risk layer over `ProbabilityBetSizer`; thin serving extra + Dockerfile; validated config schema; import-cycle break + `mlfactory` package (DECISIONS #10) |
+| 121 Breadth | Multi-symbol pooled training; benchmark-justified new models (TimesNet, TiDE, state-space, quantile heads); experiment comparison report over manifests / MLflow runs |
+| 122 L2 order book (when depth data exists) | Book ingest + bar alignment (strictly before close); imbalance/microprice/spread/depth/OFI features; inference replay through the `FeatureEngineer` spec; benchmark vs bar-only |
 
 
 ---
@@ -955,7 +968,6 @@ See **COMPLETION.md** for full implementation details.
 
 ---
 
->>>>>>> 483066e (fix: Phase 46 — full pipeline cleanup, test consolidation, lint fixes)
 ### Phase 43: Pipeline Robustness + TCN Timeframe Fix
 
 **Status:** ✅ COMPLETE
