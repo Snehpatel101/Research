@@ -72,8 +72,10 @@ Put data in, get optimized trading model out. No data leakage, reproducible resu
 ### Core Flow
 
 ```
-Raw OHLCV → Pipeline (12 stages) → Features + Labels → Adapters → Models → Ensemble
+Raw OHLCV → MLFactory (features + labels) → Adapters → Models → Ensemble → Backtest → Deploy
 ```
+
+One pipeline (`src/factory.py`); DIRECTION.md has the stage-by-stage view.
 
 ### Key Guarantees
 
@@ -653,6 +655,17 @@ src/
 - Deleted dead code (serving chain, config layer, phantom types, verified dead modules); DECISIONS #1/#4/#6/#7/#8/#9/#12 resolved; #5 prepared on a branch (blocked by permission check), #13 (second PipelineRunner pipeline) opened
 - Tooling: py311 targets, uv CI (ruff, black, pyright, vulture, `pytest -m "not slow"`), Makefile `check`/`matrix`, pre-commit, ruff NPY rules
 
+**Phase 117: COMPLETE — Best-in-Class Repo (2026-09-30)**
+- One pipeline: every CLI command (`run data status models cv walk-forward cpcv-pbo version`) runs on `MLFactory`; the PipelineRunner stack is deleted (DECISIONS #13); one raw-bar cleaner `sanitize_bars` for train and serve
+- Deleted: unused public API + the 5-D Optuna island (DECISIONS #5/#14), 15 stale scripts, dead path modules (net −24.7k lines across the phase)
+- Reproducibility: seeded runs (bit-identical across interpreters on CPU, tested), `run_manifest.json`, `tracking` (none/local/MLflow), one `config_hash()`; a resume with changed settings is refused, not cleared
+- Tests: behavioral only (DECISIONS #11), `tests/{unit,integration,e2e,property}`, hypothesis property tests for leakage/parity; suite 848 → 1,267 (~1,140 fast)
+- Correctness: one canonical Wilder ATR (`src/core/utils/atr.py`) for labels, backtest and costs; causal derived barrier cost; 4D bar-timeframe streams (parity 0% → 100%); meta-labeling `ConstantBetFilter`; calibrated probabilities clipped; `event_flags` on regime/meta bundles
+- Opt-in AFML options: CUSUM event sampling (event-unit CV embargo, train-prefix fit), frac-diff features, probability bet sizing; feature governance as read-only diagnostics (DECISIONS #3)
+- Models: batched TFT variable selection (~2× less memory) + 1.0→2.0 checkpoint converter; binary `ml cv` and tuner; harness 4D prediction parity
+- Docs site (mkdocs, generated config/CLI pages, link checker), `examples/`, CI on py3.11/3.12 pinned to `uv.lock` with wheel smoke + dependabot
+- Serving: one warmup rule for train + serve, `FEATURE_ENGINE_VERSION` checked at load, history-independent OBV/wavelets; feature-selection switches wired (timeframe budget) or deleted (regime blend). See COMPLETION.md Phase 117
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -743,6 +756,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-09-29*
+*Last updated: 2026-09-30*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

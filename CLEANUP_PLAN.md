@@ -1,7 +1,59 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 116 COMPLETE (Correctness Audit + Repo Hygiene). Phase 115 COMPLETE (Mix-and-Match Every Model). Phase 114 COMPLETE (Repository Rehabilitation). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
-**Last Updated:** 2026-09-29
+**Status:** Phase 117 COMPLETE (Best-in-Class Repo). Phase 116 COMPLETE (Correctness Audit + Repo Hygiene). Phase 115 COMPLETE (Mix-and-Match Every Model). Next: Phase 118 (prove it on real data). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
+**Last Updated:** 2026-09-30
+
+---
+
+## Phase 117: Best-in-Class Repo — COMPLETE (2026-09-30)
+
+**Goal:** one pipeline, a tree that only contains what runs, runs you can
+reproduce and audit, and verification from property tests up to a packaged
+wheel. Every change went implementer (isolated worktree) → adversarial
+reviewer → fixes → merge into `integration-117`.
+
+```
+every CLI command ──► MLFactory ──► sanitize_bars ──► FeatureEngineer (spec) ──► triple-barrier labels + spans
+                                                        │                         (opt-in CUSUM events, one Wilder ATR)
+seed ──► set_all_seeds ──► models / Optuna / MDA / meta ─┘
+run ──► run_manifest.json (config_hash, commit, packages, data SHA-256) ──► tracking (none | local | mlflow)
+resume ──► checkpoints keyed by config_hash(); mismatch refused, never cleared
+tests ──► unit ─ property (hypothesis) ─ integration ─ e2e ─ harness matrix ─ CI (py3.11/3.12, lock, wheel smoke, docs)
+```
+
+**Delivered:** one pipeline behind every CLI command (PipelineRunner stack
+deleted, DECISIONS #13); unused public API + 5-D Optuna island deleted (#5,
+#14); behavioral-only tests re-laid out by behavior (#11); property-based
+leakage/parity tests; feature governance as opt-in read-only diagnostics (#3);
+seeded determinism, run manifest, MLflow/local tracking, one config hash,
+refusing resume; CUSUM event sampling, fractional differentiation and AFML
+probability bet sizing (opt-in; event-unit CV embargo, train-prefix fits);
+harness 4D prediction parity, batched TFT (~2× less memory) + 1.0→2.0
+checkpoint converter, binary `ml cv`/tuner, 4D bar-timeframe streams; one
+canonical Wilder ATR for labels, backtest and costs; meta-labeling
+`ConstantBetFilter`; `event_flags` on regime/meta bundles; calibrated
+probabilities clipped; docs site + `examples/`; CI hardening (py3.11/3.12,
+lock-pinned installs, wheel smoke, dependabot); `uv.lock` refresh; `scripts/`
+pruned and linted; dead path modules deleted.
+
+**Landed last:**
+- Serving warmup and engine-version guards: one warmup rule for training and
+  serving (`FeatureEngineer.warmup_bars()`, session lookback, ≈1,476 bars at
+  5-min with default MTF, ≈320 without), `FEATURE_ENGINE_VERSION` (5) checked at
+  load, a clear error when the input is shorter than the warmup; history-
+  independent OBV and wavelet z-scores (meta-labeling serve parity); GARCH and
+  the constant `bb_width` deleted.
+- Feature-selection switches: `data.features.mtf_max_per_timeframe` wired
+  (opt-in), `selection_enabled=False` honored, the in-sample regime blend
+  deleted.
+
+**Moved to the roadmap (planned in 117, not started):** thin serving extra +
+Dockerfile, validated config schema, import-cycle break + `src` → `mlfactory`
+rename (DECISIONS #10) → Phase 120. Final full mix-and-match sweep is the release step.
+
+**Validation:** 1,267 tests collected (~1,140 fast, `pytest -m "not slow"`),
+ruff + black + pyright (0 errors) + vulture clean, `mkdocs build --strict`,
+`scripts/check_md_links.py` 0 broken links, CI on Python 3.11 and 3.12.
 
 ---
 
@@ -137,6 +189,9 @@ See **COMPLETION.md** for full details on all completed phases.
 | 97 | Deep Audit Phase D — 12 Regression Tests (config round-trip, leakage detection, feature index, degenerate labels, binary mode, ATR parity, barrier exits, cost parity, RSI parity, entropy shift, determinism, config hash) | ✅ COMPLETE | 2026-03-24 |
 | 98-113 | Feature Governance E1-E9 (timeframe budget, regime selection, robustness scoring, CUSUM, FracDiff, lifecycle, registry, portability, economic value) + THEETASKLIST Adversarial Audit Remediation (leakage/accuracy/memory fixes, 39-fix 8-phase remediation) — see CLAUDE.md/COMPLETION.md | ✅ COMPLETE | 2026-03-24 to 2026-03-25 |
 | 114 | Repository Rehabilitation — barrier/backtest parity, binary-mode completion, config-seam fixes, 21K-line dead code deletion, pyright baseline, ~125 new tests | ✅ COMPLETE | 2026-08-20 |
+| 115 | Mix-and-Match Every Model — any subset × 5 meta-learners × 4 modes through deploy, prediction parity verified | ✅ COMPLETE | 2026-09-29 |
+| 116 | Correctness Audit + Repo Hygiene — 24 defects fixed, uv CI, dead-code sweep | ✅ COMPLETE | 2026-09-29 |
+| 117 | Best-in-Class Repo — one pipeline, determinism + manifest, property tests, AFML options, docs site, CI hardening | ✅ COMPLETE | 2026-09-30 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -213,47 +268,26 @@ See **COMPLETION.md** for full details on all completed phases.
 | 92 | Optuna Robustness + Hardcoded Values + Sequential Ensemble | HIGH | 1 session | ✅ COMPLETE |
 | 98-113 | Feature Governance (E1-E9) + THEETASKLIST Adversarial Audit Remediation | HIGH | multi-session | ✅ COMPLETE |
 | 114 | Repository Rehabilitation (correctness fixes, cleanup, verification infra) | CRITICAL | 1 session | ✅ COMPLETE |
+| 115 | Mix-and-Match Every Model | HIGH | 1 session | ✅ COMPLETE |
+| 116 | Correctness Audit + Repo Hygiene | CRITICAL | 1 session | ✅ COMPLETE |
+| 117 | Best-in-Class Repo (one pipeline, reproducibility, verification pyramid) | HIGH | multi-session | ✅ COMPLETE |
+| 118-122 | Roadmap: real-data proof, scale, production, breadth, L2 book | — | — | ⬜ PLANNED |
 
 ---
 
 ## Active Phases
 
-### Phase 117: Best-in-Class Repo — IN PROGRESS (PM-approved)
-
-Every change goes implementer (isolated worktree) → adversarial reviewer →
-fixes → merge into `integration-117` → full verification → main branch.
-
-- **Wave 1 (merged into integration):** one pipeline (CLI on MLFactory,
-  PipelineRunner stack deleted, shared raw-bar sanitizer for train + serve);
-  unused public API + 5-D Optuna island deleted; tests re-laid out
-  (unit / integration / e2e, behavioral only, mutation-checked); feature
-  governance as opt-in diagnostics (under review fixes).
-- **Wave 2:** seeded runs + `run_manifest.json` + determinism test + tracking
-  config (MLflow extra); harness 4D prediction parity + batched TFT variable
-  selection + binary `ml cv`; hypothesis property tests for leakage/parity
-  invariants; CUSUM event sampling, fractional differentiation, AFML probability
-  bet sizing (done: opt-in config, train-only fits frozen into the bundle);
-  optional thin serving extra; feature-selection switches audited (timeframe
-  budget wired as `data.features.mtf_max_per_timeframe`, `selection_enabled`
-  honored, in-sample regime blend deleted).
-- **Wave 3:** validated config (pydantic v2 + JSON schema + `validate-config`);
-  import-cycle break (lazy facades); package rename `src` → `mlfactory` with a
-  small public API and one CLI; mkdocs site + `examples/`; CI hardening
-  (3.11/3.12, wheel smoke, `uv lock --check`, dependabot); DIRECTION.md rewrite;
-  final adversarial review + full mix-and-match sweep; land on `main`.
-
-**Validation:** full pytest suite, ruff/black/pyright(0)/vulture, full
-mix-and-match sweep on the final commit.
+Phase 117 is complete. Next is Phase 118.
 
 ### Roadmap after Phase 117
 
 | Phase | Goal | Key work | Done when |
 |-------|------|----------|-----------|
-| 118 | **Prove it on real data** | Benchmark suite on MES/MGC (fixed periods, realistic epochs/tuning): leaderboard of OOS macro-F1, log loss, net Sharpe, drawdown, turnover, DSR, PBO per model + ensemble; naive baselines (always-neutral, buy-and-hold, momentum); futures roll audit (no fake jumps in features/labels) | Leaderboard reproducible from one command; every shipped config beats baselines net of costs; scheduled benchmark catches regressions |
-| 119 | **Scale & speed** | Lazy windowing for 3D/4D (index one 2D array); `--dry-run` memory/time estimator; Optuna with CPCV + pruning + DSR gate at scale; GPU profile of the zoo | 1.6M-row runs for every model on one GPU box without OOM; estimator within ±30% |
-| 120 | **Production readiness** | Streaming inference with incremental feature state + latency test; lightweight drift monitoring vs training snapshot; paper-trading replay harness (live-like bars → deployed artifact vs backtest); bet sizing + risk layer | Paper-trading replay matches backtest trades; p99 latency budget met |
-| 122 | **L2 order-book features** (needs depth data, e.g. CME MBP-10) | Quote/book ingest aligned to bars with no lookahead (book state strictly before bar close); multi-level imbalance, microprice, spread, depth slope, order-flow imbalance, aggressor flow; same aggregation replayed at inference | Benchmark shows lift over the bar-only baseline net of costs |
-| 121 | **Breadth** | Multi-symbol pooled training (symbol id, per-symbol purge, cross-symbol validation); new models only where the benchmark shows gains (TimesNet, TiDE, state-space, quantile heads); experiment comparison report | Each addition justified by a benchmark delta |
+| 118 | **Prove it on real data** | Benchmark suite on MES/MGC (fixed periods, realistic epochs/tuning): leaderboard of OOS macro-F1, log loss, net Sharpe, drawdown, turnover, DSR, PBO per model + ensemble, each row traceable to its `run_manifest.json`; naive baselines (always-neutral, buy-and-hold, momentum); futures roll audit (no fake jumps in features/labels); A/B of the opt-in AFML options (CUSUM events, frac-diff, probability sizing) against the defaults | Leaderboard reproducible from one command (seeded, manifest per row); every shipped config beats baselines net of costs; scheduled benchmark catches regressions |
+| 119 | **Scale & speed** | Lazy windowing for 3D/4D (index one 2D array); `--dry-run` memory/time estimator; Optuna with CPCV + pruning + a DSR gate at scale (the old gate went with the 5-D island); GPU profile of the zoo (TFT already batched in 117) | 1.6M-row runs for every model on one GPU box without OOM; estimator within ±30% |
+| 120 | **Production readiness** | Streaming inference with incremental feature state + latency test (builds on the 117 warmup/engine-version guards); lightweight drift monitoring vs training snapshot; paper-trading replay harness (live-like bars → deployed artifact vs backtest); risk layer on top of `ProbabilityBetSizer`; thin serving extra + Dockerfile; validated config schema (`validate-config`); import-cycle break + `mlfactory` package with a small public API (DECISIONS #10) | Paper-trading replay matches backtest trades; p99 latency budget met; `import mlfactory` does not load the GPU stack |
+| 121 | **Breadth** | Multi-symbol pooled training (symbol id, per-symbol purge, cross-symbol validation); new models only where the benchmark shows gains (TimesNet, TiDE, state-space, quantile heads); experiment comparison report over run manifests / MLflow runs | Each addition justified by a benchmark delta |
+| 122 | **L2 order-book features** (needs depth data, e.g. CME MBP-10) | Quote/book ingest aligned to bars with no lookahead (book state strictly before bar close); multi-level imbalance, microprice, spread, depth slope, order-flow imbalance, aggressor flow; same aggregation replayed at inference through the `FeatureEngineer` spec | Benchmark shows lift over the bar-only baseline net of costs |
 
 Ongoing gates: coverage floor on core modules (labeling, CV, backtest,
 bundles); nightly full sweep on larger hardware; release flow (tags,

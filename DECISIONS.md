@@ -1,13 +1,16 @@
-# DECISIONS.md — Open Decisions After Phase 114
+# DECISIONS.md — Product and Architecture Decisions (opened in Phase 114)
 
 **Created:** 2026-08-20 (Phase 114 repository rehabilitation)
-**Status:** All items below are PENDING USER DECISION. Nothing here was changed
-during Phase 114 — the rehab deliberately fixed only things with one defensible
-answer and left every product-level call to you.
+**Updated:** 2026-09-30 (after Phase 117)
+**Status:** 13 of 14 resolved. Each resolved item keeps its original write-up
+under a **RESOLVED** note that says what was done and where; the quick-reference
+matrix at the end is the summary. **Open:** #10 (import cycle), scheduled with
+the `mlfactory` package rename in Phase 120.
 
 Each item: what it is, why it matters, your options, and a recommendation.
 Ordered by impact. Items 1–4 change what the product *does*; items 5–10 are
-architecture/cleanup calls; items 11–12 are infra.
+architecture/cleanup calls; items 11–12 are infra; 13–14 were added in
+Phase 116.
 
 ---
 
@@ -168,7 +171,7 @@ metric comparison on a reference dataset.
 
 ## 5. The 5-dimension Optuna island — keep, wire, or delete (~3,500 lines)
 
-> **RESOLVED in Phase 117 (2026-09-29):** option C — the four island modules, their dead constants/helpers (`purged_train_val_split`, 5-D trade-rate/feature-search constants, `dsr_gate`, `PipelineConfig.enforce_dsr_gate`/`dsr_deployment_threshold`) and the pinning tests deleted; the degenerate-label property is pinned on the live tuner (`tests/test_tuner_degenerate_labels.py`), MDA tail-feature reach behaviorally (`tests/test_d3_feature_index.py`).
+> **RESOLVED in Phase 117 (2026-09-29):** option C — the four island modules, their dead constants/helpers (`purged_train_val_split`, 5-D trade-rate/feature-search constants, `dsr_gate`, `PipelineConfig.enforce_dsr_gate`/`dsr_deployment_threshold`) and the pinning tests deleted; the degenerate-label property is pinned on the live tuner (`tests/unit/optimization/test_tuner_degenerate_labels.py`), MDA tail-feature reach behaviorally (`tests/unit/optimization/test_feature_search_space.py`, formerly `test_d3_feature_index.py`).
 
 **What:** `src/optimization/five_dimension_objective.py`, `hyperparameters.py`,
 `base_feature_sets.py`, `artifact_saver.py`. Zero live consumers — the live
@@ -301,6 +304,11 @@ the Phase-114 class of "settable but ignored" bugs got created.
 
 ## 10. The 209-module import cycle (the big architecture item)
 
+> **OPEN (checked 2026-09-30):** `import src.config` still loads torch and
+> xgboost. Phase 117 deleted the modules behind several eager re-exports but did
+> not break the cycle. Scheduled for Phase 120 together with the `src` →
+> `mlfactory` package rename and a small public API (option A).
+
 **What:** `src/config` ⇄ `src/models` ⇄ `src/data` (+validation, inference,
 optimization) form one strongly-connected import component: importing *any* of
 them loads torch+xgboost+lightgbm+catboost+optuna (~4–5s), driven by eager
@@ -333,7 +341,9 @@ registration. Phase 114 took the safe quick wins only.
 > scans, a dead-file scan, and stop-loss slippage, which was already covered
 > behaviorally; plus 3 list-slicing tautologies in d3). `test_phases_1_3.py` / `test_phases_4_11.py` no longer exist; the
 > phase-named test files were renamed by behavior and grouped into
-> `tests/{unit/<area>,integration,e2e}/`. No test reads `src/` as text.
+> `tests/{unit/<area>,integration,e2e}/`. No test asserts on source text; the one
+> deliberate scan of `src/` is the single-definition invariant
+> (`tests/unit/test_single_definitions.py`, core classes defined exactly once).
 
 **What:** ~20 remaining assertions in the phase-regression tier
 (`test_phases_1_3.py`, `test_phases_4_11.py`, parts of d3) verify fixes by
@@ -376,6 +386,19 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 ---
 
 ## 13. Second data pipeline behind `ml data` / `ml train` / `ml cv`
+
+> **RESOLVED in Phase 117 (2026-09-29):** option A. Every CLI command (`run`,
+> `data`, `status`, `models`, `cv`, `walk-forward`, `cpcv-pbo`, `version`) runs on
+> `MLFactory`. The standalone evaluators prepare data with
+> `MLFactory.build_evaluation_containers()` (`src/validation/cv/evaluation_data.py`):
+> train split only, per-fold scaling, purging on label spans, derived
+> purge/embargo. Deleted: `src/data/pipeline/runner.py` (PipelineRunner), the
+> stage registry and schemas, `DataConfig`, the parquet-split flow
+> (`TimeSeriesDataContainer.from_parquet_dir`), the FeatureStore/cache/lineage
+> stack, the YAML model-config loaders and the `train`/`resume` commands
+> (`ml run -m ...` covers them); about 23.5k lines. One raw-bar cleaner,
+> `sanitize_bars`, serves training and inference. Pinned by `tests/e2e/test_cli_e2e.py`
+> (every command end to end on synthetic bars).
 
 **What:** `src/data/pipeline/runner.py` (PipelineRunner) runs a separate 12-stage
 pipeline (ingest → clean → features → labeling → GA/Optuna barrier search →
@@ -433,14 +456,13 @@ and add tests. **Recommendation:** delete — the supported serving API is
 | 7 | Core TrainingResult | ✅ Resolved (Phase 116) | — | — |
 | 8 | to_*_config methods | ✅ Resolved (Phase 116) | — | — |
 | 9 | Dead config layer/yaml | ✅ Resolved (Phase 116) | — | — |
-| 10 | Import SCC | 4–5s imports, GPU-stack coupling | Staged lazy break | 3–5 days |
+| 10 | Import SCC | **Open** — 4–5s imports, GPU-stack coupling | Staged lazy break with the `mlfactory` rename (Phase 120) | 3–5 days |
 | 11 | Source-grep tests | ✅ Resolved (Phase 117: behavioral tests, layout by behavior) | — | — |
-| 12 | uv adoption | ✅ Resolved (Phase 116: uv venv, lock regenerated, CI on uv) | — | — |
-| 13 | Second data pipeline | Broken parallel pipeline stays | Re-point CLI at MLFactory, delete runner | 2–3 days |
+| 12 | uv adoption | ✅ Resolved (Phase 116: uv venv, lock regenerated, CI on uv; Phase 117: every CI job and `make install` pinned to `uv.lock`, `uv lock --check`) | — | — |
+| 13 | Second data pipeline | ✅ Resolved (Phase 117: every CLI command on MLFactory, PipelineRunner stack deleted) | — | — |
 | 14 | Unused public-API modules | ✅ Resolved (Phase 117) | — | — |
 
 ---
 
-*To act on any item: reference it by number. Items 1, 2, 3, 5 involve deleting
-more than one file and per CLAUDE.md need your explicit go-ahead anyway; item 4
-changes model results and should get a before/after comparison run.*
+*To act on the open item, reference it by number. Deleting more than one file or
+changing core interfaces needs explicit go-ahead per CLAUDE.md.*
