@@ -13,13 +13,15 @@ make check                # uv lock --check, ruff, black --check, pyright (0 err
 ```
 
 Changed dependencies in `pyproject.toml`? Run `uv lock` and commit `uv.lock` —
-CI fails when they drift. Added a runtime data file under `src/` (YAML, JSON)?
+CI fails when they drift. Every CI job and `make install` install the locked
+versions (`scripts/lock_constraints.sh` exports `uv.lock` as pip constraints;
+torch comes from the PyTorch CPU index at its locked version). Added a runtime data file under `src/` (YAML, JSON)?
 List it in `[tool.setuptools.package-data]` and run `make wheel-smoke` (builds
 the wheel, installs it into a fresh venv, imports every module).
 
 CI runs the fast tests on Python 3.11 and 3.12; lint, types and dead code run on
-3.11. Dependabot opens weekly update PRs for GitHub Actions and Python
-dependencies (minor/patch grouped).
+3.11. Dependabot opens weekly update PRs for GitHub Actions, `uv.lock` and the
+pre-commit hooks (minor/patch grouped).
 
 Slow end-to-end tests: `make test-slow`. The full mix-and-match verification:
 `make matrix` (hours on CPU; `scripts/mix_match.py <kind> --resume` continues an

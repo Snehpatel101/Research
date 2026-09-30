@@ -228,17 +228,6 @@ from src.core.lineage import (
     create_dataset_checksum,
     validate_dataset_checksum,
 )
-from src.core.paths import (
-    CONFIG_DIR,
-    CONFIG_MODELS_DIR,
-    CONFIG_ROOT,
-    DATA_DIR,
-    EXPERIMENTS_DIR,
-    PROJECT_ROOT,
-    RAW_DATA_DIR,
-    RESULTS_DIR,
-    RUNS_DIR,
-)
 
 # =============================================================================
 # PROTOCOLS - Structural typing contracts for inference
@@ -433,16 +422,6 @@ __all__ = [
     # =========================================================================
     # LEGACY EXPORTS (from original core package)
     # =========================================================================
-    # Paths
-    "PROJECT_ROOT",
-    "DATA_DIR",
-    "RAW_DATA_DIR",
-    "RESULTS_DIR",
-    "RUNS_DIR",
-    "EXPERIMENTS_DIR",
-    "CONFIG_ROOT",
-    "CONFIG_MODELS_DIR",
-    "CONFIG_DIR",
     # Reproducibility
     "ReproducibilityConfig",
     "ReproducibilityInfo",

@@ -1,19 +1,9 @@
-# Include important metadata files
+# sdist contents beyond what setuptools adds itself (pyproject.toml, the src
+# package incl. package data, LICENSE via license-files). Tests, scripts, docs
+# and project notes stay in the repository, not in the distribution.
 include README.md
 include LICENSE
-include CLAUDE.md
-include requirements.txt
-include pyproject.toml
-
-# Include documentation
-recursive-include docs *.md *.txt
-
-# Include configuration
-recursive-include config *.json *.yaml *.yml
-
-# Include test data and scripts
-recursive-include tests *.py
-recursive-include scripts *.py *.sh
+include CHANGELOG.md
 
 # Exclude build artifacts and caches
 global-exclude __pycache__

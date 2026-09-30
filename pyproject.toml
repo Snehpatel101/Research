@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+# setuptools 77 is the first release with PEP 639 (SPDX `license`, `license-files`)
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +9,8 @@ version = "0.1.0"
 description = "Ensemble ML pipeline for financial price prediction using triple-barrier labeling"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Research Team"}
 ]
@@ -19,7 +21,6 @@ classifiers = [
     "Intended Audience :: Financial and Insurance Industry",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Office/Business :: Financial :: Investment",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
@@ -110,6 +111,11 @@ ensemble-pipeline = "src.pipeline_cli:main"
 # Homepage = "https://github.com/project/ensemble-price-prediction"
 # Documentation = "https://github.com/project/ensemble-price-prediction/docs"
 # Repository = "https://github.com/project/ensemble-price-prediction"
+
+[tool.uv]
+# CI (setup-uv `version-file: pyproject.toml`) and local runs use the same uv
+# series; bump together with a `uv lock` refresh.
+required-version = ">=0.8.17,<0.9"
 
 [tool.setuptools.packages.find]
 where = ["."]

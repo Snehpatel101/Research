@@ -11,13 +11,24 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
-  # pyproject.toml + uv.lock (CI fails on drift via `uv lock --check`).
+  # uv.lock (CI installs from it and fails on drift via `uv lock --check`).
+  # lockfile-only: bump the locked versions, leave the pyproject lower bounds.
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    versioning-strategy: "lockfile-only"
     open-pull-requests-limit: 10
     groups:
       python-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+
+  # Hook revisions in .pre-commit-config.yaml.
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      pre-commit-hooks:
+        patterns: ["*"]

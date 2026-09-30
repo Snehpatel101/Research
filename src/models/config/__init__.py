@@ -22,15 +22,11 @@ from .data_requirements import (
 )
 from .environment import Environment, detect_environment, is_colab, resolve_device
 from .exceptions import ConfigError, ConfigValidationError
-from .paths import CONFIG_DIR, CONFIG_ROOT
 from .serialization import save_config, save_config_json
 from .trainer_config import TrainerConfig
 from .validation import validate_config
 
 __all__ = [
-    # Paths
-    "CONFIG_ROOT",
-    "CONFIG_DIR",
     # Exceptions
     "ConfigError",
     "ConfigValidationError",

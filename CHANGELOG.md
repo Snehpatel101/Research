@@ -20,8 +20,12 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   `make check`, pre-commit, `slow` test marker.
 - CI hardening: fast tests on Python 3.11 and 3.12, `uv lock --check`,
   packaging smoke job (sdist + wheel built, wheel installed into a fresh venv,
-  every module imported, CLI run; `make wheel-smoke`), Dependabot for Actions
-  and uv (weekly, minor/patch grouped), read-only token, job timeouts.
+  every module imported, all 21 models registered, CLI run; `make
+  wheel-smoke`), every CI and `make install` environment pinned to `uv.lock`
+  (`scripts/lock_constraints.sh`, CPU torch at the locked version), uv pinned
+  via `[tool.uv] required-version`, Dependabot for Actions, uv (lockfile-only)
+  and pre-commit hooks (weekly, minor/patch grouped), read-only token, job
+  timeouts, superseded PR runs cancelled (never runs on main).
 - Documentation site (mkdocs-material + mkdocstrings, `make docs` /
   `make docs-serve`, `docs` extra, CI `docs` job with `--strict`): getting
   started, concepts (the methodology and why each piece exists), mix and match,
@@ -35,6 +39,10 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
 - Historical audits, investigation notes and phase reports moved from the
   repository root and `docs/` to `docs/archive/` (history kept with `git mv`);
   `COMMANDS.md` moved to the root.
+- Packaging metadata: SPDX `license = "MIT"` + `license-files` (PEP 639,
+  setuptools>=77); the sdist ships the package, README, LICENSE and CHANGELOG
+  only (no tests, scripts, docs or project notes). The unused path constants
+  (`src/core/paths.py`, `src/models/config/paths.py`) are deleted.
 
 ### Fixed
 - A wheel install shipped without `config/global.yaml` (it lived outside the

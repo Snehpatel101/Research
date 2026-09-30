@@ -14,12 +14,16 @@ permissions:
 env:
   HYPOTHESIS_PROFILE: ci
 
-# A newer push to the same branch/PR cancels the superseded run. The event name
-# is part of the group so the weekly scheduled run and a push to main never
-# cancel each other.
+# A newer push to the same pull request cancels its superseded run. Runs on
+# main (pushes, the weekly schedule, manual dispatch) are never cancelled, so
+# every commit on main gets a complete run including the slow job.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Every install is pinned to uv.lock: scripts/lock_constraints.sh exports the
+# lock as pip constraints, torch comes from the PyTorch CPU index at the locked
+# version. uv itself is pinned by `[tool.uv] required-version` in pyproject.toml.
 
 jobs:
   # Fast tests on every supported Python; lint, format, types, dead code and the
@@ -37,18 +41,21 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          version-file: pyproject.toml
           enable-cache: true
+          cache-suffix: ${{ github.job }}-py${{ matrix.python-version }}
           python-version: ${{ matrix.python-version }}
 
       - name: Lockfile matches pyproject
         if: matrix.python-version == '3.11'
         run: uv lock --check
 
-      - name: Install (CPU torch)
+      - name: Install (CPU torch, pinned to uv.lock)
         run: |
+          bash scripts/lock_constraints.sh > constraints.txt
           uv venv
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-          uv pip install -e ".[dev,stats]"
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+          uv pip install -e ".[dev,stats]" -c constraints.txt
 
       - name: Lint
         if: matrix.python-version == '3.11'
@@ -80,7 +87,9 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          version-file: pyproject.toml
           enable-cache: true
+          cache-suffix: ${{ github.job }}
           python-version: "3.11"
 
       - name: Build + wheel smoke test
@@ -94,16 +103,19 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          version-file: pyproject.toml
           enable-cache: true
+          cache-suffix: ${{ github.job }}
           python-version: "3.11"
 
       # The generated pages import the package (config dataclasses, CLI), and
       # mkdocstrings reads its docstrings, so the package is installed too.
-      - name: Install (CPU torch + docs extra)
+      - name: Install (CPU torch + docs extra, pinned to uv.lock)
         run: |
+          bash scripts/lock_constraints.sh > constraints.txt
           uv venv
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-          uv pip install -e ".[docs]"
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+          uv pip install -e ".[docs]" -c constraints.txt
 
       - name: Generated pages are up to date
         run: |
@@ -125,14 +137,17 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          version-file: pyproject.toml
           enable-cache: true
+          cache-suffix: ${{ github.job }}
           python-version: "3.11"
 
-      - name: Install (CPU torch)
+      - name: Install (CPU torch, pinned to uv.lock)
         run: |
+          bash scripts/lock_constraints.sh > constraints.txt
           uv venv
-          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-          uv pip install -e ".[dev,stats]"
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+          uv pip install -e ".[dev,stats]" -c constraints.txt
 
       - name: End-to-end tests
         run: uv run --no-sync pytest -m slow -n 2 --dist loadfile
