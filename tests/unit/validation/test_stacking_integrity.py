@@ -479,3 +479,29 @@ class TestMetaLearnerHoldout:
         np.testing.assert_array_equal(holdout["row"], np.arange(n - 80, n))
         assert set(holdout["prediction"]) <= {-1, 0, 1}
         assert ((holdout["confidence"] > 0) & (holdout["confidence"] <= 1)).all()
+
+
+def test_cv_stacking_warns_when_prediction_gaps_differ(caplog: pytest.LogCaptureFixture) -> None:
+    """The gap check reads each model's prediction column (column 0 is the datetime)."""
+    from src.validation.cv.cv_stacking import validate_stacking_consistency
+    from src.validation.cv.oof_core import OOFPrediction, build_oof_frame
+
+    n = 20
+    X = pd.DataFrame({"f": np.zeros(n)}, index=pd.date_range("2024-01-02", periods=n, freq="5min"))
+    y = pd.Series(np.zeros(n, dtype=int), index=X.index)
+
+    def oof(name: str, n_missing: int) -> OOFPrediction:
+        preds = np.zeros(n)
+        preds[:n_missing] = np.nan  # e.g. a sequence model's warmup
+        probs = np.full((n, 3), 1 / 3)
+        frame = build_oof_frame(name, X.index, y, probs, preds, np.full(n, 1 / 3), np.zeros(n))
+        return OOFPrediction(model_name=name, predictions=frame, fold_info=[], coverage=1.0)
+
+    with caplog.at_level("WARNING"):
+        validate_stacking_consistency({"xgboost": oof("xgboost", 0), "lstm": oof("lstm", 5)}, 5)
+    assert "5 samples differ" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        validate_stacking_consistency({"xgboost": oof("xgboost", 0), "rf": oof("rf", 0)}, 5)
+    assert "differ" not in caplog.text

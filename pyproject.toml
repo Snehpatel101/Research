@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+# setuptools 77 is the first release with PEP 639 (SPDX `license`, `license-files`)
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +9,8 @@ version = "0.1.0"
 description = "Ensemble ML pipeline for financial price prediction using triple-barrier labeling"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Research Team"}
 ]
@@ -19,8 +21,8 @@ classifiers = [
     "Intended Audience :: Financial and Insurance Industry",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Office/Business :: Financial :: Investment",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -76,6 +78,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.5",
+    "hypothesis>=6.100",
     "black>=25.1",
     "ruff>=0.15",
     "pyright>=1.1.400",
@@ -109,12 +112,19 @@ ensemble-pipeline = "src.pipeline_cli:main"
 # Documentation = "https://github.com/project/ensemble-price-prediction/docs"
 # Repository = "https://github.com/project/ensemble-price-prediction"
 
+[tool.uv]
+# CI (setup-uv `version-file: pyproject.toml`) and local runs use the same uv
+# series; bump together with a `uv lock` refresh.
+required-version = ">=0.8.17,<0.9"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
 
 [tool.setuptools.package-data]
-src = ["py.typed"]
+# Data files the code loads at runtime (list each one explicitly; CI `package`
+# job / `make wheel-smoke` install the wheel and load them).
+"src.config" = ["global.yaml"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -123,7 +133,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "slow: long-running test (> 30 s): trains models end to end; deselect with -m 'not slow'",
-    "unit: fast, isolated test (tests/unit/, applied automatically by directory)",
+    "unit: fast, isolated test (tests/unit/ and tests/property/, applied automatically by directory)",
     "integration: several components wired together (tests/integration/, automatic)",
     "e2e: full pipeline runs (tests/e2e/, automatic)",
 ]

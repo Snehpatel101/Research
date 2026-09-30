@@ -1,5 +1,6 @@
 # ML Factory Global Configuration
-# Process-wide defaults read through src/config/global_config.py
+# Process-wide defaults read through src/config/global_config.py; shipped in
+# the wheel as package data (pyproject [tool.setuptools.package-data])
 # (get_config_value) — e.g. TrainerConfig field defaults.
 # Every key here is read somewhere; per-experiment settings (models, horizons,
 # CV gaps, Optuna budget, MTF timeframes, ...) belong in ExperimentConfig.

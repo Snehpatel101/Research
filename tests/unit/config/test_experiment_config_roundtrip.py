@@ -75,3 +75,111 @@ def test_to_dict_idempotent():
     d2 = config.to_dict()
 
     assert d1 == d2
+
+
+# =============================================================================
+# Phase 117 options: event sampling, fractional differentiation, probability sizing
+# =============================================================================
+
+
+def _configured() -> ExperimentConfig:
+    config = ExperimentConfig(run_id="fixed")
+    config.data.labeling.event_sampling = "cusum"
+    config.data.labeling.cusum_threshold = 0.004
+    config.data.labeling.cusum_vol_multiple = 2.5
+    config.data.features.frac_diff.enabled = True
+    config.data.features.frac_diff.d = 0.35
+    config.data.features.frac_diff.columns = ["close", "high"]
+    config.data.features.frac_diff.window = 64
+    config.data.features.frac_diff.threshold = 1e-4
+    config.evaluation.position_sizing = "probability"
+    config.evaluation.bet_max_contracts = 8
+    config.evaluation.bet_step_size = 0.1
+    return config
+
+
+def test_new_options_round_trip_through_dict():
+    config = _configured()
+    restored = ExperimentConfig.from_dict(config.to_dict())
+
+    assert restored.data.labeling.event_sampling == "cusum"
+    assert restored.data.labeling.cusum_threshold == 0.004
+    assert restored.data.labeling.cusum_vol_multiple == 2.5
+    frac = restored.data.features.frac_diff
+    assert (frac.enabled, frac.d, frac.columns, frac.window, frac.threshold) == (
+        True,
+        0.35,
+        ["close", "high"],
+        64,
+        1e-4,
+    )
+    assert restored.evaluation.position_sizing == "probability"
+    assert restored.evaluation.bet_max_contracts == 8
+    assert restored.evaluation.bet_step_size == 0.1
+    assert restored.to_dict() == config.to_dict()
+
+
+def test_new_options_round_trip_through_yaml(tmp_path):
+    config = _configured()
+    config.data.labeling.cusum_threshold = "auto"
+    config.data.features.frac_diff.d = "auto"
+    path = tmp_path / "config.yaml"
+    config.save_yaml(path)
+    restored = ExperimentConfig.from_yaml(path)
+
+    assert restored.data.labeling.cusum_threshold == "auto"
+    assert restored.data.features.frac_diff.d == "auto"
+    assert restored.to_dict() == config.to_dict()
+
+
+def test_defaults_keep_todays_behavior():
+    config = ExperimentConfig()
+
+    assert config.data.labeling.event_sampling == "none"
+    assert config.data.features.frac_diff.enabled is False
+    assert config.evaluation.position_sizing == "fixed"
+    assert config.validate() == []
+
+
+def test_yaml_written_before_the_new_options_loads_with_defaults():
+    old = {
+        "data": {"symbol": "MES", "labeling": {"atr_period": 14}, "features": {}},
+        "evaluation": {"run_backtest": True, "position_sizing": "kelly"},
+    }
+    config = ExperimentConfig.from_dict(old)
+
+    assert config.data.labeling.event_sampling == "none"
+    assert config.data.features.frac_diff.enabled is False
+    assert config.evaluation.position_sizing == "kelly"
+
+
+def test_validate_reports_bad_new_options():
+    config = ExperimentConfig()
+    config.data.labeling.event_sampling = "renko"
+    config.data.labeling.cusum_threshold = -1.0
+    config.data.labeling.cusum_vol_multiple = 0.0
+    config.data.features.frac_diff.d = 1.7
+    config.data.features.frac_diff.columns = ["volume"]
+    config.data.features.frac_diff.window = 1
+
+    text = " | ".join(config.validate())
+    for fragment in (
+        "event_sampling",
+        "cusum_threshold",
+        "cusum_vol_multiple",
+        "frac_diff.d",
+        "frac_diff.columns",
+        "frac_diff.window",
+    ):
+        assert fragment in text
+
+
+def test_factory_refuses_an_invalid_config(tmp_path):
+    import pytest
+
+    from src.factory import MLFactory
+
+    config = ExperimentConfig(output_dir=tmp_path)
+    config.data.labeling.event_sampling = "renko"
+    with pytest.raises(ValueError, match="event_sampling"):
+        MLFactory(config, verbose=0, enable_checkpoints=False)

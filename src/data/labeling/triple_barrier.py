@@ -536,6 +536,31 @@ def cost_in_atr_units(cost_in_price: float, atr_values: np.ndarray) -> float:
     return float(cost_in_price / np.median(valid))
 
 
+def expanding_cost_in_atr(cost_in_price: float, atr_values: np.ndarray) -> np.ndarray:
+    """Causal cost term per bar: price cost over the expanding median valid ATR.
+
+    Element ``i`` uses only ``atr_values[: i + 1]`` (invalid ATR entries -
+    NaN, non-positive - are skipped), so appending later bars never changes
+    it. 0.0 until the first valid ATR. The backtester uses this when no
+    labeling-run cost is passed; the labeler keeps its single training-rows
+    median (``cost_in_atr_units``).
+
+    Warm-up: the median needs one valid ATR (``min_periods=1``), not a full
+    ATR period. The ATR itself is already an average over its period (NaN
+    before it), and no trade opens on a bar without a valid ATR, so every
+    trade gets a cost on the scale of the labels' cost. A longer warm-up
+    would have to return 0.0 (barriers narrower than the labels') or block
+    entries; the early values are noisier estimates of the same quantity.
+    """
+    atr = np.asarray(atr_values, dtype=float)
+    valid = pd.Series(np.where(np.isfinite(atr) & (atr > 0), atr, np.nan))
+    median = valid.expanding(min_periods=1).median().to_numpy()
+    out = np.zeros(len(atr), dtype=float)
+    known = np.isfinite(median) & (median > 0)
+    out[known] = cost_in_price / median[known]
+    return out
+
+
 def compute_cost_in_atr(
     symbol: str, atr_values: np.ndarray, volatility_regime: str = "low_vol"
 ) -> float:

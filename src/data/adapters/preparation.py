@@ -580,10 +580,13 @@ class UnifiedDataPreparation:
             label_end_positions=label_ends,
         )
 
-        # Validate the prepared data
+        # Validate the prepared data. Invalid-label rows (-99) are expected here —
+        # warmup, end of data and, with event sampling, every non-event bar; the
+        # caller drops them with filter_invalid_labels() — so they are not a warning.
         is_valid, issues = prepared.validate()
-        if not is_valid:
-            logger.warning(f"PreparedData validation issues: {issues}")
+        unexpected = [i for i in issues if "invalid labels" not in i]
+        if unexpected:
+            logger.warning(f"PreparedData validation issues: {unexpected}")
 
         logger.info(prepared.summary())
         return prepared
@@ -596,8 +599,13 @@ class UnifiedDataPreparation:
         # Gap after val: the purge covers the longest label span (validation
         # labels resolving inside the test period), the embargo serial
         # correlation — whichever is wider
-        test_start = val_end + max(self.config.purge_bars, self.config.embargo_bars)
+        test_start = val_end + max(self.config.purge_bars, self._split_embargo_bars())
         return train_end, val_start, val_end, test_start
+
+    def _split_embargo_bars(self) -> int:
+        """Embargo of the chronological split, in bars of the full frame."""
+        split_embargo = getattr(self.config, "split_embargo_bars", None)
+        return self.config.embargo_bars if split_embargo is None else split_embargo
 
     def _split_with_purge_embargo(
         self,
@@ -618,7 +626,7 @@ class UnifiedDataPreparation:
         """
         n = len(df)
         purge = self.config.purge_bars
-        embargo = self.config.embargo_bars
+        embargo = self._split_embargo_bars()
         train_end, val_start, val_end, test_start = self._split_bounds(n)
 
         # Extract splits

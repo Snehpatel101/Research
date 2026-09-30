@@ -124,3 +124,6 @@ catboost_info/
 
 # Built documentation site (mkdocs build)
 /site/
+
+# pip constraints exported from uv.lock (scripts/lock_constraints.sh)
+/constraints.txt

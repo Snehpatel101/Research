@@ -141,11 +141,30 @@ class RegimeBundle:
             probabilities[rows] = output.class_probabilities[src]
             predictions[rows] = output.class_predictions[src]
 
+        metadata: dict[str, Any] = {"timestamps": common, "regimes": routed}
+        flags = self.event_flags(raw_df, common, skip_cleaning=skip_cleaning)
+        if flags is not None:
+            metadata["is_event"] = flags
         return PredictionResult(
             class_predictions=predictions,
             class_probabilities=probabilities,
             confidence=probabilities.max(axis=1),
-            metadata={"timestamps": common, "regimes": routed},
+            metadata=metadata,
+        )
+
+    def event_flags(
+        self,
+        raw_df: pd.DataFrame,
+        timestamps: pd.DatetimeIndex,
+        skip_cleaning: bool = False,
+    ) -> np.ndarray | None:
+        """Event-bar flags for ``timestamps`` (see ``ModelBundle.event_flags``).
+
+        Every regime model shares the training event definition, so any of them
+        answers; an ``EnsembleBundle`` wrapping this bundle relies on it.
+        """
+        return next(iter(self.regime_bundles.values())).event_flags(
+            raw_df, timestamps, skip_cleaning=skip_cleaning
         )
 
     # -----------------------------------------------------------------

@@ -86,6 +86,7 @@ subclass and a contract.
 | [Getting started](docs/getting-started.md) | Install, data format, first run (CLI and Python), predicting |
 | [Concepts](docs/concepts.md) | Triple-barrier labels, purge/embargo, uniqueness weights, OOF stacking, meta-labeling, regimes, walk-forward, execution timing, costs, DSR/PSR/PBO/CPCV — and why each exists |
 | [Mix and match](docs/mix-and-match.md) | Models × meta-learners × modes; how to add a model |
+| [Lopez de Prado options](docs/afml-options.md) | Opt-in CUSUM event sampling, fractional differentiation, probability bet sizing |
 | [Configuration](docs/configuration.md) | Every `ExperimentConfig` field and default (generated) |
 | [CLI](docs/cli.md) | Every `ml` command and option (generated) |
 | [Deploy and serve](docs/deploy-and-serve.md) | Bundles, deploy manifest, `predict_from_raw`, warmup |
@@ -98,7 +99,7 @@ build it with `make docs` (strict: any warning fails).
 ## Development
 
 ```bash
-make check     # ruff, black --check, pyright (0 errors), vulture, fast tests
+make check     # uv lock --check, ruff, black --check, pyright (0 errors), vulture, fast tests
 make test      # full suite incl. slow end-to-end tests
 make docs      # regenerate-check + strict docs build
 make matrix    # full mix-and-match matrix (hours)

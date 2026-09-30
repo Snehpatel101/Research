@@ -35,6 +35,7 @@ def build_evaluation_container(
     close: pd.Series,
     symbol: str,
     horizon: int,
+    n_classes: int = 3,
 ) -> TimeSeriesDataContainer:
     """
     Wrap the train split of tabular ``PreparedData`` in a container.
@@ -47,6 +48,7 @@ def build_evaluation_container(
             rows ``prepared.train_indices`` refer to.
         symbol: Trading symbol (looks up costs for CPCV/PBO strategy returns).
         horizon: Label horizon (the container's target is ``label_h{horizon}``).
+        n_classes: 2 for binary labels, 3 for short/neutral/long.
 
     Raises:
         ValueError: If the data is not tabular or has no row indices.
@@ -84,4 +86,5 @@ def build_evaluation_container(
         train_df=train_df,
         horizon=horizon,
         feature_columns=list(prepared.feature_names),
+        n_classes=n_classes,
     )

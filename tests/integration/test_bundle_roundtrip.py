@@ -185,6 +185,7 @@ class TestBundleMetadata:
         assert meta.symbol == SYMBOL
         assert meta.requires_sequences is False
         assert meta.requires_4d is False
+        assert meta.arch_version == ""  # only neural networks carry an architecture version
         assert meta.has_calibrator is False
         assert meta.feature_names == FEATURE_COLUMNS
         assert meta.training_metrics == {"val_f1": 0.5}

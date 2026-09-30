@@ -4,8 +4,8 @@ Data-section configuration classes for ExperimentConfig.
 Every field of these classes reaches the pipeline (see
 ``ExperimentConfig.to_pipeline_config()`` and ``MLFactory.prepare_data``):
 
-- FeatureConfig: feature-selection switch + opt-in governance diagnostics
-- LabelingConfig: triple-barrier overrides + binary mode
+- FeatureConfig: feature-selection switch + governance diagnostics + fractional differentiation
+- LabelingConfig: triple-barrier overrides + binary mode + CUSUM event sampling
 - SequenceConfig: window length for sequence models
 - MTFConfig: multi-timeframe feature switch + timeframes
 - SplitConfig: chronological train/val/test ratios
@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from src.config.base import BaseConfig
+from src.core.constants import FRAC_DIFF_PRICE_COLUMNS
 
 # =============================================================================
 # ENUMS
@@ -131,6 +132,65 @@ class FeatureGovernanceConfig(BaseConfig):
 
 
 @dataclass
+class FracDiffConfig(BaseConfig):
+    """
+    Fractionally differentiated log-price features (AFML ch. 5), opt-in.
+
+    Adds ``ffd_log_<column>`` features: a fixed-width-window fractional
+    difference of the log price. The window does not depend on the data
+    length, and the value at a bar uses only earlier bars (lagged one bar like
+    every other feature), so training and inference agree exactly.
+
+    Attributes:
+        enabled: Add the FFD features (default False = features unchanged)
+        d: Differentiation order in (0, 1], or ``"auto"``: the smallest d whose
+            FFD log close passes the ADF stationarity test (at least 0.05, even
+            for a series that is already stationary), fitted on the leading
+            training bars only (same prefix as the CUSUM threshold) and then
+            frozen into the feature spec (inference replays the same d).
+            ``"auto"`` needs the ``stats`` extra (statsmodels).
+        columns: Price columns (of open/high/low/close) to differentiate
+        window: Fixed FFD window cap in bars (the first ``window`` bars of a
+            series are warmup NaN)
+        threshold: FFD weight truncation threshold
+    """
+
+    enabled: bool = False
+    d: float | str = "auto"
+    columns: list[str] = field(default_factory=lambda: ["close", "open", "high", "low"])
+    window: int = 100
+    threshold: float = 1e-5
+
+    def validate(self) -> list[str]:
+        """Validate fractional-differentiation configuration."""
+        issues = super().validate()
+
+        if isinstance(self.d, str):
+            if self.d != "auto":
+                issues.append(f"frac_diff.d must be a number in (0, 1] or 'auto', got {self.d!r}")
+        elif isinstance(self.d, bool) or not 0.0 < float(self.d) <= 1.0:
+            issues.append(f"frac_diff.d must be in (0, 1] or 'auto', got {self.d}")
+
+        if self.enabled and not self.columns:
+            issues.append("frac_diff.columns must not be empty when frac_diff is enabled")
+        unknown = [c for c in self.columns if c not in FRAC_DIFF_PRICE_COLUMNS]
+        if unknown:
+            issues.append(
+                f"frac_diff.columns must be among {list(FRAC_DIFF_PRICE_COLUMNS)}, got {unknown}"
+            )
+        if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
+            issues.append(f"frac_diff.window must be an integer >= 2, got {self.window!r}")
+        if (
+            isinstance(self.threshold, bool)
+            or not isinstance(self.threshold, (int, float))
+            or not 0.0 < self.threshold < 1.0
+        ):
+            issues.append(f"frac_diff.threshold must be a number in (0, 1), got {self.threshold!r}")
+
+        return issues
+
+
+@dataclass
 class FeatureConfig(BaseConfig):
     """
     Feature configuration.
@@ -138,16 +198,23 @@ class FeatureConfig(BaseConfig):
     The feature set itself is fixed (``FeatureEngineer`` computes every
     family; MTF is controlled by ``MTFConfig``). What is configurable is
     whether the MDA feature-selection pipeline prunes it per model (feature
-    counts come from each model's contract) and whether governance
-    diagnostics are written alongside it.
+    counts come from each model's contract), whether governance diagnostics
+    are written alongside it, and whether fractionally differentiated price
+    features are added.
 
     Attributes:
         selection_enabled: Run train-only MDA feature selection per model
         governance: Opt-in stability / label-perturbation / registry diagnostics
+        frac_diff: Fractionally differentiated log-price features (opt-in)
     """
 
     selection_enabled: bool = True
     governance: FeatureGovernanceConfig = field(default_factory=FeatureGovernanceConfig)
+    frac_diff: FracDiffConfig = field(default_factory=FracDiffConfig)
+
+    def validate(self) -> list[str]:
+        """Validate feature configuration."""
+        return super().validate() + self.frac_diff.validate()
 
 
 # =============================================================================
@@ -170,6 +237,24 @@ class LabelingConfig(BaseConfig):
         max_holding_bars: Maximum holding period (time barrier, bars).
             None = auto from BARRIER_PARAMS, see upper_mult.
         binary_mode: Remap labels to {0: time-out, 1: barrier hit}
+        event_sampling: ``"none"`` (default: every bar is labeled) or
+            ``"cusum"`` (AFML ch. 2): only bars where a symmetric CUSUM filter
+            on the log returns fires carry a label; all other bars are marked
+            invalid (-99) and dropped from training, CV and the ensemble.
+            Features are still computed on every bar. Label spans stay in bar
+            coordinates, so purging and uniqueness weights follow the events.
+            The backtest acts on event bars only; ``predict_from_raw`` still
+            predicts every bar and flags the event bars in
+            ``metadata["is_event"]``.
+        cusum_threshold: CUSUM threshold in log-return units, or ``"auto"``:
+            ``cusum_vol_multiple`` x the per-bar return volatility of the
+            leading bars only — the training split (walk-forward: the bars
+            before the first test window) — frozen into the deployment bundle.
+            The validation/test holdout never influences it; purged-CV folds
+            inside the training split see a value fitted on all of it (the
+            same convention as the labeler's cost calibration).
+        cusum_vol_multiple: Multiple for the ``"auto"`` threshold. For i.i.d.
+            returns an event fires about every ``multiple^2`` bars.
 
     Example:
         config = LabelingConfig(
@@ -187,9 +272,33 @@ class LabelingConfig(BaseConfig):
     # Binary classification mode
     binary_mode: bool = False  # If True, remap labels to binary: 0=neutral, 1=significant_move
 
+    # Event sampling (AFML ch. 2)
+    event_sampling: str = "none"
+    cusum_threshold: float | str = "auto"
+    cusum_vol_multiple: float = 3.0
+
     def validate(self) -> list[str]:
         """Validate labeling configuration."""
         issues = super().validate()
+
+        if self.event_sampling not in ("none", "cusum"):
+            issues.append(f"event_sampling must be 'none' or 'cusum', got {self.event_sampling!r}")
+        if isinstance(self.cusum_threshold, str):
+            if self.cusum_threshold != "auto":
+                issues.append(
+                    f"cusum_threshold must be a positive number or 'auto', "
+                    f"got {self.cusum_threshold!r}"
+                )
+        elif isinstance(self.cusum_threshold, bool) or self.cusum_threshold <= 0:
+            issues.append(f"cusum_threshold must be positive or 'auto', got {self.cusum_threshold}")
+        if (
+            isinstance(self.cusum_vol_multiple, bool)
+            or not isinstance(self.cusum_vol_multiple, (int, float))
+            or self.cusum_vol_multiple <= 0
+        ):
+            issues.append(
+                f"cusum_vol_multiple must be a positive number, got {self.cusum_vol_multiple!r}"
+            )
 
         if self.upper_mult is not None and self.upper_mult <= 0:
             issues.append(f"upper_mult must be positive, got {self.upper_mult}")
@@ -312,6 +421,7 @@ __all__ = [
     # Configs
     "FeatureConfig",
     "FeatureGovernanceConfig",
+    "FracDiffConfig",
     "LabelingConfig",
     "SequenceConfig",
     "MTFConfig",

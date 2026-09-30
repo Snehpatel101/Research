@@ -108,12 +108,12 @@ All 16 base models mix and match (any subset × 5 meta-learners × 4 training mo
 
 ```bash
 # Linting (required - must pass)
-ruff check src/
-ruff check src/ --fix  # Auto-fix what's possible
+ruff check src/ tests/ scripts/
+ruff check src/ tests/ scripts/ --fix  # Auto-fix what's possible
 
 # Formatting (required)
-black src/
-black --check src/  # Check without modifying
+black src/ tests/ scripts/
+black --check src/ tests/ scripts/  # Check without modifying
 
 # Type checking (required - 0 errors)
 pyright

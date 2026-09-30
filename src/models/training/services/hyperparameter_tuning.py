@@ -26,6 +26,7 @@ class TuningRequest:
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
     purge_bars: int | None = None  # Pipeline purge floor (label span); None = PurgedKFold default
     optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
+    n_classes: int = 3  # 2 = binary labels: trial models are built for the same classes
 
 
 @dataclass
@@ -106,6 +107,7 @@ class HyperparameterTuningService:
             max_epochs=request.max_epochs,
             timeout=request.optuna_timeout,
             purge_bars=cv_config.purge_bars,
+            n_classes=request.n_classes,
         )
 
         X_train = request.prepared_data.X_train

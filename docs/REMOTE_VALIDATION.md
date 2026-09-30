@@ -9,7 +9,7 @@ anything above Layer 4 runs in Colab.
 
 | Layer | What | Where | Command |
 |-------|------|-------|---------|
-| 1 | Static (ruff, black, pyright) | local | `ruff check src/ tests/ && black --check src/ tests/ && pyright src/` |
+| 1 | Static (ruff, black, pyright) | local | `ruff check src/ tests/ scripts/ && black --check src/ tests/ scripts/ && pyright` |
 | 2 | Unit + behavioral tests (~600) | local | `python3 -m pytest tests/ -q` (~8 min, ~3.6 GB peak) |
 | 3 | Quick behavioral tier | local | `make test-quick` |
 | 4 | Mini E2E (tiny synthetic, boosting only) | local | `python3 -m pytest tests/e2e/test_factory_e2e.py -q` |

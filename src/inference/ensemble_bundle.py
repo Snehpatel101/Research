@@ -566,6 +566,12 @@ class EnsembleBundle:
         }
         result = self.predict(base_predictions, calibrate=calibrate)
         result.metadata["timestamps"] = common
+        # Base models share one training event definition (see ModelBundle.event_flags)
+        flags = next(iter(self._base_bundles.values())).event_flags(
+            raw_df, common, skip_cleaning=skip_cleaning
+        )
+        if flags is not None:
+            result.metadata["is_event"] = flags
         return result
 
     def _stack_predictions(

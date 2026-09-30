@@ -57,7 +57,6 @@ from .base import (
     TrainingMetrics,
 )
 from .config import (
-    CONFIG_DIR,
     TrainerConfig,
     save_config,
     validate_config,
@@ -127,7 +126,6 @@ __all__ = [
     "register",
     # Configuration
     "TrainerConfig",
-    "CONFIG_DIR",
     "validate_config",
     "save_config",
     # Training

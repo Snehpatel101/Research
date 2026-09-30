@@ -122,6 +122,10 @@ class PipelineConfig:
     # ExperimentConfig.resolve_cv_gaps derives both from the label span and bar
     # timeframe for factory runs; label-end columns in the training frame make
     # every CV purge follow each label's actual resolution bar on top.
+    split_embargo_bars: int | None = None
+    # Embargo in BARS of the full frame for the chronological val/test gap.
+    # None = ``embargo_bars``. With event sampling ``embargo_bars`` is in SAMPLES
+    # (the CV works on event rows) while the split works on bars.
 
     sample_weighting: str = "uniqueness"
     # Default training sample weights when the frame carries label-end columns:

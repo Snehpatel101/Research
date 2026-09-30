@@ -231,8 +231,9 @@ fixes → merge into `integration-117` → full verification → main branch.
 - **Wave 2:** seeded runs + `run_manifest.json` + determinism test + tracking
   config (MLflow extra); harness 4D prediction parity + batched TFT variable
   selection + binary `ml cv`; hypothesis property tests for leakage/parity
-  invariants; CUSUM event sampling, fractional differentiation, meta-probability
-  bet sizing; optional thin serving extra.
+  invariants; CUSUM event sampling, fractional differentiation, AFML probability
+  bet sizing (done: opt-in config, train-only fits frozen into the bundle);
+  optional thin serving extra.
 - **Wave 3:** validated config (pydantic v2 + JSON schema + `validate-config`);
   import-cycle break (lazy facades); package rename `src` → `mlfactory` with a
   small public API and one CLI; mkdocs site + `examples/`; CI hardening

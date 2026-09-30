@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.core.common.timeframes import detect_timeframe
+from src.core.common.timeframes import detect_timeframe, get_timeframe_suffix
 from src.core.constants import MODEL_FAMILIES
 from src.data.pipeline.stages.features import FeatureEngineer
 from src.inference.preprocessing_graph import PreprocessingGraph
@@ -140,6 +140,14 @@ def trained_features(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataF
     engineer = FeatureEngineer(output_dir=tmp_path_factory.mktemp("fe"), timeframe="5min")
     featured, _report = engineer.engineer_features(raw.reset_index(), symbol="TEST")
     return featured.set_index("datetime"), engineer.pipeline_record("5min")
+
+
+def test_mtf_features_are_generated_for_each_higher_timeframe(trained_features) -> None:
+    """MTF is on by default: every higher timeframe contributes suffixed columns."""
+    featured, _pipeline = trained_features
+    for timeframe in ("15min", "60min"):
+        suffix = get_timeframe_suffix(timeframe)
+        assert any(c.endswith(suffix) for c in featured.columns), f"no {timeframe} MTF columns"
 
 
 def test_graph_reproduces_training_features_exactly(trained_features) -> None:

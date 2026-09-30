@@ -620,11 +620,10 @@ class TestGovernanceFactoryE2E:
         }
 
     def test_report_present_only_when_enabled_and_features_identical(self, tmp_path: Path) -> None:
-        from tests.e2e.test_factory_e2e import N_ROWS
         from tests.helpers import make_intraday_ohlcv
 
         data_path = tmp_path / "bars.parquet"
-        make_intraday_ohlcv(N_ROWS, seed=7).to_parquet(data_path)
+        make_intraday_ohlcv(2500, seed=7).to_parquet(data_path)
 
         off = self._run(data_path, tmp_path / "off", governance=False)
         on = self._run(data_path, tmp_path / "on", governance=True)

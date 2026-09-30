@@ -876,6 +876,14 @@ class BaseRNNModel(BaseModel):
         # else (e.g. a different pooling or padding), which must fail loudly.
         saved_version = str(checkpoint.get("arch_version") or _LEGACY_ARCH_VERSION)
         if saved_version != self.ARCH_VERSION:
+            upgraded = self._upgrade_checkpoint(checkpoint, saved_version)
+            if upgraded is not None:
+                logger.info(
+                    f"Converted {self._get_model_type().upper()} checkpoint {model_path} "
+                    f"from architecture version {saved_version} to {self.ARCH_VERSION}"
+                )
+                checkpoint, saved_version = upgraded, self.ARCH_VERSION
+        if saved_version != self.ARCH_VERSION:
             raise ValueError(
                 f"{self._get_model_type().upper()} checkpoint {model_path} was saved by "
                 f"architecture version {saved_version}, but this code builds version "
@@ -898,6 +906,19 @@ class BaseRNNModel(BaseModel):
 
         self._is_fitted = True
         logger.info(f"Loaded {self._get_model_type().upper()} model from {path}")
+
+    def _upgrade_checkpoint(
+        self, checkpoint: dict[str, Any], saved_version: str
+    ) -> dict[str, Any] | None:
+        """
+        Deterministically convert a checkpoint of an older architecture version.
+
+        Returns the checkpoint rewritten for ``ARCH_VERSION``, or None when no
+        exact conversion exists (``load`` then refuses the checkpoint). Only a
+        subclass whose version change is a pure re-parameterization of the same
+        function overrides this.
+        """
+        return None
 
     def _create_dataloader(
         self,

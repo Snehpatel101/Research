@@ -21,6 +21,8 @@ Optuna tuner are monkeypatched to capture their configs).
 
 from __future__ import annotations
 
+import pytest
+
 from src.config.experiment import ExperimentConfig
 from src.config.training import OptunaConfig
 from tests.helpers import tiny_prepared_data
@@ -152,6 +154,33 @@ class TestOptunaTimeoutThreading:
         _run_train_model(monkeypatch, tmp_path, patience=None, optimize_hyperparams=True)
 
         assert _FakeTuner.captured.get("timeout") == 1234
+
+    def test_tuned_best_params_reach_trainer_model_config(self, monkeypatch, tmp_path):
+        """Optuna's best_params must be trained with, not discarded (Phase 74 regression)."""
+        import src.models.training.services.hyperparameter_tuning as ht
+
+        monkeypatch.setattr(ht, "TimeSeriesOptunaTuner", _FakeTuner)
+
+        config, _ = _run_train_model(
+            monkeypatch, tmp_path, patience=None, optimize_hyperparams=True
+        )
+
+        assert config is not None
+        assert config.model_config["n_estimators"] == 10
+
+    @pytest.mark.parametrize("n_classes", [2, 3])
+    def test_model_training_request_n_classes_reaches_tuner(self, monkeypatch, tmp_path, n_classes):
+        """Binary mode: Optuna trials must build models for the pipeline's classes."""
+        import src.models.training.services.hyperparameter_tuning as ht
+
+        monkeypatch.setattr(ht, "TimeSeriesOptunaTuner", _FakeTuner)
+        _FakeTuner.captured = {}
+
+        _run_train_model(
+            monkeypatch, tmp_path, patience=None, optimize_hyperparams=True, n_classes=n_classes
+        )
+
+        assert _FakeTuner.captured.get("n_classes") == n_classes
 
     def test_model_training_request_has_optuna_timeout_field(self):
         from src.models.training.services.model_training import ModelTrainingRequest
