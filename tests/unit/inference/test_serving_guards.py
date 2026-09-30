@@ -161,3 +161,82 @@ def test_engine_mismatch_can_be_allowed_explicitly(
         bundle = load_bundle(stale_bundle, allow_engine_mismatch=True)
     assert "FEATURE ENGINE MISMATCH" in caplog.text
     assert len(bundle.predict_from_raw(raw).class_predictions) > 0
+
+
+def test_short_input_rounds_the_resample_ratio_up(bundle_dir: Path) -> None:
+    bundle = ModelBundle.load(bundle_dir)
+    assert bundle.preprocessing_graph is not None
+    needed = bundle.preprocessing_graph.config.warmup_bars + 1
+    # 2-minute bars into 5-minute training bars: 3 raw bars per bar, not 2
+    with pytest.raises(ValueError, match=f"at least {needed * 3} raw 2min bars"):
+        bundle.predict_from_raw(make_intraday_ohlcv(300, freq="2min"))
+
+
+@pytest.mark.parametrize("stale_bundle", [FEATURE_ENGINE_VERSION - 1], indirect=True)
+def test_every_loader_guards_the_engine_version(stale_bundle: Path, tmp_path: Path) -> None:
+    from src.inference.deploy import (
+        DEPLOY_MANIFEST_FILE,
+        DeployManifest,
+        HorizonArtifactEntry,
+        HorizonManifest,
+        validate_deploy_artifact,
+    )
+    from src.inference.ensemble_bundle import EnsembleBundle, EnsembleBundleMetadata
+    from src.inference.universal_pipeline import UniversalInferencePipeline
+    from src.models.ensemble import get_meta_learner
+
+    with pytest.raises(ValueError, match="allow_engine_mismatch"):
+        UniversalInferencePipeline.from_bundle(stale_bundle)
+    UniversalInferencePipeline.from_bundle(stale_bundle, allow_engine_mismatch=True)
+
+    # The ensemble refuses at load, before its base bundles are needed
+    rng = np.random.default_rng(0)
+    meta = get_meta_learner("voting_meta")
+    X = np.hstack([rng.dirichlet(np.ones(3), size=60), rng.random((60, 3))])
+    y = rng.integers(-1, 2, 60)
+    meta.fit(X, y, X, y)
+    ensemble_dir = EnsembleBundle(
+        meta_learner=meta,
+        metadata=EnsembleBundleMetadata(
+            version="1",
+            created_at="now",
+            meta_learner_name="voting_meta",
+            base_model_names=["xgboost"],
+            horizon=5,
+            n_base_models=1,
+            n_stacking_features=6,
+        ),
+        base_bundle_paths=[stale_bundle],
+    ).save(tmp_path / "ensemble_h5")
+    with pytest.raises(ValueError, match="allow_engine_mismatch"):
+        EnsembleBundle.load(ensemble_dir)
+    EnsembleBundle.load(ensemble_dir, allow_engine_mismatch=True)
+
+    # validate_deploy_artifact reports the stale bundle with the remedy
+    deploy_dir = tmp_path / "deploy"
+    entry = HorizonArtifactEntry("xgboost", str(stale_bundle))
+    DeployManifest(horizons={5: HorizonManifest(horizon=5, entries=[entry])}).save(
+        deploy_dir / DEPLOY_MANIFEST_FILE
+    )
+    report = validate_deploy_artifact(deploy_dir)
+    assert not report["valid"]
+    assert "Retrain it" in report["issues"][0]
+
+
+def test_old_graph_loaded_with_the_override_does_not_report_tampering(
+    bundle_dir: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A graph written before the version/warmup fields existed hashes as written."""
+    from src.inference.preprocessing_graph import hash_graph_dict
+
+    data = json.loads((bundle_dir / PREPROCESSING_GRAPH_FILE).read_text())
+    for key in ("feature_engine_version", "warmup_bars"):
+        data.pop(key)
+    data["config_hash"] = hash_graph_dict(data)
+    old = tmp_path / PREPROCESSING_GRAPH_FILE
+    old.write_text(json.dumps(data))
+    with caplog.at_level(logging.WARNING, logger="src.inference.preprocessing_graph"):
+        graph = PreprocessingGraph.load(old, allow_engine_mismatch=True)
+    assert "hash mismatch" not in caplog.text
+    # ...and serves with this engine's warmup rather than none
+    assert graph.config.warmup_bars == _engineer().warmup_bars()

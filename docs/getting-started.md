@@ -43,9 +43,14 @@ The repository ships sample bars in `data/raw/` — `MES_1m_1week.parquet`
 ## First run: CLI
 
 ```bash
-python -m src.cli run -d data/raw/MES_1m_1week.parquet --bar-timeframe 5min \
+python -m src.cli run -d data/raw/MES_1m_1week.parquet --bar-timeframe 5min --no-mtf \
     -m xgboost -h 5 --backtest
 ```
+
+`--no-mtf` turns off the multi-timeframe (15/60-minute) features: they need
+about 1,500 5-minute bars of history before their values stop depending on
+where the data starts, more than one week holds. With the one-month file you
+can leave them on (the next command does).
 
 This takes well under a minute on a laptop. It:
 
@@ -76,7 +81,8 @@ Add models, an ensemble and a training mode with flags:
 
 ```bash
 python -m src.cli run -d data/raw/MES_1m_1month.parquet --bar-timeframe 5min \
-    -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta -h 5 --backtest
+    -m xgboost,lstm,patchtst --build-ensemble --meta-learner voting_meta -h 5 --backtest \
+    --max-epochs 5   # a quick look on a CPU; the default trains neural models for 100 epochs
 ```
 
 See the [CLI reference](cli.md) for every command (`ml data`, `ml cv`,
@@ -92,6 +98,7 @@ cfg = ExperimentConfig(name="mes_first_run")
 cfg.data.symbol = "MES"
 cfg.data.data_path = "data/raw/MES_1m_1week.parquet"
 cfg.data.bar_timeframe = "5min"            # resample 1-minute input to 5-minute bars
+cfg.data.mtf.enabled = False               # one week is too short for the MTF warmup
 cfg.training.models = ["xgboost"]
 cfg.training.horizons = [5]
 cfg.training.optuna.n_trials = 0           # default is 100 Optuna trials per model
@@ -115,7 +122,7 @@ import pandas as pd
 from src.inference import load_deploy_artifact
 
 artifact = load_deploy_artifact(result.deploy_path, horizon=5)
-raw = pd.read_parquet("data/raw/MES_1m_1week.parquet").iloc[-3000:]   # raw 1-minute bars
+raw = pd.read_parquet("data/raw/MES_1m_1week.parquet").iloc[-3000:]   # 600 5-minute bars
 pred = artifact.predict_from_raw(raw)       # resampled, featured, scaled, calibrated
 
 pred.class_predictions          # -1 short, 0 neutral, +1 long

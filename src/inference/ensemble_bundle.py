@@ -453,6 +453,12 @@ class EnsembleBundle:
             alignment_config=alignment_config,
         )
         bundle.allow_engine_mismatch = allow_engine_mismatch
+        # Base bundles load lazily; refuse a stale feature engine now, not at predict
+        from src.inference.preprocessing_graph import check_bundle_engine_versions
+
+        for base_path in base_bundle_paths:
+            if base_path.exists():
+                check_bundle_engine_versions(base_path, allow_engine_mismatch)
         return bundle
 
     def predict(

@@ -18,7 +18,13 @@ import numpy as np
 import pandas as pd
 
 from src.core.constants import FRAC_DIFF_PRICE_COLUMNS, OHLCV_COLUMNS
-from src.core.utils.math_utils import span_settle_bars, wilder_settle_bars
+from src.core.utils.math_utils import (
+    EWM_SETTLE_TOLERANCE,
+    cascade_settle_bars,
+    span_alpha,
+    span_settle_bars,
+    wilder_settle_bars,
+)
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
@@ -44,10 +50,8 @@ from .scaling import PeriodScaler, create_period_config
 from .temporal import add_temporal_features
 from .trend import add_adx, add_supertrend
 from .volatility import (
-    ARCH_AVAILABLE,
     add_atr,
     add_bollinger_bands,
-    add_garch_features,
     add_garman_klass_volatility,
     add_higher_moments,
     add_historical_volatility,
@@ -67,9 +71,11 @@ logger = logging.getLogger(__name__)
 # Part of the feature-cache key: bump when feature values change so stale
 # caches are never reused (2: pywt read-only fix, SampEn caps, causal ffill;
 # 3: session-reset OBV, trailing-window wavelet z-scores; 4: warmup rows dropped
-# by the recorded warmup rule instead of by NaNs, regime features NaN until warm).
-# Bundles record it; loading a bundle built by another version is refused.
-FEATURE_ENGINE_VERSION = 4
+# by the recorded warmup rule instead of by NaNs, regime features NaN until warm;
+# 5: GARCH and the constant bb_width removed, tighter warmup, session lookback
+# covers the OBV moving average). Bundles record it; loading a bundle built by
+# another version is refused.
+FEATURE_ENGINE_VERSION = 5
 logger.addHandler(logging.NullHandler())
 
 
@@ -105,7 +111,6 @@ FEATURE_DEPENDENCIES: dict[str, list[str]] = {
     "garman_klass": [],  # GK vol from OHLCV
     "rogers_satchell": [],  # RS vol from OHLCV
     "yang_zhang": [],  # YZ vol from OHLCV
-    "garch": ["returns"],  # GARCH fits on returns
     "higher_moments": ["returns"],  # Skew/kurtosis of returns
     # Volume features (depend on price)
     "volume": [],  # OBV, volume SMA
@@ -156,7 +161,6 @@ FEATURE_COMPUTE_ORDER: list[str] = [
     "roc",
     "cci",
     "hvol",
-    "garch",
     "higher_moments",
     "autocorrelation",
     "entropy",
@@ -170,27 +174,33 @@ FEATURE_COMPUTE_ORDER: list[str] = [
 ]
 
 
-def warmup_mask(datetimes: pd.Series, warmup_bars: int, session_features: bool) -> np.ndarray:
+def warmup_mask(datetimes: pd.Series, warmup_bars: int, session_lookback: int) -> np.ndarray:
     """Rows whose features no longer depend on where the input starts.
 
     The one warmup rule shared by training (``engineer_features``) and serving
     (``PreprocessingGraph``): a row is kept once ``warmup_bars`` bars precede it
-    and, when session-reset features (OBV, VWAP) are computed, once the session
-    (calendar date) of the bar before it starts inside the input — the first
-    date may be partial, and those features are lagged one bar, so a session's
-    first bar still carries the previous session's value.
+    and, when session-reset features are computed (``session_lookback`` > 0),
+    once the bar ``session_lookback`` rows back lies past the input's first
+    session. Sessions are calendar dates of the (naive UTC) bar timestamps; the
+    first date of any input may be partial, and a session-reset feature at bar t
+    reads up to ``session_lookback`` bars back (OBV and VWAP lag one bar, the
+    OBV moving average spans its whole window), so every one of those bars must
+    belong to a session that starts inside the input.
 
     Args:
         datetimes: Bar timestamps, oldest first.
         warmup_bars: Bars of history every kept row needs
             (:meth:`FeatureEngineer.warmup_bars`).
-        session_features: Whether session-reset features are computed.
+        session_lookback: Bars a session-reset feature reads back
+            (:meth:`FeatureEngineer.session_lookback_bars`); 0 when there are none.
     """
-    keep = np.arange(len(datetimes)) >= warmup_bars
-    if session_features and len(datetimes):
+    n = len(datetimes)
+    keep = np.arange(n) >= warmup_bars
+    if session_lookback > 0 and n:
         dates = pd.to_datetime(pd.Series(datetimes)).dt.date.to_numpy()
-        previous = np.concatenate([dates[:1], dates[:-1]])
-        keep &= previous != dates[0]
+        back = np.arange(n) - session_lookback
+        keep &= back >= 0
+        keep[back >= 0] &= dates[back[back >= 0]] != dates[0]
     return keep
 
 
@@ -239,6 +249,7 @@ class FeatureEngineer:
         wavelet_level: int = 3,
         wavelet_window: int = 64,
         nan_threshold: float = 0.9,
+        ewm_settle_tolerance: float = EWM_SETTLE_TOLERANCE,
         cache_dir: str | Path | None = None,
         frac_diff_columns: list[str] | None = None,
         frac_diff_d: float | None = None,
@@ -346,6 +357,11 @@ class FeatureEngineer:
             raise ValueError(f"nan_threshold must be between 0.0 and 1.0, got {nan_threshold}")
         self.nan_threshold = nan_threshold
 
+        # Warmup: an EWM counts as settled once its start weighs below this
+        if not 0.0 < ewm_settle_tolerance < 1.0:
+            raise ValueError(f"ewm_settle_tolerance must be in (0, 1), got {ewm_settle_tolerance}")
+        self.ewm_settle_tolerance = ewm_settle_tolerance
+
         # Fractional differentiation configuration
         self.frac_diff_columns = list(frac_diff_columns or [])
         self.frac_diff_d = frac_diff_d
@@ -405,6 +421,7 @@ class FeatureEngineer:
         "wavelet_level",
         "wavelet_window",
         "nan_threshold",
+        "ewm_settle_tolerance",
         "frac_diff_columns",
         "frac_diff_d",
         "frac_diff_window",
@@ -439,31 +456,49 @@ class FeatureEngineer:
             "engineer": self.to_spec(),
             "engine_version": FEATURE_ENGINE_VERSION,
             "warmup_bars": self.warmup_bars(),
+            "session_lookback_bars": self.session_lookback_bars(),
         }
 
-    @property
-    def session_features(self) -> bool:
-        """Whether session-reset features (OBV, VWAP) are computed."""
-        return self.enable_volume_features
+    def session_lookback_bars(self) -> int:
+        """Bars a session-reset feature reads back (0 without them).
+
+        OBV and VWAP reset every session (calendar date) and lag one bar; the
+        OBV moving average averages the session OBV over its window. So a bar's
+        session-reset features read up to ``volume_sma`` period + 1 bars back.
+        """
+        if not self.enable_volume_features:
+            return 0
+        return max(self.period_config.get("volume_sma") or [20]) + 1
 
     def warmup_bars(self) -> int:
         """Bars of history before every feature stops depending on the input start.
 
-        Derived from the feature definitions: the longest rolling window
-        (SMA-200 and every other period-config indicator, the entropy and regime
-        windows), EWM-based indicators until their starting value weighs less
-        than ``EWM_SETTLE_TOLERANCE`` (EMA, MACD, Wilder RSI/ATR/ADX, Keltner,
-        Supertrend), the wavelet DWT window plus its z-score window, and each
-        MTF timeframe's indicator warmup in base bars. Each lookback includes
-        the one-bar anti-lookahead lag.
+        Derived from the feature definitions, each lookback including the
+        one-bar anti-lookahead lag:
+
+        - the longest rolling window (SMA-200 and every other period-config
+          indicator, the entropy and regime windows);
+        - EWM-based indicators until their starting value weighs less than
+          ``ewm_settle_tolerance`` — (1 - alpha)^n after n bars. The numba EMA,
+          RSI, ATR and ADX seed with an average of their first ``period``
+          values, so their settling starts ``period - 1`` bars in; the MACD
+          signal line and ADX are EWMs of EWMs (``cascade_settle_bars``);
+        - the wavelet DWT window plus its z-score window, the fixed FFD window;
+        - with MTF, each higher timeframe's indicator warmup in base bars
+          (``MTFFeatureGenerator.warmup_bars``), and at least ``mtf_min_rows``
+          (below it MTF features are not computed at all).
+
+        Session-reset features are covered separately by
+        :meth:`session_lookback_bars` in :func:`warmup_mask`.
         """
+        tol = self.ewm_settle_tolerance
         pc = self.period_config
 
         def longest(name: str, default: int) -> int:
             return max(pc.get(name) or [default])
 
-        rolling = max(max(periods) for periods in pc.values() if periods)
-        fixed = max(
+        rolling = max(max(periods) for periods in pc.values() if periods) + 1
+        fixed = 1 + max(
             *DEFAULT_SHANNON_WINDOWS,
             *DEFAULT_LZ_WINDOWS,
             *DEFAULT_APEN_WINDOWS,
@@ -472,37 +507,45 @@ class FeatureEngineer:
             VOLATILITY_REGIME_WINDOW + longest("hvol", 20),
         )
         ema, atr, adx = longest("ema", 50), longest("atr", 14), longest("adx", 14)
-        slow, signal = longest("macd_slow", 26), longest("macd_signal", 9)
+        fast, slow = longest("macd_fast", 12), longest("macd_slow", 26)
+        signal = longest("macd_signal", 9)
         rsi, keltner = longest("rsi", 14), longest("keltner", 20)
         supertrend = longest("supertrend_period", 10)
-        ewm = max(
-            ema + span_settle_bars(ema),
-            slow + span_settle_bars(slow) + signal + span_settle_bars(signal),
-            rsi + wilder_settle_bars(rsi),
-            atr + wilder_settle_bars(atr),
-            keltner + max(span_settle_bars(keltner), wilder_settle_bars(keltner)),
-            2 * (adx + wilder_settle_bars(adx)),
-            supertrend + wilder_settle_bars(supertrend),
+        signal_alpha = span_alpha(signal)
+        ewm = 1 + max(
+            ema - 1 + span_settle_bars(ema, tol),
+            (slow - 1)
+            + (signal - 1)
+            + max(
+                cascade_settle_bars(span_alpha(slow), signal_alpha, tol),
+                cascade_settle_bars(span_alpha(fast), signal_alpha, tol),
+            ),
+            rsi + wilder_settle_bars(rsi, tol),
+            atr + wilder_settle_bars(atr, tol),
+            keltner + max(span_settle_bars(keltner, tol), wilder_settle_bars(keltner, tol)),
+            2 * adx + cascade_settle_bars(1.0 / adx, 1.0 / adx, tol),
+            supertrend + wilder_settle_bars(supertrend, tol),
         )
         lookbacks = [rolling, fixed, ewm]
         if self.enable_wavelets:
             lookbacks.append(self.wavelet_window + NORMALIZE_WINDOW)
         if self.frac_diff_columns:
-            # Fixed-width FFD window, lagged one bar
             lookbacks.append(self.frac_diff_window + 1)
         if self.enable_mtf:
             from src.core.common.timeframes import get_timeframe_minutes
 
             base = get_timeframe_minutes(self.timeframe)
-            for tf in self.mtf_timeframes:
-                ratio = get_timeframe_minutes(tf) / base
-                if ratio > 1:
-                    lookbacks.append(math.ceil(ratio) * MTFFeatureGenerator.warmup_bars())
-        return max(lookbacks) + 1
+            higher = [tf for tf in self.mtf_timeframes if get_timeframe_minutes(tf) > base]
+            if higher:
+                lookbacks.append(self.mtf_min_rows)
+            for tf in higher:
+                ratio = math.ceil(get_timeframe_minutes(tf) / base)
+                lookbacks.append(ratio * MTFFeatureGenerator.warmup_bars(tol))
+        return max(lookbacks)
 
     def warmup_mask(self, datetimes: pd.Series) -> np.ndarray:
         """:func:`warmup_mask` with this engineer's warmup."""
-        return warmup_mask(datetimes, self.warmup_bars(), self.session_features)
+        return warmup_mask(datetimes, self.warmup_bars(), self.session_lookback_bars())
 
     def compute_features(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
         """
@@ -571,9 +614,6 @@ class FeatureEngineer:
             df = add_yang_zhang_volatility(
                 df, self.feature_metadata, period=pc.get("yz_vol", [20])[0]
             )
-            # Add GARCH volatility forecast features (optional - requires arch library)
-            if ARCH_AVAILABLE:
-                df = add_garch_features(df, self.feature_metadata, timeframe=self.timeframe)
         else:
             logger.info("Volatility features disabled via config")
 
@@ -794,6 +834,9 @@ class FeatureEngineer:
                     "enable_microstructure": self.enable_microstructure,
                     "enable_volume_features": self.enable_volume_features,
                     "enable_volatility_features": self.enable_volatility_features,
+                    # Rows kept by the warmup rule
+                    "warmup_bars": self.warmup_bars(),
+                    "session_lookback_bars": self.session_lookback_bars(),
                 },
                 sort_keys=True,
             ).encode()

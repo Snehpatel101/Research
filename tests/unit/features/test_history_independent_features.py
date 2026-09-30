@@ -98,6 +98,44 @@ def test_wavelet_coefficients_are_independent_of_the_input_start() -> None:
 FEATURE_TOLERANCE = 1e-3
 
 
+def _assert_kept_rows_match(engineer: FeatureEngineer, raw: pd.DataFrame, start: int) -> int:
+    """Features of ``raw[start:]`` on its kept rows equal those of ``raw``; returns kept rows."""
+    full, _ = engineer.compute_features(raw)
+    window, _ = engineer.compute_features(raw.iloc[start:].reset_index(drop=True))
+    columns = [c for c in full.columns if c not in ("datetime", *OHLCV_COLUMNS)]
+
+    keep = engineer.warmup_mask(window["datetime"])
+    served = window.loc[keep, columns].to_numpy(float)
+    reference = full[columns].iloc[start:].to_numpy(float)[keep]
+    assert not np.isnan(served).any(), "a kept row still has warmup NaNs"
+
+    spread = np.nanstd(full[columns].to_numpy(float), axis=0)
+    tolerance = FEATURE_TOLERANCE * spread + 1e-9 * np.abs(reference)
+    off = np.abs(served - reference) > tolerance
+    bad = sorted({columns[j] for j in np.nonzero(off)[1]})
+    assert not off.any(), f"start {start}: differ from full history: {bad}"
+    return int(keep.sum())
+
+
+def _rth_bars(n_days: int, freq: str, seed: int) -> pd.DataFrame:
+    """Gapped sessions: 09:30-16:00 on weekdays only (overnight and weekend gaps)."""
+    days = pd.bdate_range("2024-01-02", periods=n_days)
+    index = pd.DatetimeIndex(
+        np.concatenate(
+            [
+                pd.date_range(day + pd.Timedelta("9h30min"), day + pd.Timedelta("16h"), freq=freq)[
+                    :-1
+                ].to_numpy()
+                for day in days
+            ]
+        ),
+        name="datetime",
+    )
+    bars = make_intraday_ohlcv(len(index), seed=seed, freq=freq)
+    bars.index = index
+    return bars.reset_index()
+
+
 @pytest.mark.parametrize(
     ("timeframe", "mtf"),
     [("5min", False), ("5min", True), ("1min", False)],
@@ -108,43 +146,77 @@ def test_every_kept_row_matches_full_history(timeframe: str, mtf: bool) -> None:
     warmup = engineer.warmup_bars()
     start = 437  # mid-session
     raw = make_intraday_ohlcv(start + warmup + 400, seed=5, freq=timeframe).reset_index()
-    full, _ = engineer.compute_features(raw)
-    window, _ = engineer.compute_features(raw.iloc[start:].reset_index(drop=True))
-    columns = [c for c in full.columns if c not in ("datetime", *OHLCV_COLUMNS)]
-
-    keep = engineer.warmup_mask(window["datetime"])
-    assert keep.sum() > 300
-    served = window.loc[keep, columns].to_numpy(float)
-    reference = full[columns].iloc[start:].to_numpy(float)[keep]
-    assert not np.isnan(served).any(), "a kept row still has warmup NaNs"
-
-    spread = np.nanstd(full[columns].to_numpy(float), axis=0)
-    tolerance = FEATURE_TOLERANCE * spread + 1e-9 * np.abs(reference)
-    off = np.abs(served - reference) > tolerance
-    assert (
-        not off.any()
-    ), f"differ from full history: {sorted({columns[j] for j in np.nonzero(off)[1]})}"
+    assert _assert_kept_rows_match(engineer, raw, start) > 300
 
     # The full-history warmup also covers every feature's NaN warmup
+    full, _ = engineer.compute_features(raw)
+    columns = [c for c in full.columns if c not in ("datetime", *OHLCV_COLUMNS)]
     first_complete = int(full[columns].notna().all(axis=1).to_numpy().argmax())
     assert first_complete <= warmup
 
 
-def test_warmup_mask_needs_warmup_bars_and_a_complete_session() -> None:
+@pytest.mark.parametrize("timeframe", ["5min", "1min"])
+def test_windows_starting_around_midnight_match_full_history(timeframe: str) -> None:
+    """24/7 bars, windows starting at random times incl. just after midnight.
+
+    With wavelets off the warmup is shorter than a day, so the session rule binds:
+    the OBV moving average must not average OBV from the partial first date.
+    """
+    engineer = FeatureEngineer(timeframe=timeframe, enable_mtf=False, enable_wavelets=False)
+    per_day = pd.Timedelta("1D") // pd.Timedelta(timeframe)
+    raw = make_intraday_ohlcv(3 * per_day + engineer.warmup_bars(), seed=11, freq=timeframe)
+    raw = raw.reset_index()
+    first_midnight = int(np.flatnonzero(raw["datetime"].dt.hour.diff().lt(0).to_numpy())[0])
+    rng = np.random.default_rng(0)
+    starts = [first_midnight + 1, first_midnight + 7, *rng.integers(1, per_day, size=3)]
+    for start in starts:
+        assert _assert_kept_rows_match(engineer, raw, int(start)) > 100
+
+
+@pytest.mark.parametrize("timeframe", ["5min", "1min"])
+def test_gapped_sessions_match_full_history_for_any_start(timeframe: str) -> None:
+    """RTH-style sessions with overnight and weekend gaps, several start offsets."""
+    engineer = FeatureEngineer(timeframe=timeframe, enable_mtf=False, enable_wavelets=False)
+    per_day = pd.Timedelta("6h30min") // pd.Timedelta(timeframe)
+    n_days = engineer.warmup_bars() // per_day + 6
+    raw = _rth_bars(n_days, timeframe, seed=13)
+    rng = np.random.default_rng(1)
+    for start in [1, per_day - 3, per_day + 1, *rng.integers(1, 2 * per_day, size=2)]:
+        assert _assert_kept_rows_match(engineer, raw, int(start)) > 100
+
+
+def test_warmup_mask_needs_warmup_bars_and_a_covered_session() -> None:
     times = pd.Series(pd.date_range("2024-01-02 20:00", periods=12, freq="1h"))
-    # Bars 0-3 are on the first (partial) date; bar 4 still carries its lagged
-    # session value, so scoring starts at bar 5
-    np.testing.assert_array_equal(warmup_mask(times, 2, session_features=True), np.arange(12) >= 5)
-    np.testing.assert_array_equal(warmup_mask(times, 6, session_features=True), np.arange(12) >= 6)
-    np.testing.assert_array_equal(warmup_mask(times, 2, session_features=False), np.arange(12) >= 2)
+    # Bars 0-3 are on the first (partial) date; a row is kept once the bar
+    # session_lookback rows back is past it
+    np.testing.assert_array_equal(warmup_mask(times, 2, session_lookback=1), np.arange(12) >= 5)
+    np.testing.assert_array_equal(warmup_mask(times, 2, session_lookback=3), np.arange(12) >= 7)
+    np.testing.assert_array_equal(warmup_mask(times, 9, session_lookback=3), np.arange(12) >= 9)
+    np.testing.assert_array_equal(warmup_mask(times, 2, session_lookback=0), np.arange(12) >= 2)
 
 
-def test_warmup_covers_the_longest_mtf_timeframe() -> None:
-    base = FeatureEngineer(timeframe="5min", enable_mtf=False).warmup_bars()
+def test_session_lookback_covers_the_obv_moving_average() -> None:
+    engineer = FeatureEngineer(timeframe="5min", enable_mtf=False)
+    assert engineer.session_lookback_bars() == max(engineer.period_config["volume_sma"]) + 1
+    assert FeatureEngineer(enable_volume_features=False).session_lookback_bars() == 0
+
+
+def test_warmup_covers_mtf_timeframes_and_mtf_min_rows() -> None:
+    base = FeatureEngineer(timeframe="5min", enable_mtf=False)
     hourly = FeatureEngineer(timeframe="5min", enable_mtf=True, mtf_timeframes=["60min"])
     quarter = FeatureEngineer(timeframe="5min", enable_mtf=True, mtf_timeframes=["15min"])
-    assert hourly.warmup_bars() > quarter.warmup_bars() > base
-    assert hourly.warmup_bars() == 4 * (quarter.warmup_bars() - 1) + 1
+    assert hourly.warmup_bars() > quarter.warmup_bars() > base.warmup_bars()
+    # Below mtf_min_rows MTF features are not computed at all
+    assert quarter.warmup_bars() >= quarter.mtf_min_rows
+
+
+def test_warmup_tolerance_is_a_spec_field() -> None:
+    loose = FeatureEngineer(timeframe="5min", ewm_settle_tolerance=1e-2)
+    strict = FeatureEngineer(timeframe="5min", ewm_settle_tolerance=1e-4)
+    assert (
+        loose.warmup_bars() < FeatureEngineer(timeframe="5min").warmup_bars() < strict.warmup_bars()
+    )
+    assert FeatureEngineer.from_spec(loose.to_spec()).warmup_bars() == loose.warmup_bars()
 
 
 def test_regime_features_are_nan_until_warm() -> None:

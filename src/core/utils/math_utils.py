@@ -179,19 +179,41 @@ def ewm_settle_bars(alpha: float, tolerance: float = EWM_SETTLE_TOLERANCE) -> in
     return math.ceil(math.log(tolerance) / math.log1p(-alpha))
 
 
-def span_settle_bars(span: int) -> int:
+def span_alpha(span: int) -> float:
+    """Smoothing factor of an EWM with ``span`` (pandas / TA convention)."""
+    return 2.0 / (span + 1)
+
+
+def span_settle_bars(span: int, tolerance: float = EWM_SETTLE_TOLERANCE) -> int:
     """:func:`ewm_settle_bars` of an EWM with ``span`` (alpha = 2 / (span + 1))."""
-    return ewm_settle_bars(2.0 / (span + 1))
+    return ewm_settle_bars(span_alpha(span), tolerance)
 
 
-def wilder_settle_bars(period: int) -> int:
+def wilder_settle_bars(period: int, tolerance: float = EWM_SETTLE_TOLERANCE) -> int:
     """:func:`ewm_settle_bars` of Wilder smoothing over ``period`` (alpha = 1 / period)."""
-    return ewm_settle_bars(1.0 / period)
+    return ewm_settle_bars(1.0 / period, tolerance)
+
+
+def cascade_settle_bars(
+    inner_alpha: float, outer_alpha: float, tolerance: float = EWM_SETTLE_TOLERANCE
+) -> int:
+    """Bars until an EWM of an EWM (e.g. a MACD signal line) forgets its start.
+
+    The sum of both settling times: the inner EWM's start has faded after its
+    own settling time, and the outer EWM's memory of the inner error after its
+    own. A start error can be several times a feature's spread (an EMA starts
+    at the first price of the window), so this headroom over the tightest
+    geometric bound is what keeps such features within ``tolerance`` of their
+    spread, not just of their start error.
+    """
+    return ewm_settle_bars(inner_alpha, tolerance) + ewm_settle_bars(outer_alpha, tolerance)
 
 
 __all__ = [
     "EWM_SETTLE_TOLERANCE",
+    "cascade_settle_bars",
     "ewm_settle_bars",
+    "span_alpha",
     "span_settle_bars",
     "wilder_settle_bars",
     "safe_divide",

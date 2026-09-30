@@ -48,7 +48,7 @@ def apply_timeframe_budget(
     Example:
         >>> ranking = pd.Series({
         ...     'rsi_14_5min': 0.8, 'macd_line_5min': 0.6,
-        ...     'atr_14_5min': 0.4, 'bb_width_5min': 0.2,
+        ...     'atr_14_5min': 0.4, 'bb_position_5min': 0.2,
         ...     'rsi_14_15min': 0.7, 'macd_line_15min': 0.5,
         ...     'log_return': 0.9, 'adx_14': 0.85,
         ... })

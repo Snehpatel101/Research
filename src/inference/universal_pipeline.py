@@ -133,16 +133,19 @@ class UniversalInferencePipeline:
     # -----------------------------------------------------------------
 
     @classmethod
-    def from_bundle(cls, path: str | Path) -> UniversalInferencePipeline:
+    def from_bundle(
+        cls, path: str | Path, allow_engine_mismatch: bool = False
+    ) -> UniversalInferencePipeline:
         """Load a single ModelBundle from *path*.
 
         Args:
             path: Directory containing a saved ModelBundle.
+            allow_engine_mismatch: See ``ModelBundle.load``.
 
         Returns:
             Pipeline with one loaded bundle.
         """
-        bundle = ModelBundle.load(path)
+        bundle = ModelBundle.load(path, allow_engine_mismatch=allow_engine_mismatch)
         scaling = ScalingSource(bundle.metadata.scaling_source)
         return cls([bundle], scaling_source=scaling)
 
@@ -151,24 +154,32 @@ class UniversalInferencePipeline:
         cls,
         paths: list[str | Path],
         ensemble_path: str | Path | None = None,
+        allow_engine_mismatch: bool = False,
     ) -> UniversalInferencePipeline:
         """Load multiple ModelBundles (and optionally an EnsembleBundle).
 
         Args:
             paths: Directories for individual ModelBundles.
             ensemble_path: Optional directory for an EnsembleBundle.
+            allow_engine_mismatch: See ``ModelBundle.load``.
 
         Returns:
             Pipeline with multiple loaded bundles.
         """
-        bundles = [ModelBundle.load(p) for p in paths]
-        ens = EnsembleBundle.load(ensemble_path) if ensemble_path else None
+        allow = allow_engine_mismatch
+        bundles = [ModelBundle.load(p, allow_engine_mismatch=allow) for p in paths]
+        ens = (
+            EnsembleBundle.load(ensemble_path, allow_engine_mismatch=allow)
+            if ensemble_path
+            else None
+        )
         return cls(bundles, ensemble_bundle=ens)
 
     @classmethod
     def from_experiment(
         cls,
         config: PipelineConfig,
+        allow_engine_mismatch: bool = False,
     ) -> UniversalInferencePipeline:
         """Reconstruct pipeline from an experiment directory.
 
@@ -178,6 +189,7 @@ class UniversalInferencePipeline:
 
         Args:
             config: PipelineConfig whose *output_dir* contains bundles.
+            allow_engine_mismatch: See ``ModelBundle.load``.
 
         Returns:
             Pipeline loaded from the experiment.
@@ -198,10 +210,12 @@ class UniversalInferencePipeline:
             if info is None:
                 continue
             if info.kind == "ensemble":
-                ensemble_bundle = EnsembleBundle.load(child)
+                ensemble_bundle = EnsembleBundle.load(
+                    child, allow_engine_mismatch=allow_engine_mismatch
+                )
                 logger.info("Loaded ensemble bundle from %s", child)
             elif info.kind == "model":
-                bundles.append(ModelBundle.load(child))
+                bundles.append(ModelBundle.load(child, allow_engine_mismatch=allow_engine_mismatch))
             else:
                 # Regime / meta-labeling bundles are served by load_bundle();
                 # an ensemble over regime models still works via predict_ensemble

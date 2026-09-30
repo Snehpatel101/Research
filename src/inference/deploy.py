@@ -208,7 +208,7 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
     Checks:
     - manifest.json exists and parses
     - All referenced bundle paths exist
-    - Each bundle can be loaded (optional deep check)
+    - Every bundle's features come from this code's feature engine version
 
     Args:
         deploy_dir: Path to deploy directory.
@@ -216,6 +216,8 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
     Returns:
         Dict with 'valid' (bool) and 'issues' (list[str]).
     """
+    from src.inference.preprocessing_graph import check_bundle_engine_versions
+
     deploy_dir = Path(deploy_dir)
     issues: list[str] = []
 
@@ -238,6 +240,11 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
                 issues.append(
                     f"H{horizon}/{entry.model_name}: bundle not found at {entry.bundle_path}"
                 )
+                continue
+            try:
+                check_bundle_engine_versions(bundle_path)
+            except ValueError as e:
+                issues.append(f"H{horizon}/{entry.model_name}: {e}")
 
     return {
         "valid": len(issues) == 0,

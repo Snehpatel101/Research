@@ -154,7 +154,7 @@ def test_every_row_served_from_a_short_window_matches_full_history(
     # Exactly the bars the training warmup rule keeps are emitted
     graph = bundle.primary_bundle.preprocessing_graph
     assert graph is not None and graph.config.warmup_bars > 0
-    session = FeatureEngineer.from_spec(graph.config.feature_engineering).session_features
+    session = FeatureEngineer.from_spec(graph.config.feature_engineering).session_lookback_bars()
     kept = warmup_mask(pd.Series(window.index), graph.config.warmup_bars, session)
     assert list(served.index) == list(window.index[kept])
     assert len(served) > 300

@@ -51,7 +51,6 @@ FEATURE_PRIORITY: dict[str, int] = {
     "macd_crossover": 75,
     # Bollinger Bands - prefer derived metrics
     "bb_position": 90,  # Most useful - normalized position
-    "bb_width": 85,
     "bb_upper": 60,  # Raw values less useful
     "bb_lower": 60,
     # ATR - prefer percentage versions

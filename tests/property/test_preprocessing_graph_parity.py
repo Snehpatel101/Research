@@ -28,11 +28,11 @@ _SLOW_OK = {"deadline": None, "suppress_health_check": [HealthCheck.too_slow]}
 def _graph(enable_mtf: bool) -> PreprocessingGraph:
     """Graph over every feature the engineer produces (like a model trained on all of them)."""
     engineer = FeatureEngineer(enable_mtf=enable_mtf, mtf_min_rows=200)
-    warmup_frame = build_ohlcv(1200 if enable_mtf else 400, seed=0, vol=1e-3).reset_index()
+    warmup_frame = build_ohlcv(engineer.warmup_bars() + 200, seed=0, vol=1e-3).reset_index()
     features, _ = engineer.compute_features(warmup_frame)
     columns = [c for c in features.columns if c not in ("datetime", *OHLCV_COLUMNS)]
     return PreprocessingGraph.from_feature_pipeline(
-        {"bar_timeframe": "5min", "engineer": engineer.to_spec()}, feature_columns=columns
+        engineer.pipeline_record("5min"), feature_columns=columns
     )
 
 
@@ -85,10 +85,12 @@ def test_transform_on_prefix_equals_rows_of_full_transform(
     seed: int, vol: float, t_frac: float, datetime_column: bool, shuffle: int | None
 ) -> None:
     """transform(bars[:t+1]) == transform(bars)[rows up to t] (after warmup)."""
-    bars = build_ohlcv(400, seed=seed, vol=vol)
-    t = int(t_frac * len(bars))
+    graph = _graph(False)
+    warmup = graph.config.warmup_bars
+    bars = build_ohlcv(warmup + 200, seed=seed, vol=vol)
+    t = warmup + int(t_frac * 200)
 
-    _assert_prefix_matches_full(_graph(False), bars, t, datetime_column, shuffle)
+    _assert_prefix_matches_full(graph, bars, t, datetime_column, shuffle)
 
 
 @settings(budget(3, heavy=True), **_SLOW_OK)
@@ -98,7 +100,9 @@ def test_transform_on_prefix_equals_rows_of_full_transform(
 )
 def test_transform_prefix_parity_with_multi_timeframe_features(seed: int, t_frac: float) -> None:
     """Same parity with 15min / 60min MTF features enabled."""
-    bars = build_ohlcv(1200, seed=seed, vol=5e-4)
-    t = int(t_frac * len(bars))
+    graph = _graph(True)
+    warmup = graph.config.warmup_bars
+    bars = build_ohlcv(warmup + 200, seed=seed, vol=5e-4)
+    t = warmup + int(t_frac * 200)
 
-    _assert_prefix_matches_full(_graph(True), bars, t, datetime_column=False, shuffle=None)
+    _assert_prefix_matches_full(graph, bars, t, datetime_column=False, shuffle=None)

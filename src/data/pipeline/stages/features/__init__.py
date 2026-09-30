@@ -152,10 +152,8 @@ from .trend import (
 
 # Feature functions - Volatility
 from .volatility import (
-    ARCH_AVAILABLE,
     add_atr,
     add_bollinger_bands,
-    add_garch_features,
     add_garman_klass_volatility,
     add_higher_moments,
     add_historical_volatility,
@@ -233,8 +231,6 @@ __all__ = [
     "add_rogers_satchell_volatility",
     "add_yang_zhang_volatility",
     "add_higher_moments",
-    "add_garch_features",
-    "ARCH_AVAILABLE",
     # Volume
     "add_volume_features",
     "add_vwap",

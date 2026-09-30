@@ -53,7 +53,6 @@ BASELINE_VOLATILITY = [
     "bb_upper",
     "bb_middle",
     "bb_lower",
-    "bb_width",
     "bb_pct",
     "kc_upper",
     "kc_middle",
@@ -127,7 +126,6 @@ MTF_INDICATORS_15MIN = [
     "rsi_14_15min",
     "atr_14_15min",
     "macd_line_15min",
-    "bb_width_15min",
     "adx_14_15min",
 ]
 
@@ -135,7 +133,6 @@ MTF_INDICATORS_1H = [
     "rsi_14_1h",
     "atr_14_1h",
     "macd_line_1h",
-    "bb_width_1h",
     "adx_14_1h",
     "sma_50_1h",
     "ema_21_1h",

@@ -767,6 +767,34 @@ class MLFactory:
                 f"{train_end}). Clean the raw bars (gaps, NaN prices) and rerun."
             )
 
+    @staticmethod
+    def _check_feature_warmup(engineer: Any, n_bars: int, bar_timeframe: str) -> None:
+        """Fail before feature engineering when the warmup would leave no training rows.
+
+        Every bar before ``engineer.warmup_bars()`` is dropped (its features
+        still depend on where the data starts), the same rule serving applies.
+        """
+        warmup = engineer.warmup_bars()
+        if n_bars > warmup:
+            return
+        hint = "pass more data"
+        if engineer.enable_mtf:
+            from src.core.common.timeframes import get_timeframe_minutes
+            from src.data.pipeline.stages.features.engineer import FeatureEngineer
+
+            without_mtf = FeatureEngineer.from_spec({**engineer.to_spec(), "enable_mtf": False})
+            base = get_timeframe_minutes(bar_timeframe)
+            higher = [t for t in engineer.mtf_timeframes if get_timeframe_minutes(t) > base]
+            hint = (
+                f"MTF features ({'/'.join(higher)}) need ≈{warmup} bars, "
+                f"≈{without_mtf.warmup_bars()} without them; pass --no-mtf "
+                "(data.mtf.enabled=False) or more data"
+            )
+        raise ValueError(
+            f"{n_bars} {bar_timeframe} bars < feature warmup {warmup} bars, so no bar would "
+            f"keep history-independent features: {hint}."
+        )
+
     def _resolve_frac_diff(self, raw_df: pd.DataFrame) -> dict[str, Any]:
         """FeatureEngineer kwargs for the fractional-differentiation features.
 
@@ -1039,6 +1067,7 @@ class MLFactory:
         self._feature_pipeline = engineer.pipeline_record(bar_timeframe)
         if event_spec is not None:
             self._feature_pipeline["event_sampling"] = event_spec.to_dict()
+        self._check_feature_warmup(engineer, len(df_for_features), bar_timeframe)
         df_features, _report = engineer.engineer_features(
             df_for_features,
             symbol=self.config.data.symbol,

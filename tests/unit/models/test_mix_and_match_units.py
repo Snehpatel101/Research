@@ -130,7 +130,7 @@ def test_feature_engineer_spec_round_trips() -> None:
     assert rebuilt.period_config == engineer.period_config
 
 
-# Default engineer (MTF on 15min/60min): ~1900 bars of warmup, then scored bars
+# Default engineer (MTF on 15min/60min): ~1,500 bars of warmup, then scored bars
 N_BARS = 2500
 
 

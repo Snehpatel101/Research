@@ -132,7 +132,6 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "hvol_",
             "parkinson_",
             "garman_",
-            "bb_width",
             # Volume features
             "volume_",
             "obv",
@@ -409,7 +408,6 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "gk_vol",
             "rs_vol",
             "yz_vol",
-            "bb_width",
             "kc_",
             # Higher moments (related to vol clustering)
             "return_skew_",
@@ -482,7 +480,6 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "atr_",
             "hvol_",
             "bb_position",
-            "bb_width",
             "close_bb_zscore",
             "kc_position",
             "close_kc_atr_dev",
@@ -677,7 +674,6 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "parkinson_",
             "garman_",
             "bb_position",
-            "bb_width",
             "kc_position",
             # Volume analysis
             "volume_",

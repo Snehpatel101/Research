@@ -124,11 +124,13 @@ class PreprocessingGraphConfig:
 
     def compute_hash(self) -> str:
         """Hash of the configuration (excluding timestamps) for validation."""
-        hash_data = self.to_dict()
-        hash_data.pop("created_at", None)
-        hash_data.pop("config_hash", None)
-        hash_str = json.dumps(hash_data, sort_keys=True)
-        return hashlib.sha256(hash_str.encode()).hexdigest()[:16]
+        return hash_graph_dict(self.to_dict())
+
+
+def hash_graph_dict(data: dict[str, Any]) -> str:
+    """Hash of a serialized graph configuration, ignoring its timestamp and stored hash."""
+    hash_data = {k: v for k, v in data.items() if k not in ("created_at", "config_hash")}
+    return hashlib.sha256(json.dumps(hash_data, sort_keys=True).encode()).hexdigest()[:16]
 
 
 class PreprocessingGraph:
@@ -243,12 +245,11 @@ class PreprocessingGraph:
 
         engineer = FeatureEngineer.from_spec(self.config.feature_engineering)
         # The warmup rule training applied (engineer_features)
-        keep = warmup_mask(df["datetime"], self.config.warmup_bars, engineer.session_features)
+        session_lookback = engineer.session_lookback_bars()
+        keep = warmup_mask(df["datetime"], self.config.warmup_bars, session_lookback)
         if int(keep.sum()) < min_rows:
             raise ValueError(
-                self._too_little_history(
-                    n_raw, source_tf, len(df), engineer.session_features, min_rows
-                )
+                self._too_little_history(n_raw, source_tf, len(df), session_lookback, min_rows)
             )
         df, _stats = engineer.compute_features(df)
         df = df[keep].set_index("datetime")
@@ -267,9 +268,7 @@ class PreprocessingGraph:
         df = df.dropna()
         if len(df) < min_rows:
             raise ValueError(
-                self._too_little_history(
-                    n_raw, source_tf, len(keep), engineer.session_features, min_rows
-                )
+                self._too_little_history(n_raw, source_tf, len(keep), session_lookback, min_rows)
             )
 
         if not skip_scaling and self._scaler is not None:
@@ -283,7 +282,7 @@ class PreprocessingGraph:
         n_raw: int,
         source_tf: str | None,
         n_bars: int,
-        session_features: bool,
+        session_lookback: int,
         min_rows: int,
     ) -> str:
         """Why no row can be served, and how many raw bars would be enough."""
@@ -299,9 +298,9 @@ class PreprocessingGraph:
             )
         raw_tf = source_tf or bar_tf
         session = (
-            " and a complete session before the first scored bar (the input's first "
-            "calendar date may be partial, so neither its bars nor the next bar are scored)"
-            if session_features
+            f", and its last {session_lookback} bars past the input's first calendar "
+            "date (UTC; that session may be partial)"
+            if session_lookback
             else ""
         )
         return (
@@ -405,10 +404,19 @@ class PreprocessingGraph:
         if not path.exists():
             raise FileNotFoundError(f"Preprocessing graph not found at {path}")
         with open(path) as f:
-            config = PreprocessingGraphConfig.from_dict(json.load(f))
+            data = json.load(f)
+        config = PreprocessingGraphConfig.from_dict(data)
         check_engine_version(config.feature_engine_version, path, allow_engine_mismatch)
+        if "warmup_bars" not in data:
+            # Graph from before the warmup rule (served only when explicitly
+            # allowed): apply this engine's warmup for its spec
+            from src.data.pipeline.stages.features.engineer import FeatureEngineer
 
-        expected_hash = config.compute_hash()
+            config.warmup_bars = FeatureEngineer.from_spec(config.feature_engineering).warmup_bars()
+
+        # Hash what is on disk, so fields added since it was written do not
+        # read as tampering
+        expected_hash = hash_graph_dict(data)
         if config.config_hash and config.config_hash != expected_hash:
             logger.warning(
                 f"Preprocessing graph hash mismatch (expected {expected_hash}, got "
@@ -492,10 +500,25 @@ def check_engine_version(built: int | None, source: Path | str, allow_mismatch: 
 # Constants for bundle integration
 PREPROCESSING_GRAPH_FILE = "preprocessing_graph.json"
 
+
+def check_bundle_engine_versions(bundle_dir: Path | str, allow_mismatch: bool = False) -> None:
+    """Apply :func:`check_engine_version` to every preprocessing graph in a bundle directory.
+
+    Covers nested bundles (regime members, a meta-labeling primary) without
+    loading any model.
+    """
+    for graph_path in sorted(Path(bundle_dir).rglob(PREPROCESSING_GRAPH_FILE)):
+        with open(graph_path) as f:
+            built = json.load(f).get("feature_engine_version")
+        check_engine_version(built, graph_path, allow_mismatch)
+
+
 __all__ = [
     "PreprocessingGraph",
     "PreprocessingGraphConfig",
     "PREPROCESSING_GRAPH_VERSION",
     "PREPROCESSING_GRAPH_FILE",
+    "check_bundle_engine_versions",
     "check_engine_version",
+    "hash_graph_dict",
 ]

@@ -165,6 +165,8 @@ See **COMPLETION.md** for full task details and implementation information.
 | 12 | Docs site (mkdocs-material + mkdocstrings, `make docs` strict, CI `docs` job), generated config/CLI pages (`scripts/gen_{config,cli}_docs.py`, stale check in CI), link checker, `examples/` (3 scripts, CPU minutes), 46 process docs archived to `docs/archive/`, `docs/MIX_AND_MATCH.md` regenerated (the matrix itself is not rerun in CI: it takes hours) | `docs/`, `mkdocs.yml`, `examples/`, `scripts/`, `.github/workflows/ci.yml` | 🔄 review |
 | 13 | CI hardening: 3.11/3.12 matrix, wheel build + import smoke, `uv lock --check`, dependabot | `.github/` | ⬜ |
 | 14 | DIRECTION.md rewrite; final adversarial review; full mix-and-match sweep; land on `main`; delete merged agent branches | root | ⬜ |
+| 15 | Serve parity: meta-labeling parity tests; history-independent OBV/wavelets; one warmup rule for train + serve (`warmup_mask`, `FeatureEngineer.warmup_bars`, session lookback); `FEATURE_ENGINE_VERSION` recorded in bundles and enforced at load; clear too-little-history errors; GARCH + constant `bb_width` removed | `src/data/pipeline/stages/features/`, `src/inference/`, `src/factory.py`, `tests/unit/features/test_history_independent_features.py`, `tests/unit/inference/test_serving_guards.py`, `tests/e2e/test_meta_labeling_serve_parity.py` | 🔄 review fixes |
+| 16 | Follow-up: sessions are calendar dates of the (naive UTC) timestamps; use exchange session opens (e.g. CME 17:00/18:00 ET) for session-reset features and the warmup session rule | `src/data/pipeline/stages/features/volume.py`, `engineer.warmup_mask` | ⬜ |
 
 **Verify:** `make check`; `pytest -m slow -n 2`; `python scripts/mix_match.py <kind> --resume` for every kind.
 

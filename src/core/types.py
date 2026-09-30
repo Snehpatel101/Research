@@ -79,7 +79,7 @@ class FeatureFamily(StrEnum):
     - RAW: 5 (open, high, low, close, volume)
     - MOMENTUM: 23 (RSI, MACD, Stochastic, etc.)
     - MOVING_AVERAGE: 16 (SMA, EMA, crossovers)
-    - VOLATILITY: 25 (ATR, BB, Keltner, GARCH)
+    - VOLATILITY: 25 (ATR, BB, Keltner, range estimators)
     - VOLUME: 15 (OBV, VWAP, TWAP)
     - TREND: 6 (ADX, Supertrend)
     - PRICE: 12 (returns, ratios, autocorr)

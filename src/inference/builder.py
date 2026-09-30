@@ -199,7 +199,7 @@ class BundleBuilder:
         Args:
             config: PipelineConfig instance - THE single source of truth
             feature_pipeline: Raw-OHLCV -> features recipe recorded by training
-                (``{"bar_timeframe": ..., "engineer": FeatureEngineer.to_spec()}``).
+                (``FeatureEngineer.pipeline_record()``).
                 Required for bundles that can predict from raw OHLCV.
         """
         self.config = config

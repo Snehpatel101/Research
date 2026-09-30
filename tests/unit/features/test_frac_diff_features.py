@@ -188,7 +188,7 @@ def test_preprocessing_graph_replays_the_recorded_d_at_inference(
     columns = ["ffd_log_close", "ffd_log_low"]
 
     graph = PreprocessingGraph.from_feature_pipeline(
-        {"bar_timeframe": "5min", "engineer": engineer.to_spec()}, feature_columns=columns
+        engineer.pipeline_record("5min"), feature_columns=columns
     )
     path = tmp_path / "graph.json"
     graph.save(path)
@@ -196,7 +196,7 @@ def test_preprocessing_graph_replays_the_recorded_d_at_inference(
 
     served = PreprocessingGraph.load(path).transform(raw_bars, skip_scaling=True)
     common = served.index.intersection(trained.index)
-    assert len(common) > 500
+    assert len(common) > 400  # every bar past the warmup rule
     np.testing.assert_allclose(
         served.loc[common, columns].to_numpy(float),
         trained.loc[common, columns].to_numpy(float),
