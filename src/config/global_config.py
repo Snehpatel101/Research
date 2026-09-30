@@ -1,5 +1,5 @@
 """
-GlobalConfig - typed view of config/global.yaml.
+GlobalConfig - typed view of src/config/global.yaml (shipped as package data).
 
 Holds only sections that code actually reads: via ``get_config_value()``
 (TrainerConfig field defaults) or ``get_global_config()``
@@ -250,7 +250,7 @@ def load_global_config(
     path: Path | str | None = None,
 ) -> GlobalConfig:
     if path is None:
-        path = Path(__file__).parent.parent.parent / "config" / "global.yaml"
+        path = Path(__file__).parent / "global.yaml"
     return GlobalConfig.from_yaml(path)
 
 

@@ -99,7 +99,7 @@ build it with `make docs` (strict: any warning fails).
 ## Development
 
 ```bash
-make check     # ruff, black --check, pyright (0 errors), vulture, fast tests
+make check     # uv lock --check, ruff, black --check, pyright (0 errors), vulture, fast tests
 make test      # full suite incl. slow end-to-end tests
 make docs      # regenerate-check + strict docs build
 make matrix    # full mix-and-match matrix (hours)

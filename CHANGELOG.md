@@ -18,6 +18,14 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   positions, derived purge/embargo, exact PSR/DSR, CSCV PBO, CPCV path assembly.
 - CI on uv (ruff, black, pyright, vulture, fast tests; weekly slow tests),
   `make check`, pre-commit, `slow` test marker.
+- CI hardening: fast tests on Python 3.11 and 3.12, `uv lock --check`,
+  packaging smoke job (sdist + wheel built, wheel installed into a fresh venv,
+  every module imported, all 21 models registered, CLI run; `make
+  wheel-smoke`), every CI and `make install` environment pinned to `uv.lock`
+  (`scripts/lock_constraints.sh`, CPU torch at the locked version), uv pinned
+  via `[tool.uv] required-version`, Dependabot for Actions, uv (lockfile-only)
+  and pre-commit hooks (weekly, minor/patch grouped), read-only token, job
+  timeouts, superseded PR runs cancelled (never runs on main).
 - Documentation site (mkdocs-material + mkdocstrings, `make docs` /
   `make docs-serve`, `docs` extra, CI `docs` job with `--strict`): getting
   started, concepts (the methodology and why each piece exists), mix and match,
@@ -53,8 +61,15 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
 - The pre-training leakage check ignores invalid-label (-99) rows, and
   `UnifiedDataPreparation.prepare` no longer warns about them (they are dropped
   by `filter_invalid_labels`).
+- Packaging metadata: SPDX `license = "MIT"` + `license-files` (PEP 639,
+  setuptools>=77); the sdist ships the package, README, LICENSE and CHANGELOG
+  only (no tests, scripts, docs or project notes). The unused path constants
+  (`src/core/paths.py`, `src/models/config/paths.py`) are deleted.
 
 ### Fixed
+- A wheel install shipped without `config/global.yaml` (it lived outside the
+  package), so every process-wide default fell back to its hard-coded value;
+  the file moved to `src/config/global.yaml` and ships as package data.
 - Backtest filled at the open of the bar whose close produced the signal
   (lookahead); circuit breakers ended the simulation; label costs were in
   dollars instead of price points.

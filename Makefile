@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-quick test-slow lint format type-check dead-code check docs docs-gen docs-check docs-serve examples matrix pre-commit clean
+.PHONY: help constraints install install-dev test test-quick test-slow lint format type-check dead-code lock-check wheel-smoke check docs docs-gen docs-check docs-serve examples matrix pre-commit clean
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -6,13 +6,16 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install: ## Create .venv (Python 3.11, CPU torch) and install the package
+constraints: ## Export uv.lock as pip constraints (constraints.txt) for the CPU-torch installs
+	bash scripts/lock_constraints.sh > constraints.txt
+
+install: constraints ## Create .venv (Python 3.11, CPU torch) and install the package, pinned to uv.lock
 	uv venv .venv --python 3.11
-	uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-	uv pip install -e .
+	uv pip install torch --index-url https://download.pytorch.org/whl/cpu -c constraints.txt
+	uv pip install -e . -c constraints.txt
 
 install-dev: install ## Install with development dependencies + git hooks
-	uv pip install -e ".[dev,stats,docs]"
+	uv pip install -e ".[dev,stats,docs]" -c constraints.txt
 	pre-commit install
 
 test: ## Run the full test suite (incl. slow end-to-end tests)
@@ -36,7 +39,14 @@ type-check: ## Run pyright (must report 0 errors)
 dead-code: ## Report unused code (vulture, config in pyproject)
 	vulture
 
-check: ## Everything CI runs: lint, format, types, dead code, fast tests
+lock-check: ## Fail if uv.lock is out of date with pyproject.toml (run `uv lock` to refresh)
+	uv lock --check
+
+wheel-smoke: ## Build sdist + wheel, install the wheel into a fresh venv, import every module
+	bash scripts/wheel_smoke.sh
+
+check: ## Everything the CI checks job runs: lock, lint, format, types, dead code, fast tests
+	uv lock --check
 	ruff check src/ tests/ scripts/
 	black --check src/ tests/ scripts/
 	pyright

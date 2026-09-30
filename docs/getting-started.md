@@ -138,7 +138,7 @@ OMP_NUM_THREADS=1 python examples/01_quickstart.py
 ## Development checks
 
 ```bash
-make check        # ruff, black --check, pyright (0 errors), vulture, fast tests
+make check        # uv lock --check, ruff, black --check, pyright (0 errors), vulture, fast tests
 make test         # full suite incl. slow end-to-end tests
 make docs         # build this site with --strict
 make matrix       # the full mix-and-match verification matrix (hours)
