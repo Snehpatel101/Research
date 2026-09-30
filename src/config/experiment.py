@@ -751,6 +751,7 @@ class ExperimentConfig:
             optimize_hyperparams=_do_optimize,
             optimize_labels=_do_optimize,
             optimize_features=self.data.features.selection_enabled,
+            mtf_max_per_timeframe=self.data.features.mtf_max_per_timeframe,
             # Optuna trial counts - all driven by OptunaConfig.n_trials
             hyperparam_trials=self.training.optuna.n_trials,
             label_optimization_trials=self.training.optuna.n_trials,

@@ -63,7 +63,8 @@ Feature configuration. (`src.config.data.FeatureConfig`)
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `selection_enabled` | `bool` | `True` | Run train-only MDA feature selection per model. |
+| `selection_enabled` | `bool` | `True` | Run train-only MDA feature selection per model. Off = every model trains on every feature (a model whose contract caps the feature count below that then fails contract validation). |
+| `mtf_max_per_timeframe` | `int \| None` | `None` | Opt-in timeframe budget: after the MDA ranking, keep at most this many features of each higher timeframe in ``data.mtf.timeframes`` (the top-ranked ones; base-timeframe features are untouched), before decorrelation and the per-model cut. Limits near-duplicate MTF columns (e.g. ``sma_20_15m`` / ``ema_21_15m``). None (default) = no budget. |
 | `governance` | `FeatureGovernanceConfig` | see below | Opt-in stability / label-perturbation / registry diagnostics. See [`data.features.governance`](#datafeaturesgovernance). |
 | `frac_diff` | `FracDiffConfig` | see below | Fractionally differentiated log-price features (opt-in) See [`data.features.frac_diff`](#datafeaturesfrac_diff). |
 
@@ -263,6 +264,7 @@ data:
   bar_timeframe: null
   features:
     selection_enabled: true
+    mtf_max_per_timeframe: null
     governance:
       report: false
       bootstrap_stability: true

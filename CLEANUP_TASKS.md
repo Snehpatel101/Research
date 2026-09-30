@@ -164,6 +164,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 11 | Import-cycle break (lazy facades, DECISIONS #10) + package rename `src` → `mlfactory`, public API, entry-point model registry | package-wide | ⬜ |
 | 12 | Docs site (mkdocs-material + mkdocstrings, `make docs` strict, CI `docs` job), generated config/CLI pages (`scripts/gen_{config,cli}_docs.py`, stale check in CI), link checker, `examples/` (3 scripts, CPU minutes), 46 process docs archived to `docs/archive/`, `docs/MIX_AND_MATCH.md` regenerated (the matrix itself is not rerun in CI: it takes hours) | `docs/`, `mkdocs.yml`, `examples/`, `scripts/`, `.github/workflows/ci.yml` | 🔄 review |
 | 13 | CI hardening: 3.11/3.12 matrix, wheel build + import smoke, `uv lock --check`, dependabot | `.github/` | ⬜ |
+| 15 | Feature-selection switches reachable from config or removed: `data.features.mtf_max_per_timeframe` (timeframe budget on the generator's `_15m`/`_1h` suffixes, opt-in), `selection_enabled=False` honored by the orchestrator, `regime_selection.py` + `regime_conditional` deleted (in-sample MDA) | `src/config/data.py`, `src/core/config.py`, `src/models/training/feature_selection.py`, `src/optimization/feature_selection/timeframe_budget.py`, `tests/integration/test_feature_selection_switches.py` | ✅ |
 | 14 | DIRECTION.md rewrite; final adversarial review; full mix-and-match sweep; land on `main`; delete merged agent branches | root | ⬜ |
 
 **Verify:** `make check`; `pytest -m slow -n 2`; `python scripts/mix_match.py <kind> --resume` for every kind.

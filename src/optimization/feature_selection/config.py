@@ -139,8 +139,6 @@ class FeatureSelectionConfig:
     mda_n_repeats: int = 5
     use_clustered_importance: bool = False
     max_clusters: int = 20
-    mtf_max_per_timeframe: int = 8
-    regime_conditional: bool = False
     random_state: int = 42
     model_family: str | None = None
 
@@ -230,8 +228,6 @@ class FeatureSelectionConfig:
             "mda_n_repeats": self.mda_n_repeats,
             "use_clustered_importance": self.use_clustered_importance,
             "max_clusters": self.max_clusters,
-            "mtf_max_per_timeframe": self.mtf_max_per_timeframe,
-            "regime_conditional": self.regime_conditional,
             "random_state": self.random_state,
             "model_family": self.model_family,
             "selected_features": self._selected_features,

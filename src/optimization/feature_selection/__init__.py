@@ -90,9 +90,6 @@ from .priority import (
     get_feature_priority,
 )
 
-# Regime-conditional selection
-from .regime_selection import compute_regime_importance
-
 # Feature registry with persistence
 from .registry import FeatureRecord, FeatureRegistry, RunUpdate
 from .result import (
@@ -104,7 +101,7 @@ from .result import (
 from .robustness_scoring import RobustnessScorer
 
 # Timeframe budget for MTF feature competition
-from .timeframe_budget import MTF_SUFFIXES, apply_timeframe_budget
+from .timeframe_budget import apply_timeframe_budget
 
 # Walk-forward selectors - minimal external dependencies
 from .walk_forward import (
@@ -167,8 +164,6 @@ __all__ = [
     "DEFAULT_PRIORITY",
     "FEATURE_PRIORITY",
     "get_feature_priority",
-    # Regime-conditional selection
-    "compute_regime_importance",
     # Feature lifecycle
     "FeatureLifecycleState",
     # Feature registry
@@ -186,6 +181,5 @@ __all__ = [
     # Robustness scoring
     "RobustnessScorer",
     # Timeframe budget
-    "MTF_SUFFIXES",
     "apply_timeframe_budget",
 ]

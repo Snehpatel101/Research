@@ -116,7 +116,10 @@ real deployments; B if standard mode is what you actually ship.
 (in `src/optimization/feature_selection/`) and `ticker_portability.py`
 (in `src/validation/`). Only their own tests import them — the live
 feature-selection pipeline never calls any of them. (By contrast, the Phase
-98–99 pieces — timeframe budget, regime blend, robustness scoring — ARE wired.)
+98–99 pieces — timeframe budget, regime blend, robustness scoring — ARE wired.
+Phase 117 correction: the budget and regime blend read a `feature_selection`
+attribute PipelineConfig never had, so neither ran; the budget is now
+`data.features.mtf_max_per_timeframe`, the regime blend is deleted.)
 
 **Options:**
 - **A. Wire the useful ones** into `_run_feature_selection_pipeline()` as
