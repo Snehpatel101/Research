@@ -40,6 +40,20 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(getattr(pytest.mark, _LAYERS[parts[0]]))
 
 
+@pytest.fixture(autouse=True)
+def plain_wide_console(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rich renders CLI help; pin plain, wide output so CI terminals match local runs.
+
+    GitHub Actions (GITHUB_ACTIONS / FORCE_COLOR) makes Rich color and wrap option
+    names, which breaks every test that looks for an option in ``--help``.
+    """
+    for name in ("GITHUB_ACTIONS", "FORCE_COLOR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setenv("COLUMNS", "200")
+
+
 @pytest.fixture
 def sample_prices() -> pd.DataFrame:
     """
