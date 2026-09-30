@@ -578,18 +578,18 @@ class TestFeatureGovernanceInternals:
         assert json.loads(reg.read_text()) == before
 
     def test_checkpoint_hash_ignores_governance_settings_only(self) -> None:
-        from src.core.checkpoint import compute_config_hash
-
+        # Checkpoints are keyed by ExperimentConfig.config_hash()
         cfg = ExperimentConfig(run_id="fixed")
-        base = compute_config_hash(cfg)
+        base = cfg.config_hash()
         cfg.data.features.governance.report = True
         cfg.data.features.governance.n_bootstrap = 20
-        assert compute_config_hash(cfg) == base, "diagnostics must not invalidate checkpoints"
+        cfg.data.features.governance.registry_path = "elsewhere/registry.json"
+        assert cfg.config_hash() == base, "diagnostics must not invalidate checkpoints"
         cfg.data.features.selection_enabled = False
-        assert compute_config_hash(cfg) != base
+        assert cfg.config_hash() != base
         cfg.data.features.selection_enabled = True
         cfg.training.n_splits += 1
-        assert compute_config_hash(cfg) != base
+        assert cfg.config_hash() != base
 
 
 # ---------------------------------------------------------------------------

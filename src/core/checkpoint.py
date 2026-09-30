@@ -35,11 +35,8 @@ Example:
 
 from __future__ import annotations
 
-import copy
-import hashlib
 import json
 import logging
-import pickle
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -280,29 +277,26 @@ class PipelineCheckpointManager:
             return 0
         return state.stage_index + 1
 
-    def validate_config(self, current_hash: str) -> bool:
+    def validate_config(self, *accepted_hashes: str) -> bool:
         """
-        Check if current config matches checkpoint config.
+        Check if the checkpoint was written under one of ``accepted_hashes``.
 
         Args:
-            current_hash: Hash of current configuration
+            accepted_hashes: Config hashes a resume may continue from (the
+                current one, plus any legacy form of it)
 
         Returns:
-            True if configs match, False if different or no checkpoint
-
-        Note:
-            If configs don't match, you should typically clear checkpoints
-            and start fresh to avoid mixing incompatible states.
+            True if the checkpoint hash is accepted (or there is no checkpoint)
         """
         state = self.load_latest()
         if state is None:
             return True  # No checkpoint, any config is valid
 
-        matches = state.config_hash == current_hash
+        matches = state.config_hash in accepted_hashes
         if not matches:
             logger.warning(
                 f"Config mismatch: checkpoint has {state.config_hash[:8]}..., "
-                f"current is {current_hash[:8]}..."
+                f"current is {accepted_hashes[0][:8] if accepted_hashes else '?'}..."
             )
         return matches
 
@@ -363,67 +357,7 @@ class PipelineCheckpointManager:
         return None
 
 
-# Config paths that only steer read-only diagnostics: they never change the data,
-# features, labels or models, so changing them must not invalidate a checkpoint.
-HASH_EXCLUDED_PATHS: tuple[tuple[str, ...], ...] = (("data", "features", "governance"),)
-
-
-def _without_diagnostic_settings(config_dict: dict[str, Any]) -> dict[str, Any]:
-    """Copy of ``config_dict`` minus the ``HASH_EXCLUDED_PATHS`` entries."""
-    pruned = copy.deepcopy(config_dict)
-    for path in HASH_EXCLUDED_PATHS:
-        node: Any = pruned
-        for key in path[:-1]:
-            node = node.get(key) if isinstance(node, dict) else None
-        if isinstance(node, dict):
-            node.pop(path[-1], None)
-    return pruned
-
-
-def compute_config_hash(config: Any) -> str:
-    """
-    Compute a hash of a configuration object.
-
-    Diagnostics-only settings (``HASH_EXCLUDED_PATHS``, e.g. the feature-governance
-    report) are left out of the hash.
-
-    Args:
-        config: Configuration object (must be pickle-able or have to_dict())
-
-    Returns:
-        SHA256 hash of the configuration
-
-    Example:
-        hash1 = compute_config_hash(config)
-        # ... later ...
-        if compute_config_hash(config) != hash1:
-            print("Config has changed!")
-    """
-    try:
-        # Try to use to_dict if available (for dataclasses)
-        if hasattr(config, "to_dict"):
-            config_bytes = json.dumps(
-                _without_diagnostic_settings(config.to_dict()), sort_keys=True
-            ).encode()
-        elif hasattr(config, "__dict__"):
-            # For regular objects, use __dict__
-            config_bytes = json.dumps(
-                {k: str(v) for k, v in config.__dict__.items()},
-                sort_keys=True,
-            ).encode()
-        else:
-            # Fall back to pickle
-            config_bytes = pickle.dumps(config)
-
-        return hashlib.sha256(config_bytes).hexdigest()
-    except Exception as e:
-        logger.warning(f"Failed to compute config hash: {e}")
-        # Return a random hash to force fresh run
-        return hashlib.sha256(str(datetime.now()).encode()).hexdigest()
-
-
 __all__ = [
     "CheckpointState",
     "PipelineCheckpointManager",
-    "compute_config_hash",
 ]

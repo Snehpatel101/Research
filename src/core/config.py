@@ -50,7 +50,6 @@ from src.core.constants import (
     DEFAULT_MIN_FEATURES,
     DEFAULT_MTF_TIMEFRAMES,
     DEFAULT_N_SPLITS,
-    DEFAULT_OPTUNA_RANDOM_STATE,
     DEFAULT_OPTUNA_TIMEOUT,
     DEFAULT_PURGE_BARS,
     DEFAULT_SPLIT_RATIOS,
@@ -63,6 +62,9 @@ logger = logging.getLogger(__name__)
 
 # Training sample-weighting schemes (see PipelineConfig.sample_weighting)
 SAMPLE_WEIGHTING_MODES = ("uniqueness", "none")
+# Experiment-tracking backends: "none" (no tracker), "local" (JSON files, no
+# dependencies), "mlflow" (optional extra: pip install '.[mlflow]')
+TRACKING_BACKENDS = ("none", "local", "mlflow")
 
 
 @dataclass
@@ -233,8 +235,7 @@ class PipelineConfig:
     optimize_hyperparams: bool = True
     hyperparam_trials: int = DEFAULT_HYPERPARAM_TRIALS  # 100
 
-    # Optuna settings
-    optuna_random_state: int = DEFAULT_OPTUNA_RANDOM_STATE  # 42
+    # Optuna settings (samplers are seeded with random_state)
     # Wall-clock cap for each Optuna study (seconds). None/0 = unbounded.
     optuna_timeout: int | None = DEFAULT_OPTUNA_TIMEOUT  # 43200 = 12h
     optuna_metric: str = "f1_weighted"  # Optimization metric (from OptunaConfig.metric)
@@ -341,10 +342,23 @@ class PipelineConfig:
     # MISC CONFIGURATION
     # =========================================================================
 
-    random_state: int = 42  # Global random seed
+    # Global seed: models' random_state / random_seed, Optuna samplers, feature
+    # selection, meta-learners
+    random_state: int = 42
+    deterministic: bool = False  # deterministic torch kernels (slower on GPU)
     n_jobs: int = -1  # Use all available cores (-1 = auto-detect)
     verbose: int = 1  # Logging verbosity (0=silent, 1=progress, 2=debug)
     n_classes: int = 3  # Number of classes (2 for binary, 3 for standard)
+
+    # =========================================================================
+    # EXPERIMENT TRACKING (ExperimentConfig.tracking)
+    # =========================================================================
+
+    tracking_backend: str = "none"  # "none", "local", "mlflow"
+    tracking_uri: str | None = None  # local: directory; mlflow: server URI / store
+    tracking_experiment: str | None = None  # tracker experiment name
+    # The factory's parent run: each trained model logs a child run under it
+    tracking_parent_run_id: str | None = None
 
     # =========================================================================
     # INTERNAL (set automatically)
@@ -418,6 +432,14 @@ class PipelineConfig:
                 field="sample_weighting",
                 expected=list(SAMPLE_WEIGHTING_MODES),
                 actual=self.sample_weighting,
+            )
+
+        if self.tracking_backend not in TRACKING_BACKENDS:
+            raise ValidationError(
+                f"Invalid tracking_backend: {self.tracking_backend}",
+                field="tracking_backend",
+                expected=list(TRACKING_BACKENDS),
+                actual=self.tracking_backend,
             )
 
         # Validate horizons

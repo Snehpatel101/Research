@@ -37,6 +37,7 @@ nav:
       - Configuration: configuration.md
       - CLI: cli.md
       - Deploy and serve: deploy-and-serve.md
+      - Reproducibility and tracking: reproducibility.md
       - Examples: examples.md
       - Colab notebook: USER_GUIDE.md
       - Remote validation: REMOTE_VALIDATION.md

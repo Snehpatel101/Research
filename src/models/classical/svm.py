@@ -19,7 +19,11 @@ from sklearn.svm import SVC
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
-from ..common import map_classes_to_labels, map_labels_to_classes
+from ..common import (
+    full_class_probabilities,
+    map_classes_to_labels,
+    map_labels_to_classes,
+)
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -202,6 +206,9 @@ class SVMModel(BaseModel):
             decision = self._model.decision_function(X)
             exp_decision = np.exp(decision - decision.max(axis=1, keepdims=True))
             probabilities = exp_decision / exp_decision.sum(axis=1, keepdims=True)
+        probabilities = full_class_probabilities(
+            probabilities, self._model.classes_, self._n_classes
+        )
 
         class_predictions_sk = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_sklearn(class_predictions_sk)
@@ -222,15 +229,7 @@ class SVMModel(BaseModel):
         if self._model is None:
             raise RuntimeError("Model is not fitted")
 
-        if hasattr(self._model, "predict_proba"):
-            result: np.ndarray = self._model.predict_proba(X)
-            return result
-        else:
-            # Fallback using decision function
-            decision = self._model.decision_function(X)
-            exp_decision = np.exp(decision - decision.max(axis=1, keepdims=True))
-            result_fallback: np.ndarray = exp_decision / exp_decision.sum(axis=1, keepdims=True)
-            return result_fallback
+        return self.predict(X).class_probabilities
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""

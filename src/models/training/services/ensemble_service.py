@@ -475,7 +475,10 @@ class EnsembleService:
             )
 
             # 2. Evaluation fit (early stopping on a purged meta-train tail)
-            meta_learner = get_meta_learner(config.meta_learner, n_classes=n_classes)
+            seed = int(getattr(config, "random_state", 42))
+            meta_learner = get_meta_learner(
+                config.meta_learner, n_classes=n_classes, random_state=seed
+            )
             fit_pos, es_pos = train_pos, holdout_pos
             early_stops = bool(getattr(meta_learner, "uses_early_stopping", False))
             if early_stops:
@@ -514,7 +517,9 @@ class EnsembleService:
 
             # 4. Refit on every aligned OOF row for deployment
             refit_overrides: dict[str, Any] = meta_learner.refit_config() if early_stops else {}
-            deployed = get_meta_learner(config.meta_learner, n_classes=n_classes, **refit_overrides)
+            deployed = get_meta_learner(
+                config.meta_learner, n_classes=n_classes, random_state=seed, **refit_overrides
+            )
             deployed.fit(X_train=X, y_train=y, X_val=X_hold, y_val=y_hold)
 
             training_time = time.time() - start

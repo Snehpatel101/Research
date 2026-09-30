@@ -48,6 +48,36 @@ _T = TypeVar("_T")
 # A number written in scientific notation without a dot, e.g. 1e-5 or 2E-3
 _SCIENTIFIC_FLOAT = re.compile(r"[+-]?\d+[eE][+-]?\d+")
 
+# Settings (dotted paths into to_dict()) that name, place or report a run
+# without changing what it computes; excluded from ExperimentConfig.config_hash.
+# The feature-governance diagnostics are read-only with respect to the data,
+# features, labels and models, so they are neutral too (changing them never
+# invalidates a checkpoint). Everything else is result-affecting, including the
+# opt-in AFML options (data.labeling.event_sampling, data.features.frac_diff).
+RESULT_NEUTRAL_FIELDS = frozenset(
+    {
+        "name",
+        "description",
+        "run_id",
+        "output_dir",
+        "verbose",
+        "tracking",
+        "data.features.governance",
+    }
+)
+
+
+def _drop_paths(tree: dict[str, Any], paths: frozenset[str], prefix: str = "") -> dict[str, Any]:
+    """Copy of a nested dict without the dotted ``paths``."""
+    kept: dict[str, Any] = {}
+    for key, value in tree.items():
+        path = f"{prefix}{key}"
+        if path in paths:
+            continue
+        kept[key] = _drop_paths(value, paths, f"{path}.") if isinstance(value, dict) else value
+    return kept
+
+
 # Derived embargo: one trading day. CME equity/metal futures trade ~23h a day,
 # so 1440 minutes of bars spans one session at any bar timeframe.
 EMBARGO_SPAN_MINUTES = 1440
@@ -269,6 +299,26 @@ class BundlingSection:
     deploy_artifact: bool = True
 
 
+@dataclass
+class TrackingSection:
+    """
+    Experiment tracking: one parent run per ``MLFactory.run`` plus one child
+    run per trained model.
+
+    Attributes:
+        backend: Tracking backend: "none" (default), "local" or "mlflow"
+            (mlflow needs the ``mlflow`` extra)
+        tracking_uri: local = directory the runs are written to (default
+            ``<output root>/tracking``); mlflow = tracking server URI or store
+            (default: ``MLFLOW_TRACKING_URI`` or ``./mlruns``)
+        experiment_name: Tracker experiment (default: ``ExperimentConfig.name``)
+    """
+
+    backend: str = "none"
+    tracking_uri: str | None = None
+    experiment_name: str | None = None
+
+
 # =============================================================================
 # EXPERIMENT CONFIG
 # =============================================================================
@@ -288,7 +338,10 @@ class ExperimentConfig:
         description: Free-text description (metadata, saved with the run)
         run_id: Unique run identifier (auto-generated)
         output_dir: Output directory for artifacts
-        random_seed: Random seed for reproducibility
+        random_seed: Seed for every random number generator of the run (Python,
+            NumPy, torch, Optuna samplers, model ``random_state``)
+        deterministic: Force deterministic torch kernels (slower on GPU; CPU
+            runs of the same config are bit-identical without it)
         verbose: Logging verbosity (0=silent, 1=info, 2=debug); MLFactory's
             default when its own ``verbose`` argument is omitted
 
@@ -296,6 +349,7 @@ class ExperimentConfig:
         training: Training configuration section
         evaluation: Evaluation configuration section
         bundling: Bundling configuration section
+        tracking: Experiment-tracking configuration section
 
     Example:
         config = ExperimentConfig(
@@ -311,6 +365,7 @@ class ExperimentConfig:
     run_id: str = field(default_factory=_generate_run_id)
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
     random_seed: int = 42
+    deterministic: bool = False
     verbose: int = 1
 
     # Configuration sections
@@ -318,6 +373,7 @@ class ExperimentConfig:
     training: TrainingSection = field(default_factory=TrainingSection)
     evaluation: EvaluationSection = field(default_factory=EvaluationSection)
     bundling: BundlingSection = field(default_factory=BundlingSection)
+    tracking: TrackingSection = field(default_factory=TrackingSection)
 
     def __post_init__(self) -> None:
         """Validate and normalize configuration."""
@@ -329,7 +385,7 @@ class ExperimentConfig:
         if self.output_dir.name != self.run_id:
             self.output_dir = self.output_dir / self.run_id
 
-        from src.core.config import SAMPLE_WEIGHTING_MODES
+        from src.core.config import SAMPLE_WEIGHTING_MODES, TRACKING_BACKENDS
 
         if self.training.sample_weighting not in SAMPLE_WEIGHTING_MODES:
             raise ValueError(
@@ -340,6 +396,18 @@ class ExperimentConfig:
             value = getattr(self.training, name)
             if value is not None and value < 0:
                 raise ValueError(f"training.{name} must be >= 0 or None, got {value}")
+        from src.core.reproducibility import MAX_RANDOM_SEED
+
+        if not 0 <= self.random_seed <= MAX_RANDOM_SEED:
+            raise ValueError(
+                f"random_seed must be in [0, {MAX_RANDOM_SEED}] (derived per-fold and "
+                f"per-feature seeds must stay below 2**32), got {self.random_seed}"
+            )
+        if self.tracking.backend not in TRACKING_BACKENDS:
+            raise ValueError(
+                f"tracking.backend must be one of {TRACKING_BACKENDS}, "
+                f"got {self.tracking.backend!r}"
+            )
 
     def validate(self) -> list[str]:
         """Config problems that would only surface deep inside a run (empty = valid).
@@ -488,6 +556,40 @@ class ExperimentConfig:
         return embargo
 
     # =========================================================================
+    # IDENTITY AND TRACKING
+    # =========================================================================
+
+    def config_hash(self) -> str:
+        """
+        SHA-256 of every setting that can change a run's results.
+
+        Two runs with the same hash, input data and code produce the same
+        output. Settings that only name, place or report the run
+        (``RESULT_NEUTRAL_FIELDS``: name, description, run_id, output_dir,
+        verbose, tracking, the feature-governance diagnostics) are excluded, so
+        re-running an experiment under a new run ID keeps its hash.
+        """
+        from src.core.run_manifest import canonical_json_sha256
+
+        return canonical_json_sha256(_drop_paths(self.to_dict(), RESULT_NEUTRAL_FIELDS))
+
+    def tracking_experiment_name(self) -> str:
+        """Tracker experiment the run is logged to (``tracking.experiment_name`` or ``name``)."""
+        return self.tracking.experiment_name or self.name
+
+    def tracking_location(self) -> str | None:
+        """
+        Where the tracker writes: ``tracking.tracking_uri`` when set; for the
+        local backend ``<output root>/tracking`` (next to the run directories);
+        None for mlflow (MLflow's default) and "none".
+        """
+        if self.tracking.tracking_uri:
+            return self.tracking.tracking_uri
+        if self.tracking.backend == "local":
+            return str(self.output_dir.parent / "tracking")
+        return None
+
+    # =========================================================================
     # SERIALIZATION
     # =========================================================================
 
@@ -562,6 +664,7 @@ class ExperimentConfig:
         bar_timeframe: str | None = None,
         n_rows: int | None = None,
         split_embargo_bars: int | None = None,
+        tracking_parent_run_id: str | None = None,
     ) -> Any:
         """
         Convert to the PipelineConfig consumed by the training orchestrator
@@ -575,6 +678,8 @@ class ExperimentConfig:
             split_embargo_bars: Embargo of the chronological val/test gap in bars
                 when it differs from the CV embargo (event sampling: the CV
                 embargo counts event samples). None = the CV embargo.
+            tracking_parent_run_id: Tracker run of the factory; every trained
+                model logs a child run under it.
 
         Returns:
             PipelineConfig instance
@@ -633,6 +738,13 @@ class ExperimentConfig:
             meta_labeling_meta_model=self.training.meta_labeling.meta_model,
             meta_labeling_threshold=self.training.meta_labeling.threshold,
             random_state=self.random_seed,
+            deterministic=self.deterministic,
+            # Experiment tracking: trainers log one child run per model under
+            # the factory's parent run
+            tracking_backend=self.tracking.backend,
+            tracking_uri=self.tracking_location(),
+            tracking_experiment=self.tracking_experiment_name(),
+            tracking_parent_run_id=tracking_parent_run_id,
             # Optimization flags — Optuna-based ones disabled when n_trials=0.
             # Feature selection is NOT Optuna-based (MDA ranking) and follows
             # features.selection_enabled independently of the trial count.
@@ -677,4 +789,5 @@ __all__ = [
     "TrainingSection",
     "EvaluationSection",
     "BundlingSection",
+    "TrackingSection",
 ]

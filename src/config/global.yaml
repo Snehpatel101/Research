@@ -84,11 +84,6 @@ processing:
 scaler:
   default: "robust"
 
-# Experiment tracking
-tracking:
-  enabled: true
-  backend: "local"
-
 # Out-of-memory recovery settings
 oom_recovery:
   enabled: true

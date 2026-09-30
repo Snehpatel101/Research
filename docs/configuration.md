@@ -31,12 +31,14 @@ Single source of truth for ML Factory experiment configuration. (`src.config.exp
 | `description` | `str` | `""` | Free-text description (metadata, saved with the run) |
 | `run_id` | `str` | timestamp + random suffix | Unique run identifier (auto-generated) |
 | `output_dir` | `Path` | `experiments/runs` (+ `/<run_id>`) | Output directory for artifacts. |
-| `random_seed` | `int` | `42` | Random seed for reproducibility. |
+| `random_seed` | `int` | `42` | Seed for every random number generator of the run (Python, NumPy, torch, Optuna samplers, model ``random_state``) |
+| `deterministic` | `bool` | `False` | Force deterministic torch kernels (slower on GPU; CPU runs of the same config are bit-identical without it) |
 | `verbose` | `int` | `1` | Logging verbosity (0=silent, 1=info, 2=debug); MLFactory's default when its own ``verbose`` argument is omitted. |
 | `data` | `DataSection` | see below | Data configuration section. See [`data`](#data). |
 | `training` | `TrainingSection` | see below | Training configuration section. See [`training`](#training). |
 | `evaluation` | `EvaluationSection` | see below | Evaluation configuration section. See [`evaluation`](#evaluation). |
 | `bundling` | `BundlingSection` | see below | Bundling configuration section. See [`bundling`](#bundling). |
+| `tracking` | `TrackingSection` | see below | Experiment-tracking configuration section. See [`tracking`](#tracking). |
 
 ## `data`
 
@@ -233,6 +235,16 @@ Bundling-related configuration section. (`src.config.experiment.BundlingSection`
 | `create_bundle` | `bool` | `True` | Write one inference bundle per model (and ensemble) per horizon. |
 | `deploy_artifact` | `bool` | `True` | Write `deploy/manifest.json` indexing the bundles. |
 
+## `tracking`
+
+Experiment tracking: one parent run per ``MLFactory.run`` plus one child run per trained model. (`src.config.experiment.TrackingSection`)
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `backend` | `str` | `"none"` | Tracking backend: "none" (default), "local" or "mlflow" (mlflow needs the ``mlflow`` extra) |
+| `tracking_uri` | `str \| None` | `None` | local = directory the runs are written to (default ``<output root>/tracking``); mlflow = tracking server URI or store (default: ``MLFLOW_TRACKING_URI`` or ``./mlruns``) |
+| `experiment_name` | `str \| None` | `None` | Tracker experiment (default: ``ExperimentConfig.name``) |
+
 ## Full default config as YAML
 
 `ExperimentConfig().save_yaml(path)` writes this (plus `run_id` and `output_dir`):
@@ -241,6 +253,7 @@ Bundling-related configuration section. (`src.config.experiment.BundlingSection`
 name: ml_factory_experiment
 description: ''
 random_seed: 42
+deterministic: false
 verbose: 1
 data:
   symbol: MES
@@ -343,4 +356,8 @@ evaluation:
 bundling:
   create_bundle: true
   deploy_artifact: true
+tracking:
+  backend: none
+  tracking_uri: null
+  experiment_name: null
 ```

@@ -36,6 +36,7 @@ from src.cli.utils import (
     show_error,
     show_warning,
 )
+from src.core.reproducibility import apply_model_seed
 
 
 def _load_evaluation_data(
@@ -51,6 +52,7 @@ def _load_evaluation_data(
     purge_bars: int | None,
     embargo_bars: int | None,
     command: str,
+    random_seed: int,
 ):
     """
     Prepare data through MLFactory and open the command's result directory.
@@ -72,6 +74,7 @@ def _load_evaluation_data(
         purge_bars=purge_bars,
         embargo_bars=embargo_bars,
         name=f"{symbol}_{command}",
+        random_seed=random_seed,
     )
     factory = MLFactory(config, enable_checkpoints=False)
     try:
@@ -124,6 +127,7 @@ def run_cv(
     output_dir: Path = typer.Option(
         DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output root; writes <dir>/<run_id>/cv/"
     ),
+    seed: int = typer.Option(42, "--seed", help="Random seed (models, Optuna, feature selection)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """
@@ -164,6 +168,7 @@ def run_cv(
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
             command="cv",
+            random_seed=seed,
         )
     except Exception as e:
         show_error(f"Data preparation failed: {e}")
@@ -190,6 +195,7 @@ def run_cv(
             select_features=not no_feature_selection,
             n_features_to_select=n_features,
             tuning_trials=n_trials,
+            seed=seed,
         )
 
         try:
@@ -283,6 +289,7 @@ def _run_walk_forward_for_model(
     container,
     model_name: str,
     config,
+    seed: int,
     label_spans=None,
 ):
     """Run walk-forward evaluation for a single model."""
@@ -353,7 +360,9 @@ def _run_walk_forward_for_model(
             w_train = weights.iloc[train_idx].values
 
         # Create and train model
-        model = ModelRegistry.create(model_name, config={"n_classes": n_classes})
+        model = ModelRegistry.create(
+            model_name, config=apply_model_seed({"n_classes": n_classes}, seed)
+        )
         model.fit(
             X_train=X_train_scaled,
             y_train=y_train.values,
@@ -450,6 +459,7 @@ def run_walk_forward(
         "-o",
         help="Output root; writes <dir>/<run_id>/walk-forward/",
     ),
+    seed: int = typer.Option(42, "--seed", help="Random seed (models, Optuna, feature selection)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """
@@ -485,6 +495,7 @@ def run_walk_forward(
             purge_bars=gap_bars,
             embargo_bars=None,
             command="walk-forward",
+            random_seed=seed,
         )
     except Exception as e:
         show_error(f"Data preparation failed: {e}")
@@ -526,6 +537,7 @@ def run_walk_forward(
                     container=container,
                     model_name=model_name,
                     config=config,
+                    seed=seed,
                     label_spans=label_spans,
                 )
                 all_results.append(result)
@@ -652,6 +664,7 @@ def _run_cpcv_for_model(
     forward_returns: np.ndarray,
     cost_per_turnover: np.ndarray,
     groups: np.ndarray | None,
+    seed: int,
     label_spans=None,
 ):
     """
@@ -705,7 +718,9 @@ def _run_cpcv_for_model(
         X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
         X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
-        model = ModelRegistry.create(model_name, config={"n_classes": container.n_classes})
+        model = ModelRegistry.create(
+            model_name, config=apply_model_seed({"n_classes": container.n_classes}, seed)
+        )
         model.fit(
             X_train=scaling_result.X_train_scaled,
             y_train=y.iloc[fit_idx].values,
@@ -784,6 +799,7 @@ def run_cpcv_pbo(
         "-o",
         help="Output root; writes <dir>/<run_id>/cpcv-pbo/",
     ),
+    seed: int = typer.Option(42, "--seed", help="Random seed (models, Optuna, feature selection)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """
@@ -822,6 +838,7 @@ def run_cpcv_pbo(
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
             command="cpcv-pbo",
+            random_seed=seed,
         )
     except Exception as e:
         show_error(f"Data preparation failed: {e}")
@@ -887,6 +904,7 @@ def run_cpcv_pbo(
                     forward_returns=forward_returns,
                     cost_per_turnover=costs,
                     groups=groups,
+                    seed=seed,
                     label_spans=label_spans,
                 )
                 cpcv_results[model_name] = result

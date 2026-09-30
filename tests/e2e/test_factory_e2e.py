@@ -210,6 +210,33 @@ class TestFactoryRunCompletes:
         artifacts = [p for p in out.rglob("*") if p.is_file()]
         assert len(artifacts) >= 2, f"expected training artifacts, found only {artifacts}"
 
+    def test_run_manifest_written(
+        self, first_run: tuple[ExperimentConfig, ExperimentResult, MLFactory]
+    ) -> None:
+        """Every run leaves run_manifest.json: provenance, data, final results."""
+        import json
+
+        from src.core.run_manifest import file_sha256, verify_provenance
+
+        cfg, result, _factory = first_run
+        assert result.manifest_path == Path(cfg.output_dir) / "run_manifest.json"
+        manifest = json.loads(result.manifest_path.read_text())
+        assert manifest["status"] == "success"
+        assert manifest["error"] is None
+        assert verify_provenance(manifest)
+        provenance = manifest["provenance"]
+        assert provenance["config_hash"] == cfg.config_hash()
+        assert provenance["config"] == cfg.to_dict()
+        assert provenance["data_source"]["sha256"] == file_sha256(cfg.data.data_path)
+        assert manifest["data"]["n_rows"] == N_ROWS
+        assert manifest["data"]["bar_timeframe"] == "5min"
+        assert manifest["data"]["start"] < manifest["data"]["end"]
+        results = manifest["results"]
+        assert results["best_model"] == result.best_model
+        assert set(results["metrics"]) == set(result.metrics)
+        assert results["backtest"]["total_trades"] == result.backtest_metrics["total_trades"]
+        assert manifest["tracking"] is None  # tracking.backend defaults to "none"
+
     def test_labels_used_per_symbol_barriers(
         self, first_run: tuple[ExperimentConfig, ExperimentResult, MLFactory]
     ) -> None:
@@ -241,6 +268,9 @@ class TestFactoryRunReproducible:
         result_b = factory_b.run()
 
         assert result_b.success is True
+        # Same experiment under a new run ID: same config hash
+        assert cfg_b.run_id != _cfg_a.run_id
+        assert cfg_b.config_hash() == _cfg_a.config_hash()
         assert result_a.n_models == result_b.n_models
         assert result_a.best_model == result_b.best_model
 

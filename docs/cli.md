@@ -66,6 +66,9 @@ python -m src.cli run [OPTIONS]
 | `--batch-size` | INT |  | Neural batch size |
 | `--backtest`, `--no-backtest` | flag | `--no-backtest` | Backtest the predictions with barrier-aligned exits |
 | `--deploy`, `--no-deploy` | flag | `--deploy` | Write the bundle and deploy artifact |
+| `--seed` | INT | `42` | Random seed of the run (models, Optuna, feature selection) |
+| `--tracking` | TEXT | `none` | Experiment tracking: none, local (JSON under <output-dir>/tracking) or mlflow (pip install '.[mlflow]') |
+| `--tracking-uri` | TEXT |  | Tracking directory (local) or MLflow tracking URI |
 | `--output-dir`, `-o` | PATH | `experiments` | Output root; the run writes <dir>/<run_id>/ |
 | `--config`, `-c` | PATH |  | ExperimentConfig YAML (replaces the options above) |
 | `--resume` | PATH |  | Run directory to resume from its last checkpoint (settings come from the run's experiment_config.yaml) |
@@ -137,6 +140,7 @@ python -m src.cli cv [OPTIONS]
 | `--tune` | flag | off | Enable Optuna hyperparameter tuning |
 | `--n-trials` | INT | `50` | Number of Optuna trials per model |
 | `--output-dir`, `-o` | PATH | `experiments` | Output root; writes <dir>/<run_id>/cv/ |
+| `--seed` | INT | `42` | Random seed (models, Optuna, feature selection) |
 | `--verbose`, `-v` | flag | off | Enable verbose logging |
 
 ## `ml walk-forward`
@@ -161,6 +165,7 @@ python -m src.cli walk-forward [OPTIONS]
 | `--test-pct` | FLOAT | `0.1` | Test window percentage |
 | `--gap-bars` | INT |  | Gap bars between train and test (default: label span) |
 | `--output-dir`, `-o` | PATH | `experiments` | Output root; writes <dir>/<run_id>/walk-forward/ |
+| `--seed` | INT | `42` | Random seed (models, Optuna, feature selection) |
 | `--verbose`, `-v` | flag | off | Enable verbose logging |
 
 ## `ml cpcv-pbo`
@@ -188,6 +193,7 @@ python -m src.cli cpcv-pbo [OPTIONS]
 | `--pbo-block` | FLOAT | `0.8` | PBO blocking threshold |
 | `--no-costs` | flag | off | Compute strategy returns without transaction costs |
 | `--output-dir`, `-o` | PATH | `experiments` | Output root; writes <dir>/<run_id>/cpcv-pbo/ |
+| `--seed` | INT | `42` | Random seed (models, Optuna, feature selection) |
 | `--verbose`, `-v` | flag | off | Enable verbose logging |
 
 ## `ml version`

@@ -44,6 +44,7 @@ def run_cv_with_per_fold_feature_selection(
     cv: PurgedKFold | None = None,
     tuning_trials: int = 50,
     label_spans: LabelSpans | None = None,
+    seed: int = 42,
     n_classes: int = 3,
 ) -> dict[str, Any]:
     """
@@ -72,6 +73,7 @@ def run_cv_with_per_fold_feature_selection(
         tuning_trials: Number of Optuna trials for per-fold tuning
         label_spans: Label spans of the rows of ``X`` (bar positions); inner tuning
             folds purge on them
+        seed: Seeds mutual-information ranking and per-fold tuning
         n_classes: Label classes (2 for binary labels, 3 for short/neutral/long);
             fold models are built for it and the OOF frame has one probability
             column per class
@@ -116,7 +118,7 @@ def run_cv_with_per_fold_feature_selection(
             X_train_fold.values,
             y_train_fold.values,
             discrete_features=False,
-            random_state=42,
+            random_state=seed,
         )
 
         # Select top N features based on MI scores from training data only
@@ -157,6 +159,7 @@ def run_cv_with_per_fold_feature_selection(
                 cv=inner_cv,
                 n_trials=max(10, tuning_trials // 3),  # Fewer trials for inner tuning
                 scale_per_fold=True,
+                seed=seed,
                 n_classes=n_classes,
             )
             tuning_result = tuner.tune(

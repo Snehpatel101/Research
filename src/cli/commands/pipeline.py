@@ -41,6 +41,9 @@ def _print_run_result(result) -> None:
     console.print(f"Run ID: {result.run_id}")
     console.print(f"Output: {result.output_dir}", soft_wrap=True)
     console.print(f"Duration: {result.duration_seconds:.1f}s")
+    console.print(f"Manifest: {result.manifest_path}", soft_wrap=True)
+    if result.tracking_run_id:
+        console.print(f"Tracking run: {result.tracking_run_id}")
 
     if result.best_model:
         console.print(f"\nBest model: {result.best_model}")
@@ -107,6 +110,18 @@ def run_pipeline(
     ),
     deploy: bool = typer.Option(
         True, "--deploy/--no-deploy", help="Write the bundle and deploy artifact"
+    ),
+    seed: int = typer.Option(
+        42, "--seed", help="Random seed of the run (models, Optuna, feature selection)"
+    ),
+    tracking: str = typer.Option(
+        "none",
+        "--tracking",
+        help="Experiment tracking: none, local (JSON under <output-dir>/tracking) or mlflow "
+        "(pip install '.[mlflow]')",
+    ),
+    tracking_uri: str | None = typer.Option(
+        None, "--tracking-uri", help="Tracking directory (local) or MLflow tracking URI"
     ),
     output_dir: Path = typer.Option(
         DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output root; the run writes <dir>/<run_id>/"
@@ -191,6 +206,9 @@ def run_pipeline(
                 embargo_bars=embargo_bars,
                 run_backtest=backtest,
                 deploy=deploy,
+                random_seed=seed,
+                tracking_backend=tracking,
+                tracking_uri=tracking_uri,
             )
     except (FileNotFoundError, ValueError, KeyError, TypeError) as e:
         show_error(f"Configuration error: {e}")

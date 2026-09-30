@@ -19,6 +19,7 @@ import pandas as pd
 
 from src.core.constants import OHLCV_COLUMNS
 from src.core.label_spans import LabelSpans
+from src.core.reproducibility import sequential_prediction
 from src.data.adapters import PreparedData
 from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
@@ -108,30 +109,7 @@ class TrainingOpsMixin:
             prepared_map[model_name] = prepared
             logger.info(f"  {model_name} data prepared: {prepared.summary()}")
 
-            training_requests.append(
-                ModelTrainingRequest(
-                    model_name=model_name,
-                    horizon=horizon,
-                    prepared_data=prepared,
-                    sequence_length=self.config.sequence_length_for(model_name),
-                    output_dir=self.output_dir / f"h{horizon}",
-                    optimize_hyperparams=self.config.optimize_hyperparams,
-                    n_splits=self.config.n_splits,
-                    hyperparam_trials=self.config.hyperparam_trials,
-                    scoring=self.config.optuna_metric,
-                    use_feature_selection=self._trainer_feature_selection(model_name),
-                    max_epochs=self.config.max_epochs,
-                    batch_size=getattr(self.config, "batch_size", None),
-                    cv_method=self.config.cv_method,
-                    embargo_bars=getattr(self.config, "embargo_bars", None),
-                    purge_bars=getattr(self.config, "purge_bars", None),
-                    n_classes=getattr(self.config, "n_classes", 3),
-                    early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
-                    optuna_timeout=getattr(self.config, "optuna_timeout", None),
-                    use_calibration=self.config.auto_calibrate,
-                    calibration_method=self.config.calibration_method,
-                )
-            )
+            training_requests.append(self._training_request(model_name, prepared, horizon))
 
         parallel_results = self._parallel_service.train_models_parallel(training_requests)
 
@@ -229,34 +207,31 @@ class TrainingOpsMixin:
         """
         return self.config.optimize_features and not self._per_model_features
 
+    def _training_request(
+        self,
+        model_name: str,
+        prepared: PreparedData,
+        horizon: int,
+        **overrides: Any,
+    ) -> ModelTrainingRequest:
+        """Training request for one model at one horizon, settings from the run's config."""
+        return ModelTrainingRequest.from_pipeline_config(
+            self.config,
+            model_name=model_name,
+            horizon=horizon,
+            prepared_data=prepared,
+            output_dir=self.output_dir / f"h{horizon}",
+            use_feature_selection=self._trainer_feature_selection(model_name),
+            **overrides,
+        )
+
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:
         """Train a single model with OOM recovery for neural/transformer models."""
         from src.core.contracts import get_model_contract
 
         from .unified_orchestrator import ModelTrainingResult
 
-        request = ModelTrainingRequest(
-            model_name=model_name,
-            horizon=horizon,
-            prepared_data=prepared,
-            sequence_length=self.config.sequence_length_for(model_name),
-            output_dir=self.output_dir / f"h{horizon}",
-            optimize_hyperparams=self.config.optimize_hyperparams,
-            n_splits=self.config.n_splits,
-            hyperparam_trials=self.config.hyperparam_trials,
-            scoring=self.config.optuna_metric,
-            use_feature_selection=self._trainer_feature_selection(model_name),
-            max_epochs=self.config.max_epochs,
-            batch_size=getattr(self.config, "batch_size", None),
-            cv_method=self.config.cv_method,
-            embargo_bars=getattr(self.config, "embargo_bars", None),
-            purge_bars=getattr(self.config, "purge_bars", None),
-            n_classes=getattr(self.config, "n_classes", 3),
-            early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
-            optuna_timeout=getattr(self.config, "optuna_timeout", None),
-            use_calibration=self.config.auto_calibrate,
-            calibration_method=self.config.calibration_method,
-        )
+        request = self._training_request(model_name, prepared, horizon)
 
         training_degraded = False
         contract = get_model_contract(model_name)
@@ -276,27 +251,8 @@ class TrainingOpsMixin:
                 f"from {original_batch} to {reduced_batch} and retrying"
             )
             release_gpu_memory()
-            request = ModelTrainingRequest(
-                model_name=model_name,
-                horizon=horizon,
-                prepared_data=prepared,
-                sequence_length=self.config.sequence_length_for(model_name),
-                output_dir=self.output_dir / f"h{horizon}",
-                optimize_hyperparams=self.config.optimize_hyperparams,
-                n_splits=self.config.n_splits,
-                hyperparam_trials=self.config.hyperparam_trials,
-                scoring=self.config.optuna_metric,
-                use_feature_selection=self._trainer_feature_selection(model_name),
-                max_epochs=self.config.max_epochs,
-                cv_method=self.config.cv_method,
-                batch_size=reduced_batch,
-                embargo_bars=getattr(self.config, "embargo_bars", None),
-                purge_bars=getattr(self.config, "purge_bars", None),
-                n_classes=getattr(self.config, "n_classes", 3),
-                early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
-                optuna_timeout=getattr(self.config, "optuna_timeout", None),
-                use_calibration=self.config.auto_calibrate,
-                calibration_method=self.config.calibration_method,
+            request = self._training_request(
+                model_name, prepared, horizon, batch_size=reduced_batch
             )
             result = self._model_service.train_model(request)
             training_degraded = True
@@ -1012,10 +968,13 @@ class TrainingOpsMixin:
                 if len(np.unique(meta_labels_train[tr_idx])) < 2:
                     continue  # a fold with one class cannot fit a classifier
                 fold_meta = self._create_meta_model(meta_model_name)
-                fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx])
+                sequential_prediction(
+                    fold_meta.fit(X_meta_train[tr_idx], meta_labels_train[tr_idx])
+                )
                 meta_proba_oof[va_idx] = fold_meta.predict_proba(X_meta_train[va_idx])[:, 1]
             meta_model = self._create_meta_model(meta_model_name)
-            meta_model.fit(X_meta_train, meta_labels_train)
+            # Bit-reproducible probabilities: forests predict in a fixed tree order
+            sequential_prediction(meta_model.fit(X_meta_train, meta_labels_train))
         p_win_val = meta_model.predict_proba(X_meta_val)[:, 1]
 
         # Stage 5: Evaluate the bets on validation — precision and net outcome of

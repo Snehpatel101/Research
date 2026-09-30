@@ -17,7 +17,11 @@ from sklearn.preprocessing import StandardScaler
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
-from ..common import map_classes_to_labels, map_labels_to_classes
+from ..common import (
+    full_class_probabilities,
+    map_classes_to_labels,
+    map_labels_to_classes,
+)
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -264,10 +268,9 @@ class RidgeMetaLearner(BaseModel):
         """
         if self._model is None:
             raise RuntimeError("Meta model is not fitted")
-        fitted = np.asarray(self._model.predict_proba(X_scaled))
-        probabilities = np.zeros((len(X_scaled), self._n_classes), dtype=np.float64)
-        probabilities[:, np.asarray(self._model.classes_, dtype=int)] = fitted
-        return probabilities
+        return full_class_probabilities(
+            self._model.predict_proba(X_scaled), self._model.classes_, self._n_classes
+        )
 
 
 __all__ = ["RidgeMetaLearner"]

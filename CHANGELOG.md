@@ -46,6 +46,22 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
 - `ExperimentConfig.validate()` (checked by `MLFactory`); `scripts/mix_match.py
   --set KEY=VALUE` config overrides; YAML numbers in scientific notation without a
   dot (`1e-5`) load as numbers; backtest summaries report `zero_size_signals`.
+- Seeded runs: `MLFactory.run` seeds Python/NumPy/torch from `random_seed`
+  before any data work; the seed reaches every model, the Optuna sampler and
+  its trials, feature selection, walk-forward windows and the meta-learner.
+  `deterministic` config flag for deterministic torch kernels; CLI `--seed`.
+- `run_manifest.json` in every run directory (config + `config_hash`, seed,
+  git commit/dirty, package versions, torch/CUDA environment, data SHA-256, rows
+  and time range, timing, status/error, final metrics); `ExperimentResult.manifest_path`;
+  the deploy manifest references it and `validate_deploy_artifact` verifies it.
+- Experiment tracking section `tracking` (`none` | `local` | `mlflow`,
+  `tracking_uri`, `experiment_name`; CLI `--tracking`, `--tracking-uri`): one
+  parent run per factory run, one child run per model. `mlflow` is an optional
+  extra (`pip install '.[mlflow]'`); the MLflow tracker uses `MlflowClient` (no
+  global active run) and a missing install fails the run before training.
+- Determinism test: two runs in separate interpreters (different
+  `PYTHONHASHSEED`) give bit-identical OOF, ensemble holdout and deployed
+  predictions.
 
 ### Changed
 - Historical audits, investigation notes and phase reports moved from the
@@ -65,6 +81,15 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   setuptools>=77); the sdist ships the package, README, LICENSE and CHANGELOG
   only (no tests, scripts, docs or project notes). The unused path constants
   (`src/core/paths.py`, `src/models/config/paths.py`) are deleted.
+- Checkpoint resume is keyed by `ExperimentConfig.config_hash()` (settings
+  that change results). Editing tracking, verbosity or names no longer
+  invalidates checkpoints. A resume against checkpoints written with
+  different settings is refused with an error instead of silently clearing
+  them; `resume_from_checkpoint(restart_on_config_change=True)` discards them
+  explicitly. Checkpoints written before this change still resume.
+- A resumed run keeps its original `run_manifest.json` provenance and appends a
+  `resumes` entry (time, stage, code and package versions of the resume).
+  Partitioned (directory) datasets are fingerprinted file by file.
 
 ### Fixed
 - A wheel install shipped without `config/global.yaml` (it lived outside the
@@ -79,6 +104,37 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
 - Clustered MDA feature ranking ignored the target.
 - Cross-rank stacking paired predictions from different bars; inference used a
   different feature engine than training; several save/load round-trips failed.
+- `random_seed` never reached the models: model seeds, the Optuna sampler, MDA
+  feature ranking and the meta-learner were hard-coded to 42.
+- Random-forest predictions changed in the last bits on every call (scikit-learn
+  sums trees in thread-completion order when `n_jobs != 1`): MDA gave unused
+  features random ±1e-17 importances, so identical runs could select different
+  features. Forests now predict in a fixed tree order (row-parallel for the
+  `random_forest` model); LightGBM runs with `deterministic=True` on CPU.
+- Feature rankings let float noise and set iteration order (PYTHONHASHSEED)
+  break ties: every score is now rounded to 12 significant digits of its own
+  magnitude (variance rankings spanning many orders of magnitude keep their
+  order), permutation-importance noise around 0 is folded to 0, ties are
+  broken by feature name (`optimization/feature_selection/ranking.py`), and
+  stable-feature counts are built in sorted order.
+- Classifiers fitted without one of the classes (e.g. labels {-1, +1} only)
+  returned fewer probability columns, and argmax over them gave a column
+  position instead of a class; every model now returns `n_classes` columns in
+  class order (`full_class_probabilities`).
+- The standalone evaluators (`ml cv`, `ml walk-forward`, `ml cpcv-pbo`) and
+  regime-conditional selection ignored the run seed; they take `--seed` /
+  `random_seed` now. `random_seed` is bounded below 2**32 minus the offsets
+  derived seeds add.
+- Tracking failures (tracking server down, quota) could fail a training run or
+  leave a model unsaved; tracker calls in the Trainer are best-effort, models
+  are saved before any metric is logged, and a child run always ends. The
+  MLflow tracker records directories (checkpoints) by reference instead of
+  uploading them. Credentials in URIs are masked in the run manifest and in
+  tracked parameters.
+- Every `Trainer` silently logged a local tracking run and copied its model
+  checkpoints into it (a hidden `global.yaml` default); tracking is now off
+  unless `tracking.backend` is set, and local runs reference artifacts instead
+  of copying them.
 
 ### Removed
 - Dead serving/monitoring chain, aspirational config layer, phantom types and

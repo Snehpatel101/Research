@@ -193,6 +193,9 @@ def build_experiment_config(
     run_backtest: bool = False,
     deploy: bool = True,
     name: str | None = None,
+    random_seed: int = 42,
+    tracking_backend: str = "none",
+    tracking_uri: str | None = None,
 ) -> ExperimentConfig:
     """
     Build the ExperimentConfig every CLI command runs on.
@@ -206,6 +209,7 @@ def build_experiment_config(
         DataSection,
         EvaluationSection,
         ExperimentConfig,
+        TrackingSection,
         TrainingSection,
     )
     from src.config.training import OptunaConfig
@@ -240,4 +244,6 @@ def build_experiment_config(
         training=training,
         evaluation=EvaluationSection(run_backtest=run_backtest),
         bundling=BundlingSection(create_bundle=deploy, deploy_artifact=deploy),
+        random_seed=random_seed,
+        tracking=TrackingSection(backend=tracking_backend, tracking_uri=tracking_uri),
     )

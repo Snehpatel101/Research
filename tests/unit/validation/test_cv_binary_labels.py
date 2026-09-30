@@ -119,6 +119,7 @@ def test_cpcv_rejects_binary_labels() -> None:
             forward_returns=np.zeros(N),
             cost_per_turnover=np.zeros(N),
             groups=None,
+            seed=0,
         )
 
 

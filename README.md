@@ -77,7 +77,7 @@ subclass and a contract.
 | No same-bar fills | Signal at bar *i* fills at bar *i + 1* (open); stops/targets at the barrier price |
 | Train/serve parity | Bundles replay bar timeframe, `FeatureEngineer` spec, scaler and calibrator; checked per combination |
 | Overfitting is measured | PSR/DSR, CPCV paths, CSCV PBO (`ml cpcv-pbo`) |
-| Reproducible | One saved `ExperimentConfig`, seeded runs, checkpoint/resume |
+| Reproducible | Seeded runs, bit-identical across processes on CPU (tested); `run_manifest.json` records config hash, commit, packages and data SHA-256; checkpoint/resume |
 
 ## Documentation
 
@@ -90,6 +90,7 @@ subclass and a contract.
 | [Configuration](docs/configuration.md) | Every `ExperimentConfig` field and default (generated) |
 | [CLI](docs/cli.md) | Every `ml` command and option (generated) |
 | [Deploy and serve](docs/deploy-and-serve.md) | Bundles, deploy manifest, `predict_from_raw`, warmup |
+| [Reproducibility and tracking](docs/reproducibility.md) | Seeds, determinism, run manifest, resume, MLflow / local experiment tracking |
 | [Examples](examples/README.md) | Three scripts, a few minutes each on a CPU |
 | [Colab notebook](docs/USER_GUIDE.md) | GPU runs on large datasets |
 

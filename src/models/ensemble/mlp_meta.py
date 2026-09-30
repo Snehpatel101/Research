@@ -17,7 +17,11 @@ from sklearn.preprocessing import StandardScaler
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
-from ..common import map_classes_to_labels, map_labels_to_classes
+from ..common import (
+    full_class_probabilities,
+    map_classes_to_labels,
+    map_labels_to_classes,
+)
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -258,7 +262,9 @@ class MLPMetaLearner(BaseModel):
         if self._scaler is not None:
             X_scaled = self._scaler.transform(X)
 
-        probabilities = self._model.predict_proba(X_scaled)
+        probabilities = full_class_probabilities(
+            self._model.predict_proba(X_scaled), self._model.classes_, self._n_classes
+        )
         class_predictions_sk = np.argmax(probabilities, axis=1)
         class_predictions = map_classes_to_labels(class_predictions_sk, self._n_classes)
         confidence = np.max(probabilities, axis=1)

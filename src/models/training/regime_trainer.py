@@ -399,26 +399,16 @@ class RegimeAwareTrainer:
                 model_dir.mkdir(parents=True, exist_ok=True)
 
                 trained = service.train_model(
-                    ModelTrainingRequest(
+                    ModelTrainingRequest.from_pipeline_config(
+                        self.config,
                         model_name=model_name,
                         horizon=horizon,
                         prepared_data=regime_prepared,
-                        sequence_length=self.config.sequence_length_for(model_name),
                         output_dir=model_dir,
-                        n_splits=self.config.n_splits,
                         # Features were already selected per model upstream
                         use_feature_selection=False,
-                        max_epochs=self.config.max_epochs,
-                        batch_size=getattr(self.config, "batch_size", None),
-                        cv_method=self.config.cv_method,
-                        embargo_bars=self.config.embargo_bars,
-                        purge_bars=self.config.purge_bars,
-                        n_classes=getattr(self.config, "n_classes", 3),
-                        early_stopping_patience=getattr(
-                            self.config, "early_stopping_patience", None
-                        ),
-                        use_calibration=self.config.auto_calibrate,
-                        calibration_method=self.config.calibration_method,
+                        # Regime models train with their configured parameters
+                        optimize_hyperparams=False,
                     )
                 )
                 trainer = trained.trainer
@@ -551,6 +541,12 @@ class RegimeAwareTrainer:
                     output_dir=model_dir,
                     use_calibration=self.config.auto_calibrate,
                     calibration_method=self.config.calibration_method,
+                    random_seed=self.config.random_state,
+                    deterministic_mode=self.config.deterministic,
+                    experiment_name=self.config.tracking_experiment,
+                    tracking_backend=self.config.tracking_backend,
+                    tracking_uri=self.config.tracking_uri,
+                    tracking_parent_run_id=self.config.tracking_parent_run_id,
                 )
 
                 # Train

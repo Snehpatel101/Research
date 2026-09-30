@@ -98,6 +98,10 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
 ]
+# Experiment tracking backend "mlflow" (tracking.backend in ExperimentConfig)
+mlflow = [
+    "mlflow>=2.14",
+]
 all = [
     "statsmodels>=0.14.0",
     "hmmlearn>=0.3.0",

@@ -27,6 +27,7 @@ from scipy.stats import spearmanr
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
+from src.core.reproducibility import sequential_prediction
 from src.optimization.feature_selection.result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
@@ -501,6 +502,7 @@ class OHLCVFeatureSelector:
                 random_state=self.random_state + fold_idx,
             )
             rf.fit(X_train, y_train, sample_weight=w_train)
+            sequential_prediction(rf)  # bit-reproducible scoring
 
             # Permutation importance on test set (more reliable than MDI)
             result = permutation_importance(

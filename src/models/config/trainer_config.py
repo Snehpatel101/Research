@@ -84,13 +84,13 @@ class TrainerConfig:
     checkpoint_interval: int = 50
     keep_n_checkpoints: int = 3
     checkpoint_dir: str | None = None
-    tracking_enabled: bool = field(
-        default_factory=lambda: _get_global_or_default("tracking.enabled", True)
-    )
-    tracking_backend: str = field(
-        default_factory=lambda: _get_global_or_default("tracking.backend", "local")
-    )
+    # Experiment tracking (ExperimentConfig.tracking via PipelineConfig):
+    # "none" | "local" | "mlflow"; each Trainer run is one tracker run, a child
+    # of tracking_parent_run_id when set (MLFactory's run). experiment_name
+    # names the tracker experiment.
+    tracking_backend: str = "none"
     tracking_uri: str | None = None
+    tracking_parent_run_id: str | None = None
     tracking_tags: dict[str, str] = field(default_factory=dict)
     oom_recovery_enabled: bool = field(
         default_factory=lambda: _get_global_or_default("oom_recovery.enabled", True)

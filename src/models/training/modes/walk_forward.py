@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from src.core.constants import DEFAULT_BATCH_SIZE, DEFAULT_MAX_EPOCHS
 from src.core.contracts import get_model_contract
 from src.core.label_spans import LabelSpans, uniqueness_sample_weights
+from src.core.reproducibility import apply_model_seed
 from src.core.types import DataRank
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
@@ -233,6 +234,8 @@ class WalkForwardTrainer:
         self.wf_config = wf_config or WalkForwardTrainerConfig()
         self._pipeline_config = pipeline_config
         self._model_config = dict(model_config) if model_config else None
+        # Run seed: window models and window feature ranking
+        self._random_state = int(getattr(pipeline_config, "random_state", 42))
         self.output_dir = config.output_dir / "walk_forward"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -546,6 +549,8 @@ class WalkForwardTrainer:
                 _model_config["early_stopping_rounds"] = getattr(
                     self._pipeline_config, "early_stopping_patience", 10
                 )
+            # The deployed model's config already carries the run seed
+            apply_model_seed(_model_config, self._random_state)
             _model_config["n_classes"] = n_classes
             if len(X_es_scaled) == 0:
                 # Windowing swallowed the early-stopping tail: fit fixed-length,
@@ -728,7 +733,9 @@ class WalkForwardTrainer:
                 X_win = X_win[::step]
                 y_win = y_win[::step]
 
-            clf = RandomForestClassifier(n_estimators=30, max_depth=5, random_state=42, n_jobs=-1)
+            clf = RandomForestClassifier(
+                n_estimators=30, max_depth=5, random_state=self._random_state, n_jobs=-1
+            )
             clf.fit(X_win, y_win)
             importances = clf.feature_importances_
             top_idx = np.argsort(importances)[::-1][:max_feat].tolist()

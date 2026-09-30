@@ -103,8 +103,33 @@ class TestHelp:
 
     def test_run_help_documents_pipeline_options(self, runner: CliRunner):
         result = runner.invoke(app, ["run", "--help"])
-        for option in ("--data-path", "--models", "--training-mode", "--resume", "--n-trials"):
+        for option in (
+            "--data-path",
+            "--models",
+            "--training-mode",
+            "--resume",
+            "--n-trials",
+            "--seed",
+            "--tracking",
+            "--tracking-uri",
+        ):
             assert option in result.output
+
+    def test_seed_and_tracking_reach_the_config(self, tmp_path: Path):
+        from src.cli.utils import build_experiment_config
+
+        cfg = build_experiment_config(
+            data_path=tmp_path / "bars.parquet",
+            output_dir=tmp_path / "out",
+            symbol="MES",
+            horizons=[5],
+            models=["xgboost"],
+            random_seed=9,
+            tracking_backend="local",
+            tracking_uri=str(tmp_path / "trk"),
+        )
+        assert cfg.random_seed == 9
+        assert (cfg.tracking.backend, cfg.tracking.tracking_uri) == ("local", str(tmp_path / "trk"))
 
 
 # =============================================================================
@@ -141,6 +166,16 @@ class TestRunErrorHandling:
         result = runner.invoke(app, ["run", "--output-dir", str(tmp_path / "out")])
         assert result.exit_code == 1
         assert "--data-path is required" in result.output
+
+    def test_run_unknown_tracking_backend_is_a_configuration_error(
+        self, runner: CliRunner, tmp_path: Path
+    ):
+        result = runner.invoke(
+            app,
+            ["run", "-d", str(tmp_path / "bars.parquet"), "--tracking", "wandb"],
+        )
+        assert result.exit_code == 1
+        assert "tracking.backend" in result.output
 
     def test_run_missing_config_path_fails_cleanly(self, runner: CliRunner, tmp_path: Path):
         result = runner.invoke(app, ["run", "--config", str(tmp_path / "does_not_exist.yaml")])
