@@ -55,13 +55,14 @@ def _perturb_from(
 
 
 def _decided_orders(
-    trades: list[Trade], prices: pd.DataFrame, delay: int, cut: int
+    trades: list[Trade], prices: pd.DataFrame, delay: int, cut: int, legacy_stop: bool
 ) -> list[tuple[int, int, int, float | None]]:
     """(signal bar, fill bar, direction, stop distance) of every trade signalled before cut.
 
     The fill price of an order decided at ``cut - 1`` may legitimately be a later bar's
     price, so fills are compared through the stop distance (ATR and cost at the signal
-    bar) rather than the price itself.
+    bar) rather than the price itself. Without barriers (``legacy_stop``) the stop is a
+    fixed fraction of the fill price, so that fraction is what the decision fixes.
     """
     bar_of = {ts: i for i, ts in enumerate(prices["timestamp"])}
     orders = []
@@ -72,6 +73,8 @@ def _decided_orders(
             continue
         stop = trade.stop_loss_price
         distance = None if stop is None else abs(trade.entry_price - stop)
+        if distance is not None and legacy_stop:
+            distance /= trade.entry_price
         orders.append((signal_bar, fill_bar, trade.direction, distance))
     return orders
 
@@ -91,8 +94,9 @@ def _assert_ignores_bars_from(
         err_msg="equity through cut - 1 changed when later bars changed (lookahead)",
     )
     delay = config.resolved_signal_delay
-    base_orders = _decided_orders(base.trades, prices, delay, cut)
-    other_orders = _decided_orders(other.trades, prices, delay, cut)
+    legacy_stop = not config.uses_barriers
+    base_orders = _decided_orders(base.trades, prices, delay, cut, legacy_stop)
+    other_orders = _decided_orders(other.trades, prices, delay, cut, legacy_stop)
     assert [o[:3] for o in other_orders] == [
         o[:3] for o in base_orders
     ], "orders decided by cut - 1 changed when later bars changed (lookahead)"
