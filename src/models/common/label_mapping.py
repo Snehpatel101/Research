@@ -162,7 +162,8 @@ def full_class_probabilities(
     no evidence for them), so every model's output width is the run's class
     count and ``argmax`` is a class index.
     """
-    proba = np.asarray(probabilities, dtype=np.float64)
+    # Calibrators emit float32 1 - p, which can round a hair below 0
+    proba = np.clip(np.asarray(probabilities, dtype=np.float64), 0.0, 1.0)
     classes = np.asarray(fitted_classes).astype(int)
     if proba.shape[1] == n_classes and np.array_equal(classes, np.arange(n_classes)):
         return proba

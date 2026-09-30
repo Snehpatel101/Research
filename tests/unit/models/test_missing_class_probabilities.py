@@ -49,3 +49,13 @@ def test_training_without_neutral_class(model_name: str) -> None:
     assert (output.class_predictions == y[450:]).mean() > 0.7
     if hasattr(model, "predict_proba"):
         assert np.array_equal(model.predict_proba(X[450:]), output.class_probabilities)
+
+
+def test_full_class_probabilities_clips_float32_rounding() -> None:
+    """A calibrator's float32 1 - p can be -2e-8; log-loss rejects negative probabilities."""
+    from src.models.common.label_mapping import full_class_probabilities
+
+    raw = np.array([[1.0000001, -2.4e-8], [0.3, 0.7]], dtype=np.float32)
+    out = full_class_probabilities(raw, [0, 2], 3)
+    assert out.min() >= 0.0 and out.max() <= 1.0
+    assert out.shape == (2, 3) and np.all(out[:, 1] == 0.0)

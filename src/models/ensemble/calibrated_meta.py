@@ -172,8 +172,9 @@ class CalibratedMetaLearner(BaseModel):
         val_metrics = self._compute_metrics(X_val_scaled, y_val)
 
         # Compute calibrated loss
-        train_proba = self._model.predict_proba(X_train_scaled)
-        val_proba = self._model.predict_proba(X_val_scaled)
+        # float32 calibrator output can round a hair outside [0, 1]
+        train_proba = np.clip(self._model.predict_proba(X_train_scaled), 0.0, 1.0)
+        val_proba = np.clip(self._model.predict_proba(X_val_scaled), 0.0, 1.0)
         train_loss = float(log_loss(y_train_sk, train_proba))
         val_loss = float(log_loss(y_val_sk, val_proba))
 
