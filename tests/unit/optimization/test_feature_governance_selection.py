@@ -8,10 +8,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.optimization.feature_selection.config import (
-    FeatureSelectionConfig,
-    FeatureSelectorConfig,
-)
+from src.optimization.feature_selection.config import FeatureSelectorConfig
 from src.optimization.feature_selection.timeframe_budget import apply_timeframe_budget
 from src.optimization.feature_selection.walk_forward import WalkForwardFeatureSelector
 
@@ -23,17 +20,9 @@ from src.optimization.feature_selection.walk_forward import WalkForwardFeatureSe
 class TestMDAStabilization:
     """E2: MDA configurable n_repeats and n_estimators defaults."""
 
-    def test_feature_selection_config_has_mda_n_repeats(self) -> None:
-        cfg = FeatureSelectionConfig()
-        assert cfg.mda_n_repeats == 5
-
     def test_feature_selector_config_has_mda_n_repeats(self) -> None:
         cfg = FeatureSelectorConfig()
         assert cfg.mda_n_repeats == 5
-
-    def test_mda_n_repeats_validation_positive(self) -> None:
-        with pytest.raises(ValueError, match="mda_n_repeats must be > 0"):
-            FeatureSelectionConfig(mda_n_repeats=0)
 
     def test_feature_selector_mda_n_repeats_validation(self) -> None:
         with pytest.raises(ValueError, match="mda_n_repeats must be > 0"):
@@ -116,19 +105,3 @@ class TestTimeframeBudget:
     def test_budget_must_be_positive(self) -> None:
         with pytest.raises(ValueError, match="max_per_timeframe must be >= 1"):
             apply_timeframe_budget(pd.Series({"a_15m": 1.0}), ["a_15m"], ["15min"], 0)
-
-
-# ---------------------------------------------------------------------------
-# Config Serialization
-# ---------------------------------------------------------------------------
-
-
-class TestConfigSerialization:
-    """FeatureSelectionConfig round-trip (Trainer-level selection settings)."""
-
-    def test_from_dict_round_trip(self) -> None:
-        cfg = FeatureSelectionConfig(mda_n_repeats=10, n_estimators=30)
-        cfg2 = FeatureSelectionConfig.from_dict(cfg.to_dict())
-        assert cfg2.mda_n_repeats == 10
-        assert cfg2.n_estimators == 30
-        assert cfg2.to_dict() == cfg.to_dict()

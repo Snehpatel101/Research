@@ -51,11 +51,8 @@ from src.models.ensemble.diversity import (
 )
 from src.validation.bootstrap import (
     BootstrapResult,
-    bootstrap_accuracy,
-    bootstrap_f1_score,
     bootstrap_max_drawdown,
     bootstrap_metric,
-    bootstrap_multiple_metrics,
     bootstrap_sharpe_ratio,
     bootstrap_win_rate,
 )
@@ -66,14 +63,12 @@ from src.validation.cv.cpcv import (
     CPCVConfig,
     CPCVPathResult,
     CPCVResult,
-    create_cpcv,
 )
 
 # Phase 5: PBO (Probability of Backtest Overfitting)
 from src.validation.cv.pbo import (
     PBOConfig,
     PBOResult,
-    analyze_overfitting_risk,
     compute_pbo,
     pbo_gate,
 )
@@ -82,12 +77,10 @@ from src.validation.cv.walk_forward import (
     WalkForwardEvaluator,
     WalkForwardResult,
     WindowMetrics,
-    create_walk_forward_evaluator,
 )
 from src.validation.deflated_sharpe import (
     DSRComputeConfig,
     DSRResult,
-    analyze_selection_bias,
     compute_deflated_sharpe,
     compute_deflated_sharpe_from_returns,
     compute_dsr_from_optuna_study,
@@ -111,8 +104,6 @@ from src.validation.lookahead_audit import (
     PropagationScanResult,
     ResampleConfig,
     ResamplingParityResult,
-    audit_feature_lookahead,
-    audit_mtf_alignment,
     scan_dependency_propagation,
     validate_resample_config,
     verify_resampling_parity,
@@ -125,8 +116,6 @@ __all__ = [
     "LookaheadBiasError",
     "ResampleConfig",
     "validate_resample_config",
-    "audit_feature_lookahead",
-    "audit_mtf_alignment",
     # H3: Dependency propagation scan
     "PropagationScanResult",
     "scan_dependency_propagation",
@@ -139,7 +128,6 @@ __all__ = [
     "compute_deflated_sharpe",
     "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",
-    "analyze_selection_bias",
     "expected_max_sharpe",
     "is_sharpe_like_metric",
     "probabilistic_sharpe_ratio",
@@ -148,10 +136,7 @@ __all__ = [
     "bootstrap_metric",
     "bootstrap_sharpe_ratio",
     "bootstrap_max_drawdown",
-    "bootstrap_accuracy",
-    "bootstrap_f1_score",
     "bootstrap_win_rate",
-    "bootstrap_multiple_metrics",
     # Leakage detection
     "LeakageCheckResult",
     "LeakageDetectedError",
@@ -204,17 +189,14 @@ __all__ = [
     "WalkForwardEvaluator",
     "WalkForwardResult",
     "WindowMetrics",
-    "create_walk_forward_evaluator",
     # CPCV - Combinatorial Purged Cross-Validation (Phase 5)
     "CombinatorialPurgedCV",
     "CPCVConfig",
     "CPCVPathResult",
     "CPCVResult",
-    "create_cpcv",
     # PBO - Probability of Backtest Overfitting (Phase 5)
     "PBOConfig",
     "PBOResult",
     "compute_pbo",
     "pbo_gate",
-    "analyze_overfitting_risk",
 ]

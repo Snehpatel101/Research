@@ -12,6 +12,21 @@ from .environment import resolve_device
 
 logger = logging.getLogger(__name__)
 
+# Settings of the Trainer-level feature selection, removed in Phase 117 (MLFactory
+# selects every model's features on train-only data before its Trainer runs).
+# Saved configs that still carry them load with a warning.
+REMOVED_FIELDS: frozenset[str] = frozenset(
+    {
+        "use_feature_selection",
+        "feature_selection_n_features",
+        "feature_selection_method",
+        "feature_selection_cv_splits",
+        "feature_selection_min_frequency",
+        "feature_selection_purge_bars",
+        "feature_selection_embargo_bars",
+    }
+)
+
 
 def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
     """Thin wrapper over the canonical config lookup (src/config/utils.py)."""
@@ -64,21 +79,6 @@ class TrainerConfig:
         default_factory=lambda: _get_global_or_default("calibration.method", "auto")
     )
     evaluate_test_set: bool = True
-    use_feature_selection: bool = field(
-        default_factory=lambda: _get_global_or_default("features.selection.enabled", True)
-    )
-    feature_selection_n_features: int = 50
-    feature_selection_method: str = field(
-        default_factory=lambda: _get_global_or_default("features.selection.method", "mda")
-    )
-    feature_selection_cv_splits: int = field(
-        default_factory=lambda: _get_global_or_default("features.selection.cv_splits", 5)
-    )
-    feature_selection_min_frequency: float = 0.6
-    # Purge/embargo (bars) for feature-selection CV. None = legacy defaults
-    # (purge 3 x horizon, embargo 1440); pipelines pass their own values.
-    feature_selection_purge_bars: int | None = None
-    feature_selection_embargo_bars: int | None = None
     deterministic_mode: bool = False
     nan_check_raise_error: bool = True
     checkpoint_interval: int = 50
@@ -180,8 +180,7 @@ class TrainerConfig:
 
         Field-driven (iterates the dataclass fields) so it can never drift
         out of sync when fields are added — the previous hand-maintained
-        key list silently dropped pipeline_run_id and
-        feature_selection_min_frequency.
+        key list silently dropped pipeline_run_id.
         """
         from dataclasses import fields as dataclass_fields
 
@@ -195,8 +194,19 @@ class TrainerConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TrainerConfig":
-        """Create TrainerConfig from dictionary."""
-        return cls(**data)
+        """Create TrainerConfig from dictionary.
+
+        Keys of removed settings (``REMOVED_FIELDS``) are dropped with a
+        warning, so configs saved by older versions still load.
+        """
+        removed = sorted(REMOVED_FIELDS.intersection(data))
+        if removed:
+            logger.warning(
+                f"TrainerConfig: ignoring removed settings {removed} (Trainer-level "
+                "feature selection was removed; MLFactory selects features per model "
+                "on train-only data)"
+            )
+        return cls(**{k: v for k, v in data.items() if k not in REMOVED_FIELDS})
 
     def get_resolved_device(self) -> str:
         """Get the resolved device (auto -> cuda/cpu)."""

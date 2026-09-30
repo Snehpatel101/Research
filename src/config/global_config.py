@@ -9,11 +9,19 @@ here that nothing reads is a "settable but ignored" knob.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
+
+# ``features.selection`` (enabled / method / cv_splits) fed the Trainer-level
+# feature selection, removed in Phase 117. A YAML that still has it loads with
+# a warning.
+_REMOVED_FEATURE_KEYS: tuple[str, ...] = ("selection",)
 
 
 @dataclass
@@ -38,13 +46,6 @@ class HorizonsConfig:
 
 
 @dataclass
-class FeatureSelectionConfig:
-    enabled: bool
-    method: str
-    cv_splits: int
-
-
-@dataclass
 class FeatureGenerationConfig:
     default: str
     modes: dict[str, str]
@@ -57,7 +58,6 @@ class FeaturesConfig:
     rsi_period: int
     macd: dict[str, int]
     bollinger: dict[str, float | int]
-    selection: FeatureSelectionConfig
     generation: FeatureGenerationConfig
 
 
@@ -129,6 +129,13 @@ class GlobalConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GlobalConfig:
+        removed = [k for k in _REMOVED_FEATURE_KEYS if k in data["features"]]
+        if removed:
+            logger.warning(
+                f"Global config: ignoring removed key(s) {['features.' + k for k in removed]} "
+                "(Trainer-level feature selection was removed; set "
+                "data.features.selection_enabled in the ExperimentConfig instead)"
+            )
         return cls(
             random_seed=data["random_seed"],
             timeframes=TimeframeConfig(**data["timeframes"]),
@@ -140,7 +147,6 @@ class GlobalConfig:
                 rsi_period=data["features"]["rsi_period"],
                 macd=data["features"]["macd"],
                 bollinger=data["features"]["bollinger"],
-                selection=FeatureSelectionConfig(**data["features"]["selection"]),
                 generation=FeatureGenerationConfig(**data["features"]["generation"]),
             ),
             training=TrainingConfig(**data["training"]),
@@ -184,11 +190,6 @@ class GlobalConfig:
                 "rsi_period": self.features.rsi_period,
                 "macd": self.features.macd,
                 "bollinger": self.features.bollinger,
-                "selection": {
-                    "enabled": self.features.selection.enabled,
-                    "method": self.features.selection.method,
-                    "cv_splits": self.features.selection.cv_splits,
-                },
                 "generation": {
                     "default": self.features.generation.default,
                     "modes": self.features.generation.modes,

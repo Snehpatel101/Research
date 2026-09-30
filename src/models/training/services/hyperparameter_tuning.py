@@ -36,7 +36,6 @@ class TuningResult:
 
     best_params: dict[str, Any]
     best_score: float
-    n_trials_completed: int
 
 
 class HyperparameterTuningService:
@@ -176,7 +175,6 @@ class HyperparameterTuningService:
         return TuningResult(
             best_params=result.get("best_params", {}),
             best_score=float(best_score) if best_score is not None else float("nan"),
-            n_trials_completed=request.n_trials,
         )
 
     def _create_cpcv(self, request: TuningRequest, purge_bars: int, embargo_bars: int) -> Any:

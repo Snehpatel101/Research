@@ -170,16 +170,3 @@ class ArtifactManager:
                 logger.warning(f"Failed to save model {key}: {e}")
 
         logger.info(f"  Saved {saved_count}/{len(trained_models)} models to: {models_dir}")
-
-    def load_config(self, config_path: Path | None = None) -> PipelineConfig:
-        """
-        Load configuration from file.
-
-        Args:
-            config_path: Optional path to config file. Uses output_dir/config.json if not provided.
-
-        Returns:
-            Loaded PipelineConfig
-        """
-        path = config_path or (self.output_dir / "config.json")
-        return PipelineConfig.load(path)

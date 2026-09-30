@@ -34,13 +34,9 @@ from .cpcv import (
     CPCVConfig,
     CPCVPathResult,
     CPCVResult,
-    create_cpcv,
 )
 from .cv_dataclasses import CVResult, FoldMetrics
-from .cv_feature_selection import (
-    compute_feature_stability,
-    run_cv_with_per_fold_feature_selection,
-)
+from .cv_feature_selection import run_cv_with_per_fold_feature_selection
 from .cv_runner import CrossValidationRunner
 from .cv_stacking import (
     analyze_cv_stability,
@@ -48,12 +44,6 @@ from .cv_stacking import (
     validate_stacking_consistency,
 )
 from .cv_tuner import TimeSeriesOptunaTuner
-from .oof_alignment import (
-    OOFAlignmentResult,
-    OOFAlignmentValidator,
-    compute_oof_coverage,
-    validate_oof_for_stacking,
-)
 from .oof_cache import (
     OOFCache,
     OOFCacheEntry,
@@ -70,16 +60,16 @@ from .param_spaces import PARAM_SPACES
 from .pbo import (
     PBOConfig,
     PBOResult,
-    analyze_overfitting_risk,
     compute_pbo,
     pbo_gate,
 )
-from .purged_kfold import ModelAwareCV, PurgedKFold, PurgedKFoldConfig
+from .purged_kfold import (
+    PurgedKFold,
+    PurgedKFoldConfig,
+)
 from .sequence_cv import (
     SequenceCVBuilder,
     SequenceFoldResult,
-    build_sequences_for_cv_fold,
-    validate_sequence_cv_coverage,
 )
 from .timestamp_alignment import (
     align_predictions_on_datetime,
@@ -91,7 +81,6 @@ from .walk_forward import (
     WalkForwardEvaluator,
     WalkForwardResult,
     WindowMetrics,
-    create_walk_forward_evaluator,
 )
 
 __all__ = [
@@ -103,7 +92,6 @@ __all__ = [
     "uniqueness_sample_weights",
     "PurgedKFold",
     "PurgedKFoldConfig",
-    "ModelAwareCV",
     "WalkForwardFeatureSelector",
     "OOFGenerator",
     "OOFPrediction",
@@ -116,7 +104,6 @@ __all__ = [
     "TimeSeriesOptunaTuner",
     # CV Feature Selection
     "run_cv_with_per_fold_feature_selection",
-    "compute_feature_stability",
     # CV Stacking
     "validate_stacking_consistency",
     "build_stacking_datasets_from_cv_results",
@@ -126,24 +113,19 @@ __all__ = [
     "WalkForwardEvaluator",
     "WalkForwardResult",
     "WindowMetrics",
-    "create_walk_forward_evaluator",
     # CPCV
     "CPCVConfig",
     "CombinatorialPurgedCV",
     "CPCVResult",
     "CPCVPathResult",
-    "create_cpcv",
     # PBO
     "PBOConfig",
     "PBOResult",
     "compute_pbo",
     "pbo_gate",
-    "analyze_overfitting_risk",
     # Sequence CV
     "SequenceCVBuilder",
     "SequenceFoldResult",
-    "build_sequences_for_cv_fold",
-    "validate_sequence_cv_coverage",
     # Sequence OOF
     "SequenceOOFGenerator",
     # Stacking
@@ -158,8 +140,4 @@ __all__ = [
     "OOFCacheEntry",
     "compute_data_hash",
     # OOF Alignment
-    "OOFAlignmentResult",
-    "OOFAlignmentValidator",
-    "compute_oof_coverage",
-    "validate_oof_for_stacking",
 ]

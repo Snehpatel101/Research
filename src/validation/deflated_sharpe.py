@@ -499,81 +499,6 @@ def compute_dsr_from_optuna_study(
 
 
 # =============================================================================
-# CONVENIENCE FUNCTIONS
-# =============================================================================
-
-
-def analyze_selection_bias(
-    returns_matrix: np.ndarray,
-    strategy_names: list[str] | None = None,
-    config: DSRComputeConfig | None = None,
-) -> dict[str, Any]:
-    """
-    Selection-bias analysis for N strategies with per-period returns.
-
-    Args:
-        returns_matrix: Array of shape (T, N) -- per-period returns of each
-            strategy configuration (NaNs are ignored per column).
-        strategy_names: Optional names for the N strategies.
-        config: Gate thresholds.
-
-    Returns:
-        Dict with the best strategy, its DSR and per-strategy Sharpe ratios.
-    """
-    matrix = np.asarray(returns_matrix, dtype=np.float64)
-    if matrix.ndim != 2:
-        raise ValueError(f"returns_matrix must be 2D (T, N), got shape {matrix.shape}")
-    n_strategies = matrix.shape[1]
-
-    if strategy_names is None:
-        strategy_names = [f"strategy_{i}" for i in range(n_strategies)]
-    if len(strategy_names) != n_strategies:
-        raise ValueError(
-            f"strategy_names length ({len(strategy_names)}) must match "
-            f"number of strategies ({n_strategies})"
-        )
-
-    sharpes = np.array([sharpe_ratio_per_period(matrix[:, j]) for j in range(n_strategies)])
-    best_idx = int(np.argmax(sharpes))
-
-    dsr_result = compute_deflated_sharpe_from_returns(
-        returns=matrix[:, best_idx],
-        trial_sharpes=sharpes,
-        config=config,
-    )
-
-    order = np.argsort(-sharpes)
-    ranks = np.empty(n_strategies, dtype=int)
-    ranks[order] = np.arange(1, n_strategies + 1)
-
-    return {
-        "n_trials": n_strategies,
-        "best_strategy_idx": best_idx,
-        "best_strategy_name": strategy_names[best_idx],
-        "raw_sharpe": dsr_result.sharpe_ratio,
-        "dsr": dsr_result.dsr,
-        "psr": dsr_result.psr,
-        "expected_max_sharpe": dsr_result.expected_max_sharpe,
-        "n_observations": dsr_result.n_observations,
-        "skewness": dsr_result.skewness,
-        "kurtosis": dsr_result.kurtosis,
-        "variance_trial_sharpes": dsr_result.variance_trial_sharpes,
-        "is_significant": dsr_result.is_significant,
-        "should_deploy": dsr_result.should_deploy,
-        "risk_level": dsr_result.get_risk_level(),
-        "strategy_analysis": [
-            {
-                "name": name,
-                "sharpe_ratio": float(sharpes[i]),
-                "rank": int(ranks[i]),
-                "is_best": i == best_idx,
-            }
-            for i, name in enumerate(strategy_names)
-        ],
-    }
-
-
-# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
@@ -582,7 +507,6 @@ __all__ = [
     "EULER_MASCHERONI",
     "DSRComputeConfig",
     "DSRResult",
-    "analyze_selection_bias",
     "compute_deflated_sharpe",
     "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",

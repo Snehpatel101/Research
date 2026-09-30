@@ -88,11 +88,10 @@ class TestTimeframeBudget:
 
 
 class TestSelectionEnabled:
-    def test_off_skips_selection_and_trainer_reselection(self, tmp_path: Path) -> None:
+    def test_off_skips_selection(self, tmp_path: Path) -> None:
         orch = _orchestrator(tmp_path, selection_enabled=False)
         orch._run_feature_selection_on_train_data(_frame())
         assert orch._per_model_features == {}
-        assert orch._trainer_feature_selection("logistic") is False
 
     def test_off_with_more_features_than_the_contract_fails_loudly(self, tmp_path: Path) -> None:
         orch = _orchestrator(tmp_path, selection_enabled=False)

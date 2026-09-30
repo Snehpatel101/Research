@@ -314,14 +314,6 @@ class TrainedModelRegistry:
                 if isinstance(value, (int, float)):
                     flat[f"cal_{key}"] = float(value)
 
-        # Feature selection info
-        if "feature_selection" in metrics:
-            fs = metrics["feature_selection"]
-            if "n_features_selected" in fs:
-                flat["n_features"] = float(fs["n_features_selected"])
-            if "reduction_ratio" in fs:
-                flat["feature_reduction"] = float(fs["reduction_ratio"])
-
         return flat
 
     def _get_model_family(self, model_name: str) -> str:

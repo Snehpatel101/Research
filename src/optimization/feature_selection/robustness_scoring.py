@@ -125,19 +125,6 @@ class RobustnessScorer:
         )
         return df
 
-    def select_top_features(self, scores_df: pd.DataFrame, n_features: int) -> list[str]:
-        """Return top N features by composite score.
-
-        Args:
-            scores_df: DataFrame from score_features().
-            n_features: Number of features to select.
-
-        Returns:
-            List of feature names, ordered by composite score descending.
-        """
-        n_features = max(n_features, 0)
-        return scores_df["feature"].head(n_features).tolist()
-
 
 def _normalize_series(series: pd.Series | None, feature_names: list[str]) -> dict[str, float]:
     """Normalize a Series to [0, 1] by dividing by max value.

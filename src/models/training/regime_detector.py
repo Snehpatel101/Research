@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -63,27 +63,7 @@ class RegimeDetectionMethod(StrEnum):
     COMBINED = "combined"
 
 
-class VolatilityRegime(int, Enum):
-    """Volatility regime states."""
-
-    LOW = 0
-    MEDIUM = 1  # Only used when n_regimes=3
-    HIGH = 2
-
-
-class TrendRegime(int, Enum):
-    """Trend regime states."""
-
-    DOWNTREND = 0
-    SIDEWAYS = 1
-    UPTREND = 2
-
-
 # Regime labels for display
-VOLATILITY_LABELS = {0: "low_vol", 1: "medium_vol", 2: "high_vol"}
-TREND_LABELS = {0: "downtrend", 1: "sideways", 2: "uptrend"}
-
-
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -539,7 +519,5 @@ __all__ = [
     "RegimeDetectorConfig",
     "RegimeResult",
     "RegimeDetectionMethod",
-    "VolatilityRegime",
-    "TrendRegime",
     "detect_regimes",
 ]

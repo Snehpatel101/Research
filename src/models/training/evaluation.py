@@ -73,9 +73,7 @@ class TrainerEvaluationMixin:
     This mixin assumes the following attributes exist on the class:
     - self.config: TrainerConfig with training settings
     - self.model: Instantiated model from registry
-    - self.feature_selector: FeatureSelectionManager instance
     - self._feature_set_columns: List of feature columns or None
-    - self._is_feature_selection_enabled(): Method to check if feature selection is enabled
     - self._is_heterogeneous_ensemble(): Method to check for heterogeneous ensembles
     - self._apply_feature_set_filter(): Method to apply feature set filtering
     - self._get_sequence_model_feature_columns(): Method to get sequence model features
@@ -84,12 +82,7 @@ class TrainerEvaluationMixin:
     # Type hints for mixin attributes (provided by the class this is mixed into)
     config: Any  # TrainerConfig
     model: Any  # Model instance
-    feature_selector: Any | None
     _feature_set_columns: list[str] | None
-
-    def _is_feature_selection_enabled(self) -> bool:
-        """Check if feature selection is enabled. Must be implemented by subclass."""
-        raise NotImplementedError
 
     def _is_heterogeneous_ensemble(self) -> bool:
         """Check for heterogeneous ensembles. Must be implemented by subclass."""
@@ -179,17 +172,6 @@ class TrainerEvaluationMixin:
 
                 logger.debug(
                     f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
-                )
-
-            # Apply feature selection if enabled
-            if (
-                self._is_feature_selection_enabled()
-                and self.feature_selector is not None
-                and self.feature_selector.is_fitted
-            ):
-                X_test_df = self.feature_selector.apply_selection_df(X_test_df)
-                logger.debug(
-                    f"Applied feature selection to test set: {X_test_df.shape[1]} features"
                 )
 
             X_test = np.asarray(X_test_df)
@@ -285,17 +267,6 @@ class TrainerEvaluationMixin:
 
                 logger.debug(
                     f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
-                )
-
-            # Apply feature selection if enabled
-            if (
-                self._is_feature_selection_enabled()
-                and self.feature_selector is not None
-                and self.feature_selector.is_fitted
-            ):
-                X_test_df = self.feature_selector.apply_selection_df(X_test_df)
-                logger.debug(
-                    f"Applied feature selection to test set: {X_test_df.shape[1]} features"
                 )
 
             X_test = np.asarray(X_test_df)

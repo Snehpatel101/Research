@@ -40,8 +40,6 @@ from src.core.constants import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_EARLY_STOPPING_PATIENCE,
     DEFAULT_EMBARGO_BARS,
-    DEFAULT_FEATURE_PRUNING_TRIALS,
-    DEFAULT_FEATURE_SELECTION_TRIALS,
     DEFAULT_HORIZON,
     DEFAULT_HYPERPARAM_TRIALS,
     DEFAULT_LABEL_OPTIMIZATION_TRIALS,
@@ -230,9 +228,6 @@ class PipelineConfig:
 
     # Feature optimization
     optimize_features: bool = True
-    feature_selection_method: str = "optuna"  # Options: "optuna", "shap", "mutual_info"
-    feature_selection_trials: int = DEFAULT_FEATURE_SELECTION_TRIALS  # 100
-    feature_pruning_trials: int = DEFAULT_FEATURE_PRUNING_TRIALS  # 50
     min_features: int = DEFAULT_MIN_FEATURES  # 20
 
     # Hyperparameter optimization

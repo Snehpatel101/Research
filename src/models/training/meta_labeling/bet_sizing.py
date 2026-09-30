@@ -8,7 +8,6 @@ based on model confidence and risk management principles.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from enum import StrEnum
 
 import numpy as np
@@ -24,17 +23,6 @@ class BetSizingStrategy(StrEnum):
     KELLY = "kelly"  # Kelly Criterion
     HALF_KELLY = "half_kelly"  # Half Kelly (more conservative)
     CONFIDENCE = "confidence"  # Based on prediction confidence
-
-
-@dataclass
-class BetSizingConfig:
-    """Configuration for bet sizing."""
-
-    strategy: BetSizingStrategy = BetSizingStrategy.BINARY
-    threshold: float = 0.5  # Minimum probability to trade
-    max_size: float = 1.0  # Maximum position size (fraction of capital)
-    min_size: float = 0.0  # Minimum position size (if trading)
-    kelly_fraction: float = 0.5  # Fraction of Kelly to use
 
 
 def compute_bet_sizes(

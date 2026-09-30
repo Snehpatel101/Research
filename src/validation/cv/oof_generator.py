@@ -99,7 +99,6 @@ class OOFGenerator:
         self._core_generator = CoreOOFGenerator(cv)
         self._sequence_generator = SequenceOOFGenerator(cv)
         self._stacking_builder = StackingDatasetBuilder(n_classes)
-        self._validator = OOFValidator()
         self._io = OOFDatasetIO()
 
         # Initialize cache if directory provided

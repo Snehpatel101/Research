@@ -7,12 +7,12 @@ any combination of models, features, optimization, and ensembles.
 Main Components:
 - UnifiedTrainingOrchestrator: THE single entry point (PHASE_3)
 - Trainer: Main orchestrator for model training workflow
-- TrainerFeaturesMixin: Feature selection and feature set resolution
+- TrainerFeaturesMixin: Feature set resolution
 - TrainerEvaluationMixin: Test set evaluation functionality
 - TrainerArtifactsMixin: Artifact saving (configs, metrics, models)
 
 Usage:
-    from src.models.training import UnifiedTrainingOrchestrator, train_pipeline
+    from src.models.training import UnifiedTrainingOrchestrator
 
     config = PipelineConfig(
         symbol="MES",
@@ -22,7 +22,7 @@ Usage:
         build_ensemble=True,
     )
 
-    result = train_pipeline(config, df)
+    result = UnifiedTrainingOrchestrator(config).train(df)
 """
 
 # Local trainer classes
@@ -33,7 +33,6 @@ from .features import TrainerFeaturesMixin
 
 # PHASE_3: Meta-labeling components
 from .meta_labeling import (
-    BetSizingConfig,
     BetSizingStrategy,
     compute_bet_sizes,
 )
@@ -59,8 +58,6 @@ from .unified_orchestrator import (
     PreTrainingValidationError,
     TrainingRunResult,
     UnifiedTrainingOrchestrator,
-    train_meta_labeling,
-    train_pipeline,
 )
 
 __all__ = [
@@ -80,8 +77,6 @@ __all__ = [
     "PreTrainingValidationError",
     "TrainingRunResult",
     "ModelTrainingResult",
-    "train_pipeline",
-    "train_meta_labeling",
     # PHASE_3: Regime-aware training
     "RegimeDetector",
     "RegimeDetectorConfig",
@@ -93,6 +88,5 @@ __all__ = [
     "RegimeModelResult",
     # PHASE_3: Meta-labeling components
     "BetSizingStrategy",
-    "BetSizingConfig",
     "compute_bet_sizes",
 ]

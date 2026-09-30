@@ -85,14 +85,6 @@ class TestRobustnessScoring:
         }
         assert set(df.columns) == expected_cols
 
-    def test_select_top_features(self) -> None:
-        scorer = RobustnessScorer()
-        mda = pd.Series({"a": 0.9, "b": 0.5, "c": 0.1})
-        df = scorer.score_features(["a", "b", "c"], mda_importance=mda)
-        top = scorer.select_top_features(df, 2)
-        assert len(top) == 2
-        assert top[0] == "a"
-
     def test_weights_must_sum_to_one(self) -> None:
         with pytest.raises(ValueError, match="sum to 1.0"):
             RobustnessScorer(stability_weight=0.5, predictive_weight=0.5, regime_weight=0.5)

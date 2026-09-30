@@ -1,14 +1,13 @@
 """
 Feature selection ranks by importance, not position: an informative feature at
-index 60 of 70 must be selected by the live selectors (walk-forward MDA, OHLCV
-selector) instead of being lost to positional truncation.
+index 60 of 70 must be selected by the walk-forward MDA selector instead of
+being lost to positional truncation.
 """
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.optimization.feature_selection.ohlcv_selector import OHLCVFeatureSelector
 from src.optimization.feature_selection.result import FeatureSelectionResult
 from src.optimization.feature_selection.walk_forward import WalkForwardFeatureSelector
 from src.validation.cv import PurgedKFold, PurgedKFoldConfig
@@ -47,22 +46,4 @@ class TestSelectionIsImportanceBasedNotPositional:
         assert f"feat_{INFORMATIVE}" in result.selected_features
         assert result.per_fold_selections and all(
             f"feat_{INFORMATIVE}" in fold for fold in result.per_fold_selections
-        )
-
-    def test_ohlcv_selector_finds_the_feature_at_index_60(self, data_with_late_signal):
-        X, y = data_with_late_signal
-        selector = OHLCVFeatureSelector(
-            n_splits=3,
-            min_stability_score=0.0,
-            correlation_threshold=0.99,
-            n_features_per_fold=5,
-            n_estimators=15,
-        )
-
-        result = selector.select_features(X.to_numpy(), y.to_numpy(), list(X.columns))
-
-        assert isinstance(result, FeatureSelectionResult)
-        assert f"feat_{INFORMATIVE}" in result.selected_features
-        assert max(result.feature_importances, key=result.feature_importances.get) == (
-            f"feat_{INFORMATIVE}"
         )

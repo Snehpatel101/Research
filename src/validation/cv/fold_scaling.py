@@ -20,7 +20,6 @@ import logging
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd  # type: ignore[import-untyped]
 from sklearn.preprocessing import RobustScaler, StandardScaler  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
@@ -79,7 +78,6 @@ class FoldAwareScaler:
         self.method = method
         self.clip_outliers = clip_outliers
         self.clip_std = clip_std
-        self._current_scaler = None
 
     def fit_transform_fold(
         self,
@@ -158,8 +156,6 @@ class FoldAwareScaler:
             np.clip(X_train_scaled, -self.clip_std, self.clip_std, out=X_train_scaled)
             np.clip(X_val_scaled, -self.clip_std, self.clip_std, out=X_val_scaled)
 
-        self._current_scaler = scaler
-
         return FoldScalingResult(
             X_train_scaled=X_train_scaled,
             X_val_scaled=X_val_scaled,
@@ -167,45 +163,6 @@ class FoldAwareScaler:
             method=self.method,
             n_features=X_train.shape[1] if X_train.ndim > 1 else 1,
         )
-
-
-def scale_cv_fold(
-    X: pd.DataFrame | np.ndarray,
-    train_idx: np.ndarray,
-    val_idx: np.ndarray,
-    method: str = "robust",
-    clip_outliers: bool = True,
-    clip_std: float = 5.0,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Convenience function to scale a CV fold.
-
-    Args:
-        X: Full feature matrix (DataFrame or ndarray)
-        train_idx: Training indices
-        val_idx: Validation indices
-        method: Scaling method ("robust", "standard", "none")
-        clip_outliers: Whether to clip outliers
-        clip_std: Clipping threshold in standard deviations
-
-    Returns:
-        Tuple of (X_train_scaled, X_val_scaled) as numpy arrays
-    """
-    if isinstance(X, pd.DataFrame):
-        X_train = X.iloc[train_idx].values
-        X_val = X.iloc[val_idx].values
-    else:
-        X_train = X[train_idx]
-        X_val = X[val_idx]
-
-    scaler = FoldAwareScaler(
-        method=method,
-        clip_outliers=clip_outliers,
-        clip_std=clip_std,
-    )
-    result = scaler.fit_transform_fold(X_train, X_val)
-
-    return result.X_train_scaled, result.X_val_scaled
 
 
 def get_scaling_method_for_model(model_name: str) -> str:
@@ -243,6 +200,5 @@ def get_scaling_method_for_model(model_name: str) -> str:
 __all__ = [
     "FoldAwareScaler",
     "FoldScalingResult",
-    "scale_cv_fold",
     "get_scaling_method_for_model",
 ]

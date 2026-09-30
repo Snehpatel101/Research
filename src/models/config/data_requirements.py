@@ -54,8 +54,6 @@ class ModelDataRequirements:
         max_features: Suggested maximum feature count (for regularization)
         supports_categorical: Whether model handles categorical features natively
         supports_missing: Whether model handles missing values natively
-        feature_selection_method: Method for feature selection ("mda", "mdi", "hybrid", "none")
-        feature_selection_n_features: Number of features to select (0 = use max_features)
         description: Human-readable description
 
         # Phase 1 SNwH fields:
@@ -77,8 +75,6 @@ class ModelDataRequirements:
     max_features: int | None = None
     supports_categorical: bool = False
     supports_missing: bool = False
-    feature_selection_method: str = "mda"
-    feature_selection_n_features: int = 0
     description: str = ""
 
     # Phase 1 SNwH: Per-model configuration fields

@@ -755,8 +755,6 @@ class ExperimentConfig:
             # Optuna trial counts - all driven by OptunaConfig.n_trials
             hyperparam_trials=self.training.optuna.n_trials,
             label_optimization_trials=self.training.optuna.n_trials,
-            feature_selection_trials=self.training.optuna.n_trials,
-            feature_pruning_trials=self.training.optuna.n_trials,
             optuna_metric=self.training.optuna.metric,
             optuna_timeout=self.training.optuna.timeout,
             # MTF configuration (empty list disables MTF features)

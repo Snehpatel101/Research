@@ -213,9 +213,6 @@ class RegimeAwareTrainer:
         # Trained models storage: (model_name, regime) -> Trainer
         self._trainers: dict[tuple[str, str], Any] = {}
 
-        # Store training result for inference
-        self._training_result: RegimeTrainingResult | None = None
-
         # Raw OHLCV fallback for regime detection (set in train())
         self._raw_ohlcv: pd.DataFrame | None = None
 
@@ -314,9 +311,6 @@ class RegimeAwareTrainer:
             ),
         )
 
-        # Store for inference
-        self._training_result = result
-
         # Save summary
         if save_models:
             self._save_summary(result)
@@ -405,8 +399,6 @@ class RegimeAwareTrainer:
                         horizon=horizon,
                         prepared_data=regime_prepared,
                         output_dir=model_dir,
-                        # Features were already selected per model upstream
-                        use_feature_selection=False,
                         # Regime models train with their configured parameters
                         optimize_hyperparams=False,
                     )

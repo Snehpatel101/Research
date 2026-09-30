@@ -1,172 +1,59 @@
 """
 Feature Selection Package for OHLCV Time-Series ML.
 
-Import paths:
-    # Canonical path:
-    from src.optimization.feature_selection import WalkForwardFeatureSelector
+The live selection is the orchestrator's train-only pipeline
+(``src/models/training/feature_selection.py``): MDA ranking, timeframe budget,
+low-variance filter, rank-ordered decorrelation, per-model contract head. This
+package holds its building blocks plus the per-fold selector of ``ml cv``.
 
 Main Components:
-    Result Classes:
-        FeatureSelectionResult: Canonical result container for all selection operations
-        PersistedFeatureSelection: Persisted result for model artifacts
+    Selection:
+        WalkForwardFeatureSelector: Per-fold MDA/MDI selection over purged CV splits
+        FeatureSelectorConfig: Its configuration
+        FeatureSelectionResult: Its result
 
-    Configuration:
-        FeatureSelectionConfig: Per-model feature selection configuration
-        FeatureSelectorConfig: Walk-forward selector configuration
-        ModelFamilyDefaults: Default settings per model family
-
-    Selectors:
-        WalkForwardFeatureSelector: Walk-forward feature selection with MDA/MDI
-        CVIntegratedFeatureSelector: CV-integrated feature selection
-        OHLCVFeatureSelector: Enhanced selector with stability, correlation, and regime support
-        FeatureSelectionManager: High-level manager for model training integration
-
-    Filtering Functions:
+    Filters and ranking:
         filter_low_variance: Remove near-constant features
-        filter_correlated_features: Remove highly correlated features
-        select_features: Main feature selection function
-        apply_feature_selection: Apply selection to DataFrame
+        select_decorrelated_by_rank: Greedy rank-ordered decorrelation
+        apply_timeframe_budget: Cap MTF features per timeframe
 
-    Priority & Categories:
-        FEATURE_PRIORITY: Feature interpretability rankings
-        FEATURE_CATEGORIES: OHLCV feature category patterns
-        get_feature_priority: Get priority score for a feature
-        categorize_feature: Categorize a feature by name pattern
+    Governance diagnostics (opt-in, read-only):
+        BootstrapFeatureStability, LabelPerturbationTester, RobustnessScorer,
+        FeatureRegistry, FeatureLifecycleState
 
 Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 """
 
-# Result classes - these have no external dependencies
-# Configuration - these have no external dependencies
-# Bootstrap feature stability
 from .bootstrap_stability import (
     BootstrapFeatureStability,
     BootstrapStabilityResult,
     StabilitySummary,
 )
-from .config import (
-    FeatureSelectionConfig,
-    FeatureSelectorConfig,
-    ModelFamilyDefaults,
-)
-
-# Filtering functions
-from .filtering import (
-    apply_feature_selection,
-    build_correlation_groups,
-    filter_correlated_features,
-    filter_low_variance,
-    identify_feature_columns,
-    save_feature_selection_report,
-    select_features,
-    select_from_correlated_group,
-)
-
-# Label perturbation testing
+from .config import FeatureSelectorConfig
+from .filtering import filter_low_variance, select_decorrelated_by_rank
 from .label_perturbation import (
     LabelPerturbationTester,
     PerturbationResult,
     PerturbationSummary,
 )
-
-# Feature lifecycle state machine
 from .lifecycle import FeatureLifecycleState
-
-# OHLCV-specific selectors
-from .ohlcv_selector import (
-    FEATURE_CATEGORIES,
-    OHLCVFeatureSelector,
-    StabilityMetrics,
-    categorize_feature,
-    create_ohlcv_selector,
-    filter_ohlcv_features,
-    get_feature_categories,
-)
-
-# Priority - no external dependencies
-from .priority import (
-    DEFAULT_PRIORITY,
-    FEATURE_PRIORITY,
-    get_feature_priority,
-)
-
-# Feature registry with persistence
 from .registry import FeatureRecord, FeatureRegistry, RunUpdate
-from .result import (
-    FeatureSelectionResult,
-    PersistedFeatureSelection,
-)
-
-# Robustness scoring
+from .result import FeatureSelectionResult
 from .robustness_scoring import RobustnessScorer
-
-# Timeframe budget for MTF feature competition
 from .timeframe_budget import apply_timeframe_budget
-
-# Walk-forward selectors - minimal external dependencies
-from .walk_forward import (
-    CVIntegratedFeatureSelector,
-    WalkForwardFeatureSelector,
-)
-
-# Lazy import for FeatureSelectionManager to avoid circular dependency
-# (it imports from src.validation.cv which can trigger src.models imports)
-_FeatureSelectionManager = None
-
-
-def __getattr__(name):
-    """Lazy import for classes with complex dependencies."""
-    global _FeatureSelectionManager
-
-    if name == "FeatureSelectionManager":
-        if _FeatureSelectionManager is None:
-            from .manager import FeatureSelectionManager
-
-            _FeatureSelectionManager = FeatureSelectionManager
-        return _FeatureSelectionManager
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
+from .walk_forward import WalkForwardFeatureSelector
 
 __all__ = [
-    # Result classes
+    # Walk-forward selection
     "FeatureSelectionResult",
-    "PersistedFeatureSelection",
-    # Configuration
-    "FeatureSelectionConfig",
     "FeatureSelectorConfig",
-    "ModelFamilyDefaults",
-    # Walk-forward selectors
     "WalkForwardFeatureSelector",
-    "CVIntegratedFeatureSelector",
-    # Manager (lazy loaded)
-    "FeatureSelectionManager",
-    # OHLCV selectors
-    "OHLCVFeatureSelector",
-    "StabilityMetrics",
-    # OHLCV utilities
-    "FEATURE_CATEGORIES",
-    "categorize_feature",
-    "filter_ohlcv_features",
-    "get_feature_categories",
-    # Factory functions
-    "create_ohlcv_selector",
-    # Filtering functions
-    "apply_feature_selection",
-    "build_correlation_groups",
-    "filter_correlated_features",
+    # Filters
     "filter_low_variance",
-    "identify_feature_columns",
-    "save_feature_selection_report",
-    "select_features",
-    "select_from_correlated_group",
-    # Priority
-    "DEFAULT_PRIORITY",
-    "FEATURE_PRIORITY",
-    "get_feature_priority",
-    # Feature lifecycle
+    "select_decorrelated_by_rank",
+    "apply_timeframe_budget",
+    # Feature lifecycle / registry
     "FeatureLifecycleState",
-    # Feature registry
     "FeatureRecord",
     "FeatureRegistry",
     "RunUpdate",
@@ -180,6 +67,4 @@ __all__ = [
     "PerturbationSummary",
     # Robustness scoring
     "RobustnessScorer",
-    # Timeframe budget
-    "apply_timeframe_budget",
 ]

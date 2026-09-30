@@ -61,7 +61,6 @@ class CVResult:
     horizon: int
     fold_metrics: list[FoldMetrics]
     oos_predictions: pd.DataFrame
-    feature_importance: pd.DataFrame = field(default_factory=pd.DataFrame)
     tuned_params: dict[str, Any] = field(default_factory=dict)
     selected_features: list[str] = field(default_factory=list)
     total_time: float = 0.0

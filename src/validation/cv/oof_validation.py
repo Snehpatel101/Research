@@ -12,8 +12,6 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
-from .oof_core import OOFPrediction
-
 logger = logging.getLogger(__name__)
 
 
@@ -141,44 +139,6 @@ class OOFValidator:
             "n_violations": total_violations,
             "fold_details": fold_details,
         }
-
-    @staticmethod
-    def validate_coverage(
-        oof_predictions: dict[str, OOFPrediction],
-        original_index: pd.Index,
-    ) -> dict[str, Any]:
-        """
-        Validate that OOF predictions cover all samples.
-
-        Args:
-            oof_predictions: Dict of OOF predictions by model
-            original_index: Original DataFrame index
-
-        Returns:
-            Validation result dict with passed status and any issues
-        """
-        issues: list[dict[str, Any]] = []
-        coverage_dict: dict[str, float] = {}
-        validation: dict[str, Any] = {"passed": True, "issues": issues, "coverage": coverage_dict}
-
-        for model_name, oof_pred in oof_predictions.items():
-            # Check for NaN predictions
-            nan_count = oof_pred.predictions[f"{model_name}_pred"].isna().sum()
-            coverage = 1.0 - (nan_count / len(original_index))
-
-            coverage_dict[model_name] = coverage
-
-            if nan_count > 0:
-                validation["passed"] = False
-                issues.append(
-                    {
-                        "model": model_name,
-                        "missing_samples": int(nan_count),
-                        "coverage": coverage,
-                    }
-                )
-
-        return validation
 
     @staticmethod
     def analyze_prediction_correlation(

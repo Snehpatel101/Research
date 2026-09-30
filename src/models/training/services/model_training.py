@@ -34,12 +34,11 @@ class ModelTrainingRequest:
     hyperparam_trials: int = 100
     n_splits: int = 5
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
-    use_feature_selection: bool = True
     max_epochs: int | None = None  # Cap epochs for neural models in Optuna
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
     batch_size: int | None = None  # Override batch size (used by OOM retry)
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
-    purge_bars: int | None = None  # Pipeline purge (feature-selection CV)
+    purge_bars: int | None = None  # Pipeline purge (Optuna CV)
     n_classes: int = 3  # 2 = binary labels, 3 = short/neutral/long
     early_stopping_patience: int | None = None  # None = TrainerConfig default
     optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
@@ -76,7 +75,7 @@ class ModelTrainingRequest:
         The single place a PipelineConfig becomes training-request settings
         (tuning, CV gaps, epochs, calibration, seed, tracking), so no caller
         can drop one. ``overrides`` replace individual fields (e.g. a reduced
-        ``batch_size`` for an OOM retry, ``use_feature_selection``).
+        ``batch_size`` for an OOM retry).
         """
         settings: dict[str, Any] = {
             "sequence_length": config.sequence_length_for(model_name),
@@ -208,10 +207,6 @@ class ModelTrainingService:
             feature_set=None,
             sequence_length=request.sequence_length,
             output_dir=model_output_dir,
-            use_feature_selection=request.use_feature_selection,
-            feature_selection_cv_splits=request.n_splits,
-            feature_selection_purge_bars=request.purge_bars,
-            feature_selection_embargo_bars=request.embargo_bars,
             max_epochs=request.max_epochs if request.max_epochs is not None else 100,
             use_calibration=request.use_calibration,
             calibration_method=request.calibration_method,

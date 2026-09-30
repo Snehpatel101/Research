@@ -130,7 +130,7 @@ class TestClusteredMDAIsTargetAware:
         assert imp.idxmax() in {"signal", "signal_dup"}
 
     def test_single_fold_call_without_holdout_uses_tail_holdout(self):
-        """manager.py calls _compute_importance with no holdout; must still work."""
+        """Without a holdout set, MDA scores a held-out tail of the training fold."""
         X, y = _signal_dup_noise_data(seed=4)
         selector = WalkForwardFeatureSelector(
             n_features_to_select=5,

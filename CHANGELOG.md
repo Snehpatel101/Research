@@ -153,6 +153,18 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   results).
 
 ### Removed
+- Unreachable feature-selection paths: the Trainer-level `FeatureSelectionManager`
+  (ran only when the orchestrator selected nothing, which no `MLFactory` mode or
+  CLI command allows; `MLFactory` selects each model's features on train-only
+  data) with its `TrainerConfig` settings (`use_feature_selection`,
+  `feature_selection_*`), `global.yaml` `features.selection` and
+  `FeatureSelectionConfig`/`ModelFamilyDefaults`/`PersistedFeatureSelection`;
+  the test-only `OHLCVFeatureSelector`; the never-called legacy filter chain
+  (`select_features`, `priority.py`). Saved configs with the removed keys still
+  load, with a warning. Also deleted: never-read `PipelineConfig`
+  selection knobs and ~30 export-only helpers in `src/models/training`,
+  `src/optimization` and `src/validation` (e.g. `train_pipeline`,
+  `ModelAwareCV`, `HeterogeneousStackingBuilder`, `oof_alignment.py`).
 - Regime-conditional feature importance (`regime_selection.py`, the
   `regime_conditional` flag and its 70/30 blend with MDA): unreachable from any
   config, and it scored permutation importance in-sample (forest fitted and

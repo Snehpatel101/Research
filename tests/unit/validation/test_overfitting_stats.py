@@ -17,7 +17,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
-from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig, CPCVPathResult, CPCVResult
+from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig
 from src.validation.cv.pbo import (
     PBOConfig,
     compute_pbo,
@@ -344,14 +344,6 @@ class TestCPCVPaths:
         for p in range(cpcv.n_paths):
             for g, (s, e) in enumerate(bounds):
                 assert np.all(paths[p, s:e] == assignments[p, g])
-
-    def test_oos_matrix_has_one_column_per_path(self) -> None:
-        results = [
-            CPCVPathResult(path_id=p, split_ids=(0,), n_samples=50, returns=np.zeros(50))
-            for p in range(5)
-        ]
-        matrix = CPCVResult(config=CPCVConfig(), path_results=results).get_oos_matrix()
-        assert matrix.shape == (50, 5)
 
 
 class TestCPCVPurge:

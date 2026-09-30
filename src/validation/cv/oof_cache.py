@@ -354,37 +354,6 @@ class OOFCache:
 
         logger.debug(f"Cleaned up {n_remove} oldest cache entries")
 
-    def get_stats(self) -> dict[str, Any]:
-        """
-        Get cache statistics.
-
-        Returns:
-            Dict with cache stats
-        """
-        total_size = 0
-        for cache_key in self._index:
-            entry_dir = self.cache_dir / cache_key
-            if entry_dir.exists():
-                for f in entry_dir.iterdir():
-                    total_size += f.stat().st_size
-
-        return {
-            "n_entries": len(self._index),
-            "max_entries": self.max_entries,
-            "total_size_mb": total_size / (1024 * 1024),
-            "models": list({v.model_name for v in self._index.values()}),
-            "cache_dir": str(self.cache_dir),
-        }
-
-    def list_entries(self) -> list[OOFCacheEntry]:
-        """
-        List all cache entries.
-
-        Returns:
-            List of OOFCacheEntry objects
-        """
-        return list(self._index.values())
-
 
 def compute_data_hash(
     X: pd.DataFrame | np.ndarray,

@@ -194,19 +194,6 @@ class TrainingOpsMixin:
         # just collect Python garbage here for prepared data cache eviction.
         gc.collect()
 
-    def _trainer_feature_selection(self, model_name: str) -> bool:
-        """Whether Trainer should run its own feature selection for this model.
-
-        The orchestrator already selects each model's features on train-only
-        data (_run_feature_selection_on_train_data). Selecting again inside
-        Trainer would train the final model on a different feature set than
-        its OOF (stacking) models, so it only runs when the orchestrator
-        selected nothing (walk-forward mode, which selects per window). Models
-        without a per-model set (e.g. a meta-labeling primary outside
-        ``models``) then use every prepared column.
-        """
-        return self.config.optimize_features and not self._per_model_features
-
     def _training_request(
         self,
         model_name: str,
@@ -221,7 +208,6 @@ class TrainingOpsMixin:
             horizon=horizon,
             prepared_data=prepared,
             output_dir=self.output_dir / f"h{horizon}",
-            use_feature_selection=self._trainer_feature_selection(model_name),
             **overrides,
         )
 
@@ -704,7 +690,6 @@ class TrainingOpsMixin:
         logger.info(f"  Separate models: {self.config.train_separate_regime_models}")
 
         regime_trainer = RegimeAwareTrainer(self.config)
-        self._regime_trainer = regime_trainer
 
         for horizon in self.config.horizons:
             logger.info(f"\n--- Horizon {horizon} ---")

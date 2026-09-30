@@ -189,39 +189,6 @@ class OOFPrediction:
         result: np.ndarray = self.predictions[f"{self.model_name}_pred"].values
         return result
 
-    def get_aligned_probabilities(
-        self,
-        start_idx: int,
-        n_samples: int,
-    ) -> np.ndarray:
-        """
-        Get probability array aligned to specified range.
-
-        Args:
-            start_idx: Start index in original dataset
-            n_samples: Number of samples to extract
-
-        Returns:
-            Aligned probability array
-
-        Raises:
-            ValueError: If requested range exceeds valid range
-        """
-        probs = self.get_probabilities()
-
-        # Adjust for alignment offset
-        local_start = start_idx - self.alignment_offset
-        local_end = local_start + n_samples
-
-        if local_start < 0 or local_end > len(probs):
-            raise ValueError(
-                f"Requested range [{start_idx}, {start_idx + n_samples}) "
-                f"exceeds valid range [{self.alignment_offset}, "
-                f"{self.alignment_offset + len(probs)})"
-            )
-
-        return probs[local_start:local_end]
-
 
 def reindex_oof_to_rows(
     oof: OOFPrediction | None, row_positions: np.ndarray | None

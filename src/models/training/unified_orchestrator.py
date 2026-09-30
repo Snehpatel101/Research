@@ -633,89 +633,6 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
 
 
 # =============================================================================
-# CONVENIENCE FUNCTIONS
-# =============================================================================
-
-
-def train_pipeline(
-    config: PipelineConfig,
-    df: pd.DataFrame,
-    **kwargs: Any,
-) -> TrainingRunResult:
-    """
-    Convenience function for training.
-
-    Usage:
-        from src.core import PipelineConfig
-        from src.models.training import train_pipeline
-
-        config = PipelineConfig(
-            symbol="MES",
-            data_path="./data/mes.parquet",
-            output_dir="./experiments",
-            models=["xgboost", "lightgbm"],
-        )
-
-        result = train_pipeline(config, df)
-
-    Args:
-        config: PipelineConfig from src/core
-        df: Raw OHLCV DataFrame
-        **kwargs: Additional arguments passed to train()
-
-    Returns:
-        TrainingRunResult with all outputs
-    """
-    orchestrator = UnifiedTrainingOrchestrator(config)
-    return orchestrator.train(df, **kwargs)
-
-
-def train_meta_labeling(
-    config: PipelineConfig,
-    df: pd.DataFrame,
-    **kwargs: Any,
-) -> TrainingRunResult:
-    """
-    Convenience function for meta-labeling training.
-
-    This is a shortcut that sets training_mode to "meta_labeling" and runs
-    the unified training orchestrator.
-
-    Usage:
-        from src.core import PipelineConfig
-        from src.models.training import train_meta_labeling
-
-        config = PipelineConfig(
-            symbol="MES",
-            data_path="./data/mes.parquet",
-            output_dir="./experiments",
-            meta_labeling_primary_model="xgboost",
-            meta_labeling_meta_model="logistic",
-            meta_labeling_threshold=0.5,
-        )
-
-        result = train_meta_labeling(config, df)
-
-        # Access results: precision / net outcome of the trades the filter takes
-        metrics = result.model_results['meta_labeling_h20'].metrics
-        print(metrics['primary_precision'], metrics['meta_precision'], metrics['meta_net_per_trade'])
-
-    Args:
-        config: PipelineConfig from src/core (training_mode will be overridden)
-        df: Raw OHLCV DataFrame
-        **kwargs: Additional arguments passed to train()
-
-    Returns:
-        TrainingRunResult with meta-labeling outputs
-    """
-    # Override training mode to meta_labeling
-    config.training_mode = TrainingMode.META_LABELING.value
-
-    orchestrator = UnifiedTrainingOrchestrator(config)
-    return orchestrator.train(df, **kwargs)
-
-
-# =============================================================================
 # EXPORTS
 # =============================================================================
 
@@ -724,6 +641,4 @@ __all__ = [
     "PreTrainingValidationError",
     "TrainingRunResult",
     "ModelTrainingResult",
-    "train_pipeline",
-    "train_meta_labeling",
 ]

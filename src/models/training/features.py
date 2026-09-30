@@ -1,13 +1,14 @@
 """
-TrainerFeaturesMixin - Feature selection and feature set resolution.
+TrainerFeaturesMixin - Feature set resolution.
 
 Contains methods for:
 - Validating feature sets against model recommendations
-- Setting up feature selection based on model family
 - Resolving feature set columns from configuration
 - Applying feature set filters to DataFrames
 - Getting sequence model feature columns
-- Running walk-forward feature selection
+
+Feature SELECTION is not done here: MLFactory's orchestrator selects each
+model's features on train-only data and hands the Trainer those columns.
 """
 
 from __future__ import annotations
@@ -32,25 +33,22 @@ except ImportError:
 
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
-    from src.core.label_spans import LabelSpans
 
 logger = logging.getLogger(__name__)
 
 
 class TrainerFeaturesMixin:
     """
-    Mixin providing feature selection and feature set resolution capabilities.
+    Mixin providing feature set resolution capabilities.
 
     This mixin assumes the following attributes exist on the class:
     - self.config: TrainerConfig with training settings
     - self.model: Instantiated model from registry
-    - self.feature_selector: FeatureSelectionManager instance
     """
 
     # Type stubs for mixin - actual values provided by composing class
     config: Any
     model: Any
-    feature_selector: Any
 
     def _validate_feature_set(self) -> None:
         """
@@ -84,139 +82,6 @@ class TrainerFeaturesMixin:
                 f"Using feature_set='{configured_feature_set}' "
                 f"(recommended for {model_name}: '{recommended_feature_set}')"
             )
-
-    def _setup_feature_selection(self) -> None:
-        """Initialize feature selection manager based on model family and config."""
-        # Late import to avoid circular dependency
-        from src.optimization.feature_selection import (
-            FeatureSelectionConfig,
-            FeatureSelectionManager,
-        )
-
-        if not self.config.use_feature_selection:
-            self.feature_selector = FeatureSelectionManager.disabled()
-            return
-
-        # Sequence models don't use external feature selection (MOD-006: improved logging)
-        # WHY: Sequence models (LSTM, GRU, TCN, Transformers) learn their own temporal
-        # feature representations through recurrent/convolutional/attention layers.
-        # External MDA-based feature selection would:
-        # 1. Lose temporal dependencies (MDA uses permutation which breaks sequences)
-        # 2. Be redundant (attention/gating mechanisms already perform selection)
-        # 3. Conflict with the model's inductive bias for sequential patterns
-        if self.model.requires_sequences:
-            logger.info(
-                f"Feature selection disabled for {self.config.model_name}: "
-                "sequence models learn feature representations internally via "
-                "recurrent/convolutional/attention layers (MDA permutation would break "
-                "temporal dependencies)"
-            )
-            self.feature_selector = FeatureSelectionManager.disabled()
-            return
-
-        # Create feature selection config based on model family
-        override: dict[str, Any] = {
-            "n_features": self.config.feature_selection_n_features,
-            "method": self.config.feature_selection_method,
-            "random_state": self.config.random_seed,
-            "min_feature_frequency": self.config.feature_selection_min_frequency,
-        }
-        fs_config = FeatureSelectionConfig.from_model_family(
-            model_family=self.model.model_family,
-            override=override,
-        )
-
-        # Override n_features if explicitly set to 0 (use family default)
-        if self.config.feature_selection_n_features == 0:
-            from src.optimization.feature_selection import ModelFamilyDefaults
-
-            defaults = ModelFamilyDefaults.get_defaults(self.model.model_family)
-            fs_config.n_features = defaults.get("n_features", 50)
-
-        self.feature_selector = FeatureSelectionManager(config=fs_config)
-
-    def _is_feature_selection_enabled(self) -> bool:
-        """Check if feature selection is enabled for this trainer."""
-        return self.feature_selector is not None and self.feature_selector.is_enabled
-
-    # =========================================================================
-    # Phase 5 SNwH: Strategy-Based Feature Selection
-    # =========================================================================
-
-    def _get_feature_columns(
-        self,
-        df: pd.DataFrame,
-        use_strategy: bool = True,
-    ) -> list[str]:
-        """
-        Get feature columns for training.
-
-        Args:
-            df: DataFrame to extract features from
-            use_strategy: Whether to use model's feature strategy
-
-        Returns:
-            List of feature column names
-        """
-        if use_strategy:
-            return self._get_strategy_features(df)
-        else:
-            return self._get_all_features(df)
-
-    def _get_strategy_features(self, df: pd.DataFrame) -> list[str]:
-        """
-        Get features based on model's declared strategy.
-
-        This is the SNwH-aware feature selection that ensures
-        each model gets features tailored to its inductive biases.
-
-        Args:
-            df: DataFrame with available features
-
-        Returns:
-            List of feature column names
-        """
-        from src.data.features.strategy_manager import FeatureStrategyManager
-
-        manager = FeatureStrategyManager(df=df)
-
-        try:
-            resolved = manager.get_features_for_model(
-                self.config.model_name,
-                strict=True,
-            )
-
-            logger.info(
-                f"Using strategy features for {self.config.model_name}: "
-                f"{resolved.n_features} features "
-                f"({resolved.baseline_available}/{resolved.baseline_requested} baseline available)"
-            )
-
-            return resolved.feature_columns
-
-        except ValueError as e:
-            logger.warning(
-                f"Strategy feature resolution failed: {e}. "
-                f"Falling back to all available features."
-            )
-            return self._get_all_features(df)
-
-    def _get_all_features(self, df: pd.DataFrame) -> list[str]:
-        """
-        Get all available feature columns (legacy behavior).
-
-        Args:
-            df: DataFrame to extract features from
-
-        Returns:
-            List of all feature column names
-        """
-        from src.data.pipeline.utils.constants import METADATA_COLUMNS
-        from src.data.pipeline.utils.feature_sets import _is_label_column
-
-        return [
-            col for col in df.columns if col not in METADATA_COLUMNS and not _is_label_column(col)
-        ]
 
     def _resolve_feature_set_columns(self, df: pd.DataFrame) -> list[str] | None:
         """
@@ -452,54 +317,5 @@ class TrainerFeaturesMixin:
                 f"Sequence model '{model_name}' using feature set "
                 f"'{feature_set_name}': {len(result)} features (from definition)"
             )
-
-        return result
-
-    def _run_feature_selection(
-        self,
-        X_train_df: pd.DataFrame,
-        y_train: pd.Series,
-        w_train: pd.Series | None,
-        label_spans: LabelSpans | None,
-    ) -> Any:
-        """
-        Run feature selection on training data.
-
-        Uses walk-forward selection to prevent lookahead bias.
-
-        Args:
-            X_train_df: Training features DataFrame
-            y_train: Training labels
-            w_train: Sample weights (optional)
-            label_spans: Label spans for purging overlapping labels (optional)
-
-        Returns:
-            FeatureSelectionResult with selected features
-        """
-        logger.info(
-            f"Running feature selection: method={self.config.feature_selection_method}, "
-            f"n_features={self.config.feature_selection_n_features}"
-        )
-
-        # Run walk-forward feature selection
-        if self.feature_selector is None:
-            raise RuntimeError("Feature selector not initialized")
-        result = self.feature_selector.select_features(
-            X=X_train_df,
-            y=y_train,
-            sample_weights=w_train,
-            n_splits=self.config.feature_selection_cv_splits,
-            purge_bars=(
-                self.config.feature_selection_purge_bars
-                if self.config.feature_selection_purge_bars is not None
-                else self.config.horizon * 3  # Purge based on horizon
-            ),
-            embargo_bars=(
-                self.config.feature_selection_embargo_bars
-                if self.config.feature_selection_embargo_bars is not None
-                else 1440  # ~5 days at 5-min resolution
-            ),
-            label_spans=label_spans,
-        )
 
         return result

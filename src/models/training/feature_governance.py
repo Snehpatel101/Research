@@ -112,10 +112,6 @@ class FeatureGovernance:
         self._importance_fn = importance_fn
         self._select_fn = select_fn
 
-    @property
-    def enabled(self) -> bool:
-        return self.settings.report
-
     def run(
         self,
         df_train: pd.DataFrame,

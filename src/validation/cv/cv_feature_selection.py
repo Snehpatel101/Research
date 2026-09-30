@@ -267,32 +267,6 @@ def run_cv_with_per_fold_feature_selection(
     }
 
 
-def compute_feature_stability(
-    fold_selected_features: list[list[str]],
-    n_features_to_select: int,
-    min_frequency: float = 0.6,
-) -> list[str]:
-    """
-    Compute stable features that appear across multiple folds.
-
-    Args:
-        fold_selected_features: List of feature lists from each fold
-        n_features_to_select: Maximum number of features to return
-        min_frequency: Minimum fraction of folds a feature must appear in
-
-    Returns:
-        List of stable feature names
-    """
-    feature_counts: Counter[str] = Counter()
-    for fold_features in fold_selected_features:
-        feature_counts.update(fold_features)
-
-    min_count = int(min_frequency * len(fold_selected_features))
-    stable_features = [f for f, count in feature_counts.items() if count >= min_count]
-    return stable_features[:n_features_to_select]
-
-
 __all__ = [
     "run_cv_with_per_fold_feature_selection",
-    "compute_feature_stability",
 ]

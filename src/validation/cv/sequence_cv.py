@@ -149,7 +149,6 @@ class SequenceCVBuilder:
 
         # Build symbol boundary information FIRST (needs original X)
         self._symbol_boundaries: np.ndarray | None = None
-        self._symbol_ids: np.ndarray | None = None
         self._boundary_detection_method = "none"
 
         if symbol_column and symbol_column in X.columns:
@@ -189,9 +188,7 @@ class SequenceCVBuilder:
         # Get symbol for each sample
         symbols = X.reset_index(drop=True)[symbol_column].values
 
-        # Assign integer IDs to symbols
-        unique_symbols, symbol_ids = np.unique(symbols, return_inverse=True)
-        self._symbol_ids = symbol_ids
+        unique_symbols = np.unique(symbols)
 
         # Find boundary indices (where symbol changes)
         boundaries = []
@@ -517,105 +514,7 @@ class SequenceCVBuilder:
             )
 
 
-def build_sequences_for_cv_fold(
-    X: pd.DataFrame,
-    y: pd.Series,
-    fold_indices: np.ndarray,
-    seq_len: int,
-    weights: pd.Series | None = None,
-    symbol_column: str | None = None,
-    allow_lookback_outside: bool = True,
-) -> SequenceFoldResult:
-    """
-    Convenience function to build sequences for a single CV fold.
-
-    This is a wrapper around SequenceCVBuilder for one-off usage.
-
-    Args:
-        X: Feature DataFrame
-        y: Label Series
-        fold_indices: Indices for this fold
-        seq_len: Sequence length
-        weights: Optional sample weights
-        symbol_column: Symbol column for isolation
-        allow_lookback_outside: Allow lookback into non-fold samples
-
-    Returns:
-        SequenceFoldResult with 3D sequences
-    """
-    builder = SequenceCVBuilder(
-        X=X,
-        y=y,
-        seq_len=seq_len,
-        weights=weights,
-        symbol_column=symbol_column,
-    )
-    return builder.build_fold_sequences(
-        fold_indices,
-        allow_lookback_outside=allow_lookback_outside,
-    )
-
-
-def validate_sequence_cv_coverage(
-    X: pd.DataFrame,
-    y: pd.Series,
-    cv,
-    seq_len: int,
-    symbol_column: str | None = None,
-) -> dict:
-    """
-    Validate sequence coverage across all CV folds.
-
-    Checks what fraction of samples in each fold can produce valid sequences.
-    Low coverage may indicate issues with seq_len, data ordering, or symbol distribution.
-
-    Args:
-        X: Feature DataFrame
-        y: Label Series
-        cv: Cross-validator (must have split method)
-        seq_len: Sequence length
-        symbol_column: Symbol column for isolation
-
-    Returns:
-        Dict with coverage statistics per fold and overall
-    """
-    builder = SequenceCVBuilder(
-        X=X,
-        y=y,
-        seq_len=seq_len,
-        symbol_column=symbol_column,
-    )
-
-    fold_coverages = []
-    fold_n_sequences = []
-    fold_n_samples = []
-
-    for _fold_idx, (_train_idx, val_idx) in enumerate(cv.split(X, y)):
-        # Check validation fold coverage
-        val_result = builder.build_fold_sequences(
-            val_idx,
-            allow_lookback_outside=True,
-        )
-        coverage = val_result.n_sequences / len(val_idx) if len(val_idx) > 0 else 0.0
-        fold_coverages.append(coverage)
-        fold_n_sequences.append(val_result.n_sequences)
-        fold_n_samples.append(len(val_idx))
-
-    return {
-        "n_folds": len(fold_coverages),
-        "fold_coverages": fold_coverages,
-        "fold_n_sequences": fold_n_sequences,
-        "fold_n_samples": fold_n_samples,
-        "mean_coverage": float(np.mean(fold_coverages)),
-        "min_coverage": float(np.min(fold_coverages)) if fold_coverages else 0.0,
-        "total_sequences": sum(fold_n_sequences),
-        "total_samples": sum(fold_n_samples),
-    }
-
-
 __all__ = [
     "SequenceFoldResult",
     "SequenceCVBuilder",
-    "build_sequences_for_cv_fold",
-    "validate_sequence_cv_coverage",
 ]

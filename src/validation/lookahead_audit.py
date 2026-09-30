@@ -408,117 +408,6 @@ class LookaheadAuditor:
 
 
 # =============================================================================
-# MTF ALIGNMENT AUDIT
-# =============================================================================
-
-
-def audit_mtf_alignment(
-    df_base: pd.DataFrame,
-    df_mtf: pd.DataFrame,
-    base_tf_minutes: int,
-    mtf_minutes: int,
-) -> tuple[bool, list[str]]:
-    """
-    Audit MTF alignment for lookahead bias.
-
-    Checks that MTF features at time T only use information
-    from completed MTF bars (not the current in-progress bar).
-
-    Args:
-        df_base: Base timeframe data with datetime index
-        df_mtf: MTF-aligned data with datetime index
-        base_tf_minutes: Base timeframe in minutes (e.g., 5)
-        mtf_minutes: MTF timeframe in minutes (e.g., 60)
-
-    Returns:
-        Tuple of (is_valid, list of issues)
-    """
-    issues = []
-
-    if df_mtf.empty:
-        issues.append("MTF DataFrame is empty")
-        return False, issues
-
-    # Check that MTF features have initial NaNs (due to shift(1))
-    # First MTF bar worth of base bars should have NaN
-    expected_nan_rows = mtf_minutes // base_tf_minutes
-
-    for col in df_mtf.columns:
-        if col in ("datetime", "date", "time"):
-            continue
-
-        first_valid = df_mtf[col].first_valid_index()
-        if first_valid is None:
-            continue
-
-        first_valid_iloc = df_mtf.index.get_loc(first_valid)
-        if first_valid_iloc == 0:
-            issues.append(
-                f"Column '{col}': First row is not NaN. "
-                f"MTF features should have initial NaNs from shift(1)."
-            )
-        elif first_valid_iloc < expected_nan_rows - 1:
-            issues.append(
-                f"Column '{col}': First valid at row {first_valid_iloc}, "
-                f"expected >= {expected_nan_rows - 1} initial NaNs."
-            )
-
-    # Check for suspicious patterns (constant early values)
-    for col in df_mtf.columns:
-        if col in ("datetime", "date", "time"):
-            continue
-
-        early_vals = df_mtf[col].iloc[: expected_nan_rows * 2].dropna()
-        if len(early_vals) > 1 and early_vals.nunique() == 1 and len(early_vals) > 3:
-            issues.append(
-                f"Column '{col}': Suspiciously constant early values. "
-                f"May indicate improper forward-fill without shift."
-            )
-
-    is_valid = len(issues) == 0
-    return is_valid, issues
-
-
-def audit_feature_lookahead(
-    df: pd.DataFrame,
-    feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
-    name: str,
-    corruption_points: list[float] | None = None,
-    raise_on_lookahead: bool = True,
-) -> list[LookaheadAuditResult]:
-    """
-    Convenience function to audit features at multiple corruption points.
-
-    Args:
-        df: Input OHLCV DataFrame
-        feature_fn: Feature generation function
-        name: Feature name
-        corruption_points: List of corruption fractions (default: [0.5, 0.7, 0.9])
-        raise_on_lookahead: If True, raise LookaheadBiasError when lookahead
-            is detected at any corruption point.
-            Default is True (blocking mode for production safety).
-
-    Returns:
-        List of LookaheadAuditResult for each corruption point
-
-    Raises:
-        LookaheadBiasError: If raise_on_lookahead=True and lookahead detected
-            at any corruption point. Raises on first detection.
-    """
-    corruption_points = corruption_points or [0.5, 0.7, 0.9]
-    results = []
-
-    for cp in corruption_points:
-        auditor = LookaheadAuditor(corruption_point=cp)
-        result = auditor.audit_feature_function(
-            df, feature_fn, f"{name}@{cp}", raise_on_lookahead=raise_on_lookahead
-        )
-        results.append(result)
-
-    return results
-
-
-# =============================================================================
 # H3: CROSS-FEATURE LOOKAHEAD PROPAGATION SCAN
 # =============================================================================
 
@@ -846,8 +735,6 @@ __all__ = [
     "LookaheadBiasError",
     "ResampleConfig",
     "validate_resample_config",
-    "audit_feature_lookahead",
-    "audit_mtf_alignment",
     "PropagationScanResult",
     "scan_dependency_propagation",
     "ResamplingParityResult",

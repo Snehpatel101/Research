@@ -3,11 +3,14 @@ Trainer - Orchestrates model training workflow.
 
 The Trainer class handles the complete training pipeline:
 1. Load and prepare data from TimeSeriesDataContainer
-2. Apply per-model feature selection (for tabular/classical models)
+2. Apply the configured named feature set (if any)
 3. Apply model-specific preprocessing
 4. Train model with early stopping
 5. Evaluate on validation set
-6. Save artifacts (model, metrics, predictions, feature selection)
+6. Save artifacts (model, metrics, predictions)
+
+Features are used as given: MLFactory selects each model's features on
+train-only data before its Trainer runs.
 
 Example:
     >>> from src.models.trainer import Trainer
@@ -52,7 +55,6 @@ from .features import TrainerFeaturesMixin
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
     from src.data.adapters import PreparedData
-    from src.optimization.feature_selection import FeatureSelectionManager
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
     model training, evaluation, and artifact saving.
 
     Inherits from:
-    - TrainerFeaturesMixin: Feature selection and feature set resolution
+    - TrainerFeaturesMixin: Feature set resolution
     - TrainerEvaluationMixin: Test set evaluation
     - TrainerArtifactsMixin: Artifact saving (configs, metrics, models)
 
@@ -122,10 +124,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             config=config.model_config,
         )
 
-        # Initialize feature selection manager based on model family
-        self.feature_selector: FeatureSelectionManager | None = None
-        self._setup_feature_selection()
-
         # Feature set columns (set during run() for per-model filtering)
         self._feature_set_columns: list[str] | None = None
 
@@ -146,8 +144,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         logger.info(
             f"Initialized Trainer: model={config.model_name}, "
-            f"horizon={config.horizon}, run_id={self.run_id}, "
-            f"feature_selection={self._is_feature_selection_enabled()}"
+            f"horizon={config.horizon}, run_id={self.run_id}"
         )
 
     # -- TrainerProtocol properties ------------------------------------------
@@ -446,11 +443,11 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         Workflow:
         1. Setup output directories
         2. Load and prepare data
-        3. Run feature selection (for tabular/classical models)
+        3. Apply the configured named feature set (if any)
         4. Apply model-specific preprocessing
         5. Train model
         6. Evaluate on validation set
-        7. Save artifacts (including feature selection)
+        7. Save artifacts
 
         Args:
             container: TimeSeriesDataContainer with train/val data
@@ -462,7 +459,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             - training_metrics: TrainingMetrics from training
             - evaluation_metrics: Validation set metrics
             - output_path: Path to outputs
-            - feature_selection: Feature selection results (if enabled)
         """
         tags = {
             "model_family": self.model.model_family,
@@ -485,13 +481,10 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         if self.config.pipeline_run_id:
             lineage_validated, lineage_issues = self._validate_pipeline_lineage()
 
-        # Load data - get DataFrames for feature selection
         logger.info("Loading data from container...")
-
-        # For feature selection, we need the feature names
         feature_names = container.feature_columns
 
-        # Get raw training data (as DataFrames for feature selection)
+        # Training data as DataFrames (named columns for the feature set filter)
         X_train_df, y_train_series, w_train_series = container.get_sklearn_arrays(
             "train", return_df=True
         )
@@ -508,13 +501,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Label spans (row positions) for purging overlapping labels
         label_spans = container.get_label_spans("train")
         if label_spans is not None:
-            logger.info(
-                "Label spans available for purging overlapping labels "
-                "(feature selection CV and stacking OOF)"
-            )
+            logger.info("Label spans available for purging overlapping labels (stacking OOF)")
 
         # Apply per-model feature set filtering (if specified)
-        # This filters features BEFORE MDA-based feature selection
         feature_set_columns = self._resolve_feature_set_columns(X_train_df)
         self._feature_set_columns = feature_set_columns  # Store for test set evaluation
         if feature_set_columns is not None:
@@ -525,26 +514,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             logger.info(
                 f"Feature set filter applied: {len(feature_names)} features "
                 f"(from original {len(container.feature_columns)})"
-            )
-
-        # Run feature selection (for tabular/classical models only)
-        feature_selection_result = None
-        if self._is_feature_selection_enabled():
-            feature_selection_result = self._run_feature_selection(
-                X_train_df=X_train_df,
-                y_train=y_train_series,
-                w_train=w_train_series,
-                label_spans=label_spans,
-            )
-
-            # Apply feature selection to training data
-            if self.feature_selector is not None:
-                X_train_df = self.feature_selector.apply_selection_df(X_train_df)
-                X_val_df = self.feature_selector.apply_selection_df(X_val_df)
-
-            logger.info(
-                f"Applied feature selection: {feature_selection_result.n_features_selected} features "
-                f"(from {feature_selection_result.n_features_original})"
             )
 
         # Exactly the columns the model is fitted on (TrainerProtocol.feature_columns)
@@ -580,7 +549,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                     break  # Use first sequence model's feature set
 
             # Sequence data for sequence-based base models (with feature filtering)
-            X_train_seq, y_train_seq, _, X_val_seq, y_val_seq = prepare_training_data(
+            X_train_seq, y_train_seq, _, X_val_seq, _ = prepare_training_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
@@ -684,14 +653,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         # Set feature names on model (for interpretability)
         if hasattr(self.model, "set_feature_names") and not self.model.requires_sequences:
-            if (
-                self._is_feature_selection_enabled()
-                and self.feature_selector is not None
-                and self.feature_selector.is_fitted
-            ):
-                self.model.set_feature_names(self.feature_selector.selected_features)
-            else:
-                self.model.set_feature_names(feature_names)
+            self.model.set_feature_names(feature_names)
 
         # Train model (pass label_spans for ensemble models with internal CV)
         logger.info(f"Training {self.config.model_name}...")
@@ -753,15 +715,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             y_pred=val_predictions.class_predictions,
         )
 
-        # Add feature selection info to eval metrics
-        if feature_selection_result is not None:
-            eval_metrics["feature_selection"] = {
-                "n_features_original": feature_selection_result.n_features_original,
-                "n_features_selected": feature_selection_result.n_features_selected,
-                "reduction_ratio": feature_selection_result.reduction_ratio,
-                "method": feature_selection_result.selection_method,
-            }
-
         # Test set evaluation (one-shot generalization estimate)
         test_metrics = None
         test_predictions = None
@@ -816,7 +769,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 lineage_issues=lineage_issues,
             )
             self._save_model()
-            self._save_feature_selection()
             if self.calibrator is not None:
                 self._save_calibrator()
             # Generate checksums for all artifacts (must be last)
@@ -849,11 +801,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             "total_time_seconds": total_time,
             "val_predictions": val_predictions.class_predictions,
             "val_true": y_val_aligned,
-            "feature_selection": (
-                self.feature_selector.get_feature_report()
-                if self._is_feature_selection_enabled() and self.feature_selector is not None
-                else None
-            ),
         }
 
         logger.info(
@@ -1012,7 +959,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             "total_time_seconds": total_time,
             "val_predictions": val_predictions.class_predictions,
             "val_true": y_val,
-            "feature_selection": None,  # Not applicable for pre-prepared data
         }
 
         logger.info(

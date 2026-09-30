@@ -259,8 +259,7 @@ class CrossValidationRunner:
         label_spans = container.get_label_spans("train")
         self._warn_if_no_label_spans(label_spans)
 
-        # The caller's CV (its n_splits, purge and embargo) is used as given; the
-        # family-adapted fold counts of ModelAwareCV would override --n-splits.
+        # The caller's CV (its n_splits, purge and embargo) is used as given
         cv_splits = list(self.cv.split(X, y, label_spans=label_spans))
 
         # ==================================================================

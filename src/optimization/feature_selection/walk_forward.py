@@ -11,9 +11,6 @@ Methods:
 - Hybrid: Combination of MDI and MDA rankings
 
 Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning", Chapter 8
-
-This module consolidates walk-forward feature selection from:
-- src/cross_validation/feature_selector.py
 """
 
 from __future__ import annotations
@@ -518,47 +515,6 @@ class WalkForwardFeatureSelector:
         return importance
 
 
-class CVIntegratedFeatureSelector:
-    """
-    Integrate feature selection with CV to prevent lookahead.
-
-    Performs feature selection and OOF prediction in a single pass,
-    ensuring features are selected using only training data.
-
-    Strategy:
-    1. For each CV fold, select features using ONLY training data
-    2. Train model on selected features
-    3. Generate OOF predictions
-    4. Track which features are stable across folds
-    """
-
-    def __init__(
-        self,
-        n_features: int = 50,
-        min_frequency: float = 0.6,
-        method: str = "mda",
-        random_state: int = 42,
-    ) -> None:
-        """
-        Initialize CVIntegratedFeatureSelector.
-
-        Args:
-            n_features: Number of features to select per fold
-            min_frequency: Minimum fold frequency for stable features
-            method: Feature importance method (mda, mdi)
-            random_state: Random seed
-        """
-        self.selector = WalkForwardFeatureSelector(
-            n_features_to_select=n_features,
-            selection_method=method,
-            min_feature_frequency=min_frequency,
-            random_state=random_state,
-        )
-        self.n_features = n_features
-        self.min_frequency = min_frequency
-
-
 __all__ = [
     "WalkForwardFeatureSelector",
-    "CVIntegratedFeatureSelector",
 ]

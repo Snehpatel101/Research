@@ -180,22 +180,6 @@ class CPCVResult:
             return 0.0
         return float(np.mean([p.sharpe for p in self.path_results]))
 
-    def get_oos_matrix(self) -> np.ndarray:
-        """
-        Out-of-sample returns of every path.
-
-        Returns:
-            Array of shape (T, phi); every path covers all T observations.
-            Empty array if returns were not recorded.
-        """
-        returns_list = [p.returns for p in self.path_results if p.returns is not None]
-        if not returns_list:
-            return np.array([])
-        lengths = {len(r) for r in returns_list}
-        if len(lengths) != 1:
-            raise ValueError(f"CPCV paths have inconsistent lengths {sorted(lengths)}")
-        return np.column_stack(returns_list)
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
@@ -414,39 +398,6 @@ class CombinatorialPurgedCV:
         """Return number of splits C(N, k)."""
         return self.config.total_combinations
 
-    def validate_coverage(self, X: pd.DataFrame | np.ndarray) -> dict[str, Any]:
-        """
-        CPCV coverage statistics.
-
-        Args:
-            X: Features
-
-        Returns:
-            Dict with coverage statistics
-        """
-        n_samples = len(X)
-        test_coverage = np.zeros(n_samples, dtype=int)
-        train_coverage = np.zeros(n_samples, dtype=int)
-
-        n_splits = 0
-        for train_idx, test_idx, _ in self.split(X):
-            test_coverage[test_idx] += 1
-            train_coverage[train_idx] += 1
-            n_splits += 1
-
-        return {
-            "total_samples": n_samples,
-            "n_splits": n_splits,
-            "n_paths": self.n_paths,
-            "n_groups": self.config.n_groups,
-            "n_test_groups": self.config.n_test_groups,
-            "samples_never_in_test": int((test_coverage == 0).sum()),
-            "samples_never_in_train": int((train_coverage == 0).sum()),
-            "avg_test_appearances": float(test_coverage.mean()),
-            "avg_train_appearances": float(train_coverage.mean()),
-            "max_test_appearances": int(test_coverage.max()),
-        }
-
     def __repr__(self) -> str:
         return (
             f"CombinatorialPurgedCV(n_groups={self.config.n_groups}, "
@@ -456,43 +407,9 @@ class CombinatorialPurgedCV:
         )
 
 
-# =============================================================================
-# FACTORY FUNCTION
-# =============================================================================
-
-
-def create_cpcv(
-    n_groups: int = 6,
-    n_test_groups: int = 2,
-    purge_bars: int = 60,
-    embargo_bars: int = 0,
-) -> CombinatorialPurgedCV:
-    """
-    Factory function to create CombinatorialPurgedCV.
-
-    Args:
-        n_groups: Number of contiguous time groups N
-        n_test_groups: Test groups per split k
-        purge_bars: Label span in bars (purge window around each test group)
-        embargo_bars: Extra rows embargoed after each test group
-
-    Returns:
-        Configured CombinatorialPurgedCV instance
-    """
-    return CombinatorialPurgedCV(
-        CPCVConfig(
-            n_groups=n_groups,
-            n_test_groups=n_test_groups,
-            purge_bars=purge_bars,
-            embargo_bars=embargo_bars,
-        )
-    )
-
-
 __all__ = [
     "CPCVConfig",
     "CombinatorialPurgedCV",
     "CPCVResult",
     "CPCVPathResult",
-    "create_cpcv",
 ]

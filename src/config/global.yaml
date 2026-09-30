@@ -38,10 +38,6 @@ features:
   bollinger:
     period: 20
     std: 2.0
-  selection:
-    enabled: true
-    method: "mda"
-    cv_splits: 5
   generation:
     default: "full"
     modes:

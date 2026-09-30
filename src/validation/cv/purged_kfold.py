@@ -85,7 +85,6 @@ class PurgedKFoldConfig:
     purge_bars: int = 60
     embargo_bars: int = 1440
     min_train_size: float = 0.3
-    timeframe: str | None = None  # For documentation/tracking purposes
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -97,59 +96,6 @@ class PurgedKFoldConfig:
             raise ValueError(f"embargo_bars must be >= 0, got {self.embargo_bars}")
         if not 0 < self.min_train_size < 1:
             raise ValueError(f"min_train_size must be in (0, 1), got {self.min_train_size}")
-
-
-# =============================================================================
-# CV STRATEGIES BY MODEL FAMILY
-# =============================================================================
-
-CV_STRATEGIES: dict[str, dict] = {
-    "boosting": {
-        "n_splits": 5,
-        "tuning_trials": 100,
-        "description": "Full purged k-fold, fast retraining per fold",
-    },
-    "neural": {
-        "n_splits": 3,
-        "tuning_trials": 50,
-        "description": "Fewer folds, early stopping within each fold",
-    },
-    "transformer": {
-        "n_splits": 3,
-        "tuning_trials": 30,
-        "description": "Minimal folds, transfer learning between folds",
-    },
-    "classical": {
-        "n_splits": 5,
-        "tuning_trials": 50,
-        "description": "Standard k-fold for classical models",
-    },
-}
-
-
-def get_cv_config_for_family(family: str, base_config: PurgedKFoldConfig) -> PurgedKFoldConfig:
-    """
-    Get CV configuration adapted for model family.
-
-    Args:
-        family: Model family (boosting, neural, transformer, classical)
-        base_config: Base configuration to modify
-
-    Returns:
-        PurgedKFoldConfig with family-appropriate n_splits
-    """
-    family_lower = family.lower()
-    if family_lower not in CV_STRATEGIES:
-        logger.warning(f"Unknown family '{family}', using default CV config")
-        return base_config
-
-    strategy = CV_STRATEGIES[family_lower]
-    return PurgedKFoldConfig(
-        n_splits=strategy["n_splits"],
-        purge_bars=base_config.purge_bars,
-        embargo_bars=base_config.embargo_bars,
-        min_train_size=base_config.min_train_size,
-    )
 
 
 # =============================================================================
@@ -324,89 +270,8 @@ class PurgedKFold:
         )
 
 
-# =============================================================================
-# MODEL-AWARE CV WRAPPER
-# =============================================================================
-
-
-class ModelAwareCV:
-    """
-    Cross-validation strategy adapted to model training costs.
-
-    Different model families require different CV strategies:
-    - Boosting: Fast training allows more folds (5)
-    - Neural: Moderate training time, fewer folds (3)
-    - Transformer: Expensive training, minimal folds (3)
-
-    Example:
-        >>> base_cv = PurgedKFold(PurgedKFoldConfig())
-        >>> model_cv = ModelAwareCV("neural", base_cv)
-        >>> for train_idx, test_idx in model_cv.get_cv_splits(X):
-        ...     # Train neural model
-    """
-
-    def __init__(self, model_family: str, base_cv: PurgedKFold) -> None:
-        """
-        Initialize ModelAwareCV.
-
-        Args:
-            model_family: Model family (boosting, neural, transformer, classical)
-            base_cv: Base PurgedKFold instance
-        """
-        self.model_family = model_family.lower()
-        self.base_cv = base_cv
-
-        if self.model_family in CV_STRATEGIES:
-            self.strategy = CV_STRATEGIES[self.model_family]
-        else:
-            logger.warning(f"Unknown family '{model_family}', using default strategy")
-            self.strategy = CV_STRATEGIES["boosting"]
-
-    def get_cv_splits(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series | None = None,
-        label_end_times: pd.Series | None = None,
-        label_spans: LabelSpans | None = None,
-    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
-        """
-        Return appropriate number of splits for model family.
-
-        Args:
-            X: Features DataFrame
-            y: Labels (optional)
-            label_end_times: When labels are resolved (optional)
-            label_spans: Label spans in bar positions (optional)
-
-        Yields:
-            Tuple of (train_indices, test_indices)
-        """
-        n_splits = self.strategy["n_splits"]
-
-        # Adjust base CV if needed
-        if n_splits != self.base_cv.config.n_splits:
-            adjusted_config = PurgedKFoldConfig(
-                n_splits=n_splits,
-                purge_bars=self.base_cv.config.purge_bars,
-                embargo_bars=self.base_cv.config.embargo_bars,
-                min_train_size=self.base_cv.config.min_train_size,
-            )
-            cv = PurgedKFold(adjusted_config)
-        else:
-            cv = self.base_cv
-
-        yield from cv.split(X, y, label_end_times=label_end_times, label_spans=label_spans)
-
-    def get_n_splits(self) -> int:
-        """Return number of CV splits for this model family."""
-        return int(self.strategy["n_splits"])
-
-
 __all__ = [
     "resolve_label_spans",
     "PurgedKFoldConfig",
     "PurgedKFold",
-    "ModelAwareCV",
-    "CV_STRATEGIES",
-    "get_cv_config_for_family",
 ]

@@ -66,9 +66,7 @@ class TrainerArtifactsMixin:
     - self.model: Instantiated model from registry
     - self.run_id: Unique run identifier
     - self.output_path: Path to output directory
-    - self.feature_selector: FeatureSelectionManager instance
     - self.calibrator: ProbabilityCalibrator instance (optional)
-    - self._is_feature_selection_enabled(): Method to check if feature selection is enabled
     """
 
     # Type hints for mixin attributes (provided by the class this is mixed into)
@@ -76,12 +74,7 @@ class TrainerArtifactsMixin:
     model: Any  # Model instance
     run_id: str
     output_path: Path
-    feature_selector: Any | None
     calibrator: Any | None
-
-    def _is_feature_selection_enabled(self) -> bool:
-        """Check if feature selection is enabled. Must be implemented by subclass."""
-        raise NotImplementedError
 
     def _save_config(self) -> None:
         """Save training configuration and environment information."""
@@ -281,17 +274,6 @@ class TrainerArtifactsMixin:
     def save(self, path: Path) -> None:
         """Save the trained model to the given path (public API for artifact persistence)."""
         self.model.save(path)
-
-    def _save_feature_selection(self) -> None:
-        """Save feature selection result with model artifacts."""
-        if not self._is_feature_selection_enabled():
-            return
-        if self.feature_selector is None or not self.feature_selector.is_fitted:
-            return
-
-        fs_path = self.output_path / "config" / "feature_selection.json"
-        self.feature_selector.save(fs_path)
-        logger.info(f"Saved feature selection to {fs_path}")
 
     def _save_calibrator(self) -> None:
         """Save probability calibrator."""

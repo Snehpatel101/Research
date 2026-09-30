@@ -73,7 +73,7 @@ def test_runner_uses_the_callers_n_splits() -> None:
         cv=cv, models=["logistic"], horizons=[HORIZON], tune_hyperparams=False, select_features=True
     )
     result = runner.run(_container(1.0))[("logistic", HORIZON)]
-    assert result.n_folds == 2  # ModelAwareCV used to replace this with the family's 5
+    assert result.n_folds == 2  # the caller's --n-splits, not a per-family default
 
 
 class TestTunerLeavesCvAlone:

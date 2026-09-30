@@ -25,11 +25,7 @@ from .model_training import (
     ModelTrainingService,
 )
 from .oof_generation import OOFGenerationService, OOFRequest
-from .parallel_training import (
-    ParallelTrainingConfig,
-    ParallelTrainingService,
-    train_models_parallel,
-)
+from .parallel_training import ParallelTrainingService
 
 __all__ = [
     # Artifact persistence
@@ -53,7 +49,5 @@ __all__ = [
     "OOFGenerationService",
     "OOFRequest",
     # Parallel training
-    "ParallelTrainingConfig",
     "ParallelTrainingService",
-    "train_models_parallel",
 ]

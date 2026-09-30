@@ -276,7 +276,6 @@ def _train_xgboost(tmp_path: Path, **request_fields: Any) -> Any:
         horizon=5,
         prepared_data=tiny_prepared_data(),
         output_dir=tmp_path / "models",
-        use_feature_selection=False,
         use_calibration=False,
         **request_fields,
     )

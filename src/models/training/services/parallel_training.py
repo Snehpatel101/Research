@@ -8,23 +8,12 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
 
 from joblib import Parallel, delayed
 
 from .model_training import ModelTrainingRequest, ModelTrainingResult, ModelTrainingService
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ParallelTrainingConfig:
-    """Configuration for parallel training."""
-
-    n_jobs: int = -1  # -1 = all CPUs
-    verbose: int = 10  # Joblib verbosity
-    backend: str = "loky"  # "loky", "multiprocessing", "threading"
-    prefer: str | None = None  # "processes" or "threads"
 
 
 class ParallelTrainingService:
@@ -104,21 +93,3 @@ class ParallelTrainingService:
         # Create a fresh service instance in the worker process
         service = ModelTrainingService()
         return service.train_model(request)
-
-
-def train_models_parallel(
-    requests: list[ModelTrainingRequest],
-    n_jobs: int = -1,
-) -> list[ModelTrainingResult]:
-    """
-    Convenience function for parallel training.
-
-    Args:
-        requests: List of ModelTrainingRequest objects
-        n_jobs: Number of parallel jobs
-
-    Returns:
-        List of ModelTrainingResult objects
-    """
-    service = ParallelTrainingService(n_jobs=n_jobs)
-    return service.train_models_parallel(requests)

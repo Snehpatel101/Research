@@ -355,8 +355,6 @@ class TestTrainerConfigRoundTrip:
         d = config.to_dict()
 
         assert d["pipeline_run_id"] == "run_123"
-        assert "feature_selection_min_frequency" in d
-        assert d["feature_selection_min_frequency"] == 0.6
 
     def test_from_dict_to_dict_round_trip(self, tmp_path):
         from src.models.config.trainer_config import TrainerConfig
@@ -374,6 +372,56 @@ class TestTrainerConfigRoundTrip:
 
         assert restored.to_dict() == d
         assert restored.early_stopping_patience == 7
+
+    def test_saved_config_with_trainer_selection_keys_loads_with_warning(self, tmp_path, caplog):
+        """training_config.json written before Phase 117 carries the removed
+        Trainer-level feature-selection settings; it must load, with a warning."""
+        from src.models.config.trainer_config import REMOVED_FIELDS, TrainerConfig
+
+        saved = TrainerConfig(model_name="xgboost", horizon=5, output_dir=tmp_path).to_dict()
+        saved.update(
+            use_feature_selection=True,
+            feature_selection_n_features=50,
+            feature_selection_method="mda",
+            feature_selection_cv_splits=5,
+            feature_selection_min_frequency=0.6,
+            feature_selection_purge_bars=None,
+            feature_selection_embargo_bars=None,
+        )
+
+        with caplog.at_level("WARNING", logger="src.models.config.trainer_config"):
+            restored = TrainerConfig.from_dict(saved)
+
+        assert restored.model_name == "xgboost"
+        assert not REMOVED_FIELDS & set(restored.to_dict())
+        for key in REMOVED_FIELDS:
+            assert key in caplog.text
+
+
+class TestGlobalConfigRemovedKeys:
+    def test_global_yaml_with_features_selection_loads_with_warning(self, tmp_path, caplog):
+        """A global.yaml that still has ``features.selection`` (read only by the
+        removed Trainer-level selection) loads, with a warning."""
+        from pathlib import Path
+
+        import yaml
+
+        from src.config import global_config
+        from src.config.global_config import GlobalConfig
+
+        shipped = Path(global_config.__file__).parent / "global.yaml"
+        data = yaml.safe_load(shipped.read_text())
+        assert "selection" not in data["features"]
+        data["features"]["selection"] = {"enabled": True, "method": "mda", "cv_splits": 5}
+        path = tmp_path / "global.yaml"
+        path.write_text(yaml.safe_dump(data))
+
+        with caplog.at_level("WARNING", logger="src.config.global_config"):
+            cfg = GlobalConfig.from_yaml(path)
+
+        assert "features.selection" in caplog.text
+        assert "selection" not in cfg.to_dict()["features"]
+        assert cfg.training.batch_size == data["training"]["batch_size"]
 
 
 # =============================================================================
@@ -439,6 +487,10 @@ class TestPipelineConfigLoadRemovedKeys:
         saved = _pipeline_config(tmp_path, "MES").to_dict()
         saved["enforce_dsr_gate"] = True
         saved["dsr_deployment_threshold"] = 0.5
+        # Never-read feature-selection knobs, removed in Phase 117
+        saved["feature_selection_method"] = "optuna"
+        saved["feature_selection_trials"] = 100
+        saved["feature_pruning_trials"] = 50
         path = tmp_path / "config.json"
         path.write_text(json.dumps(saved))
 
@@ -450,6 +502,12 @@ class TestPipelineConfigLoadRemovedKeys:
         assert not hasattr(loaded, "enforce_dsr_gate")
         assert "dsr_deployment_threshold" in caplog.text
         assert "enforce_dsr_gate" in caplog.text
+        for key in (
+            "feature_selection_method",
+            "feature_selection_trials",
+            "feature_pruning_trials",
+        ):
+            assert key in caplog.text
 
 
 # =============================================================================

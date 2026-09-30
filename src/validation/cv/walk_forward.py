@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -136,7 +136,6 @@ class WalkForwardResult:
     predictions: pd.DataFrame
     config: WalkForwardConfig
     total_time: float = 0.0
-    feature_importance: pd.DataFrame = field(default_factory=pd.DataFrame)
 
     @property
     def n_windows(self) -> int:
@@ -344,97 +343,6 @@ class WalkForwardEvaluator:
         """Return number of windows (sklearn API compatibility)."""
         return self.config.n_windows
 
-    def get_window_info(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series | None = None,
-        label_end_times: pd.Series | None = None,
-    ) -> list[dict[str, Any]]:
-        """
-        Get detailed information about each walk-forward window.
-
-        Args:
-            X: Features DataFrame (needed for timestamp info)
-            y: Labels (optional)
-            label_end_times: Label end times for purging info
-
-        Returns:
-            List of dicts with window information including sizes and time ranges
-        """
-        info = []
-        has_datetime_index = isinstance(X.index, pd.DatetimeIndex)
-
-        for window_idx, (train_idx, test_idx) in enumerate(
-            self.split(X, y, label_end_times=label_end_times)
-        ):
-            window_info = {
-                "window": window_idx,
-                "train_size": len(train_idx),
-                "test_size": len(test_idx),
-                "train_start_idx": int(train_idx[0]),
-                "train_end_idx": int(train_idx[-1]),
-                "test_start_idx": int(test_idx[0]),
-                "test_end_idx": int(test_idx[-1]),
-                "window_type": self.config.window_type,
-                "embargo_bars": self.config.embargo_bars,
-                "gap_bars": self.config.gap_bars,
-            }
-
-            if has_datetime_index:
-                window_info.update(
-                    {
-                        "train_start_time": X.index[train_idx[0]],
-                        "train_end_time": X.index[train_idx[-1]],
-                        "test_start_time": X.index[test_idx[0]],
-                        "test_end_time": X.index[test_idx[-1]],
-                    }
-                )
-
-            info.append(window_info)
-
-        return info
-
-    def validate_coverage(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series | None = None,
-        label_end_times: pd.Series | None = None,
-    ) -> dict[str, Any]:
-        """
-        Validate that walk-forward covers expected samples.
-
-        Args:
-            X: Features DataFrame
-            y: Labels (optional)
-            label_end_times: Label end times (optional)
-
-        Returns:
-            Dict with coverage statistics
-        """
-        n_samples = len(X)
-        test_coverage = np.zeros(n_samples, dtype=int)
-        train_coverage = np.zeros(n_samples, dtype=int)
-
-        for train_idx, test_idx in self.split(X, y, label_end_times=label_end_times):
-            test_coverage[test_idx] += 1
-            train_coverage[train_idx] += 1
-
-        # Calculate test range (samples that should be in test)
-        test_size = max(1, int(n_samples * self.config.test_pct))
-        min_train = int(n_samples * self.config.min_train_pct)
-        expected_test_start = min_train
-        expected_test_end = min(min_train + test_size * self.config.n_windows, n_samples)
-
-        return {
-            "total_samples": n_samples,
-            "samples_in_test": int((test_coverage > 0).sum()),
-            "test_coverage_fraction": float((test_coverage > 0).sum() / n_samples),
-            "expected_test_range": (expected_test_start, expected_test_end),
-            "samples_in_multiple_tests": int((test_coverage > 1).sum()),
-            "avg_train_size": float(train_coverage[train_coverage > 0].mean()),
-            "window_type": self.config.window_type,
-        }
-
     def __repr__(self) -> str:
         parts = [
             f"WalkForwardEvaluator(n_windows={self.config.n_windows}",
@@ -449,48 +357,9 @@ class WalkForwardEvaluator:
         return ", ".join(parts) + ")"
 
 
-# =============================================================================
-# FACTORY FUNCTIONS
-# =============================================================================
-
-
-def create_walk_forward_evaluator(
-    n_windows: int = 5,
-    window_type: str = "expanding",
-    min_train_pct: float = 0.4,
-    test_pct: float = 0.1,
-    embargo_bars: int = 60,
-    gap_bars: int = 60,
-) -> WalkForwardEvaluator:
-    """
-    Factory function to create a WalkForwardEvaluator.
-
-    Args:
-        n_windows: Number of walk-forward windows
-        window_type: "expanding" or "rolling"
-        min_train_pct: Minimum training data percentage
-        test_pct: Percentage per test window
-        embargo_bars: Post-test embargo bars
-        gap_bars: Gap between train and test
-
-    Returns:
-        Configured WalkForwardEvaluator instance
-    """
-    config = WalkForwardConfig(
-        n_windows=n_windows,
-        window_type=window_type,
-        min_train_pct=min_train_pct,
-        test_pct=test_pct,
-        embargo_bars=embargo_bars,
-        gap_bars=gap_bars,
-    )
-    return WalkForwardEvaluator(config)
-
-
 __all__ = [
     "WalkForwardConfig",
     "WalkForwardEvaluator",
     "WalkForwardResult",
     "WindowMetrics",
-    "create_walk_forward_evaluator",
 ]

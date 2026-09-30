@@ -368,69 +368,10 @@ def pbo_gate(
     )
 
 
-def analyze_overfitting_risk(
-    returns_matrix: np.ndarray,
-    strategy_names: list[str] | None = None,
-    config: PBOConfig | None = None,
-) -> dict[str, Any]:
-    """
-    PBO plus per-strategy full-sample statistics.
-
-    Args:
-        returns_matrix: (T, N) per-period returns matrix
-        strategy_names: Optional names for the N strategies
-        config: PBOConfig
-
-    Returns:
-        Dict with analysis results
-    """
-    matrix = np.asarray(returns_matrix, dtype=np.float64)
-    n_rows, n_strategies = matrix.shape
-
-    if strategy_names is None:
-        strategy_names = [f"strategy_{i}" for i in range(n_strategies)]
-    if len(strategy_names) != n_strategies:
-        raise ValueError(
-            f"strategy_names length ({len(strategy_names)}) must match N ({n_strategies})"
-        )
-
-    pbo_result = compute_pbo(matrix, config)
-
-    sums = matrix.sum(axis=0)
-    sumsq = (matrix**2).sum(axis=0)
-    sharpes = _sharpe_from_moments(sums, sumsq, np.full_like(sums, float(n_rows)))
-
-    strategy_analysis = [
-        {
-            "name": name,
-            "mean_return": float(matrix[:, i].mean()),
-            "std_return": float(matrix[:, i].std(ddof=1)),
-            "sharpe_per_period": float(sharpes[i]),
-            "is_best_full_sample": i == pbo_result.best_is_strategy_idx,
-        }
-        for i, name in enumerate(strategy_names)
-    ]
-
-    return {
-        "pbo": pbo_result.pbo,
-        "is_overfit": pbo_result.is_overfit,
-        "should_block": pbo_result.should_block,
-        "risk_level": pbo_result.get_risk_level(),
-        "performance_degradation": pbo_result.performance_degradation,
-        "prob_oos_loss": pbo_result.prob_oos_loss,
-        "rank_correlation": pbo_result.rank_correlation,
-        "n_strategies": n_strategies,
-        "n_observations": n_rows,
-        "strategy_analysis": strategy_analysis,
-        "best_full_sample_strategy": strategy_names[pbo_result.best_is_strategy_idx],
-    }
-
-
 __all__ = [
     "PBOConfig",
     "PBOResult",
     "compute_pbo",
     "directional_strategy_returns",
     "pbo_gate",
-    "analyze_overfitting_risk",
 ]

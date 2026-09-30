@@ -12,13 +12,11 @@ Components:
 """
 
 from .bet_sizing import (
-    BetSizingConfig,
     BetSizingStrategy,
     compute_bet_sizes,
 )
 
 __all__ = [
     "BetSizingStrategy",
-    "BetSizingConfig",
     "compute_bet_sizes",
 ]
