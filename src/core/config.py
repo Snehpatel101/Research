@@ -185,6 +185,10 @@ class PipelineConfig:
 
     compute_mtf_features: bool = True  # Whether to compute MTF features
 
+    # Feature selection keeps at most this many features of each MTF timeframe
+    # (top of the MDA ranking) before decorrelation. None = no budget.
+    mtf_max_per_timeframe: int | None = None
+
     # Opt-in feature-governance diagnostics (FeatureGovernanceConfig.to_dict()).
     # Empty/report=False = off. Never changes the selected features.
     governance: dict[str, Any] = field(default_factory=dict)
@@ -445,6 +449,17 @@ class PipelineConfig:
         # Validate horizons
         if not self.horizons:
             raise ValidationError("horizons list is empty", field="horizons")
+
+        budget = self.mtf_max_per_timeframe
+        if budget is not None and (
+            isinstance(budget, bool) or not isinstance(budget, int) or budget < 1
+        ):
+            raise ValidationError(
+                "mtf_max_per_timeframe must be an integer >= 1 or None",
+                field="mtf_max_per_timeframe",
+                expected=">= 1 or None",
+                actual=budget,
+            )
 
         # Validate regime-aware configuration
         if self.training_mode == TrainingMode.REGIME_AWARE.value:

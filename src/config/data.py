@@ -4,7 +4,8 @@ Data-section configuration classes for ExperimentConfig.
 Every field of these classes reaches the pipeline (see
 ``ExperimentConfig.to_pipeline_config()`` and ``MLFactory.prepare_data``):
 
-- FeatureConfig: feature-selection switch + governance diagnostics + fractional differentiation
+- FeatureConfig: feature-selection switch + MTF timeframe budget + governance diagnostics
+  + fractional differentiation
 - LabelingConfig: triple-barrier overrides + binary mode + CUSUM event sampling
 - SequenceConfig: window length for sequence models
 - MTFConfig: multi-timeframe feature switch + timeframes
@@ -203,18 +204,35 @@ class FeatureConfig(BaseConfig):
     features are added.
 
     Attributes:
-        selection_enabled: Run train-only MDA feature selection per model
+        selection_enabled: Run train-only MDA feature selection per model. Off =
+            every model trains on every feature (a model whose contract caps the
+            feature count below that then fails contract validation).
+        mtf_max_per_timeframe: Opt-in timeframe budget: after the MDA ranking,
+            keep at most this many features of each higher timeframe in
+            ``data.mtf.timeframes`` (the top-ranked ones; base-timeframe features
+            are untouched), before decorrelation and the per-model cut. Limits
+            near-duplicate MTF columns (e.g. ``sma_20_15m`` / ``ema_21_15m``).
+            None (default) = no budget.
         governance: Opt-in stability / label-perturbation / registry diagnostics
         frac_diff: Fractionally differentiated log-price features (opt-in)
     """
 
     selection_enabled: bool = True
+    mtf_max_per_timeframe: int | None = None
     governance: FeatureGovernanceConfig = field(default_factory=FeatureGovernanceConfig)
     frac_diff: FracDiffConfig = field(default_factory=FracDiffConfig)
 
     def validate(self) -> list[str]:
         """Validate feature configuration."""
-        return super().validate() + self.frac_diff.validate()
+        issues = super().validate() + self.frac_diff.validate()
+        budget = self.mtf_max_per_timeframe
+        if budget is not None and (
+            isinstance(budget, bool) or not isinstance(budget, int) or budget < 1
+        ):
+            issues.append(
+                f"features.mtf_max_per_timeframe must be an integer >= 1 or None, got {budget!r}"
+            )
+        return issues
 
 
 # =============================================================================

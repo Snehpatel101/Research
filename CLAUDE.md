@@ -557,13 +557,14 @@ src/
 - New files: `robustness_scoring.py`, `cusum_filter.py`, `frac_diff.py`
 - 5 files modified, 358/358 tests passing (21 new + 1 skipped), ruff + black clean
 
-**Phase 98: COMPLETE — Feature Governance E2+E4+E5 (7 files, 20 new tests)**
+**Phase 98: COMPLETE — Feature Governance E2+E4+E5 (7 files, 20 new tests) — E4 rewired, E5 deleted in Phase 117**
 - E2: MDA stabilization — configurable `mda_n_repeats` (default 5), `n_estimators=50` unified across pipeline
 - E4: Timeframe competition — `apply_timeframe_budget()` limits MTF features per timeframe suffix (default 8/tf)
 - E5: Regime-conditional selection — `compute_regime_importance()` with vol-regime detection, blended into MDA ranking (70% MDA + 30% regime, behind `regime_conditional=True` flag)
 - Config: `mtf_max_per_timeframe` and `regime_conditional` fields on FeatureSelectionConfig with full serialization
 - Pipeline: Steps 1b (timeframe budget) and 1c (regime blend) wired into `_run_feature_selection_pipeline()`
 - New files: `timeframe_budget.py`, `regime_selection.py` in `src/optimization/feature_selection/`
+- **Phase 117:** neither switch was reachable (PipelineConfig had no `feature_selection`), and the budget matched `_15min` names while MTF columns are `_15m`/`_1h`. Budget now `data.features.mtf_max_per_timeframe` (opt-in, generator suffixes); `regime_selection.py` deleted (in-sample permutation importance, no purged CV)
 - 7 files modified, 337/337 tests passing (20 new), ruff + black clean
 
 **Phases 103-105 (THEETASKLIST Phases 1-3): COMPLETE — Critical Leakage + Accuracy + Memory Fixes (17 tasks, 12 new tests)**

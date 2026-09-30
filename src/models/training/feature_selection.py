@@ -24,6 +24,7 @@ from src.optimization.feature_selection.ranking import (
     IMPORTANCE_NOISE_FLOOR,
     rank_by_importance,
 )
+from src.optimization.feature_selection.timeframe_budget import apply_timeframe_budget
 from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 
 if TYPE_CHECKING:
@@ -311,9 +312,15 @@ class FeatureSelectionMixin:
 
         if errors:
             error_summary = "\n".join([f"  - {e}" for e in errors])
+            hint = (
+                ""
+                if self.config.optimize_features
+                else "Feature selection is off (data.features.selection_enabled=False); "
+                "turn it on to cut each model to its contract's feature budget, or "
+            )
             raise PreTrainingValidationError(
                 f"Contract validation failed after feature selection:\n{error_summary}\n\n"
-                f"To bypass, set strict_validation=False in PipelineConfig."
+                f"{hint}set strict_validation=False in PipelineConfig to bypass."
             )
 
     def _run_feature_selection_on_train_data(
@@ -327,6 +334,10 @@ class FeatureSelectionMixin:
         the training portion to ``_run_feature_selection_pipeline``.  This
         prevents correlation / variance statistics from leaking test-set
         information into feature selection decisions.
+
+        Does nothing when ``config.optimize_features`` is off
+        (``data.features.selection_enabled=False``): every model then gets
+        every feature column.
         """
         # Determine feature columns (same logic as _pre_training_validation)
         exclude_patterns = ["label", "sample_weight", "datetime", "date", "time"]
@@ -338,6 +349,15 @@ class FeatureSelectionMixin:
         ]
 
         if not feature_names:
+            return
+
+        if not self.config.optimize_features:
+            logger.info(
+                "  Feature selection disabled (data.features.selection_enabled=False): "
+                f"every model trains on all {len(feature_names)} features"
+            )
+            if self.config.governance.get("report"):
+                logger.warning("  Feature governance report skipped: feature selection is off")
             return
 
         # Compute train split boundary (mirrors UnifiedDataPreparation._split_data)
@@ -376,7 +396,7 @@ class FeatureSelectionMixin:
 
         logger.info(f"  Feature ranking method: {ranking_method}")
 
-        # Steps 1b-4: budget, regime blend, low-variance, decorrelation, per-model head
+        # Steps 1b-4: timeframe budget, low-variance, decorrelation, per-model head
         feature_names, ranking, per_model = self._select_from_ranking(
             df, feature_names, ranking, ranking_method
         )
@@ -419,13 +439,13 @@ class FeatureSelectionMixin:
         *,
         verbose: bool = True,
     ) -> tuple[list[str], pd.Series | None, dict[str, list[str]]]:
-        """Everything after the ranking: budget, regime blend, filters, per-model head.
+        """Everything after the ranking: timeframe budget, filters, per-model head.
 
         Pure with respect to the orchestrator (touches no attribute), so the live
         selection and the governance stability replay run the SAME code.
 
         Args:
-            df: Frame the filters (variance, correlation, regime) read; TRAIN rows.
+            df: Frame the filters (variance, correlation) read; TRAIN rows.
             feature_names: Candidate features the ranking covers.
             ranking: Importance per feature (MDA, or variance fallback); None = unranked.
             ranking_method: Label for logs ("MDA" / "variance").
@@ -438,72 +458,19 @@ class FeatureSelectionMixin:
 
         info = logger.info if verbose else logger.debug
         warn = logger.warning if verbose else logger.debug
-        # Step 1b: Timeframe competition (E4) — budget MTF features per timeframe
-        fs_config = getattr(self.config, "feature_selection", None)
-        mtf_budget = getattr(fs_config, "mtf_max_per_timeframe", 8) if fs_config else 8
-        if ranking is not None:
-            try:
-                from src.optimization.feature_selection.timeframe_budget import (
-                    apply_timeframe_budget,
-                )
-
-                budgeted = apply_timeframe_budget(
-                    ranking, feature_names, max_per_timeframe=mtf_budget
-                )
-                if len(budgeted) < len(feature_names):
-                    info(
-                        f"  Timeframe budget: {len(feature_names)} -> "
-                        f"{len(budgeted)} features (max {mtf_budget}/tf)"
-                    )
-                    feature_names = budgeted
-                    # Re-slice ranking to budgeted features
-                    ranking = ranking.loc[ranking.index.isin(feature_names)]
-            except Exception as e:
-                logger.warning(f"  Timeframe budget skipped: {e}")
-
-        # Step 1c: Regime-conditional selection (E5) — boost regime-specific features
-        regime_enabled = getattr(fs_config, "regime_conditional", False) if fs_config else False
-        if regime_enabled and ranking is not None:
-            try:
-                from src.optimization.feature_selection.regime_selection import (
-                    compute_regime_importance,
-                )
-
-                label_col = None
-                for h in self.config.horizons:
-                    candidate = f"label_h{h}"
-                    if candidate in df.columns:
-                        label_col = candidate
-                        break
-
-                if label_col is not None:
-                    result = compute_regime_importance(
-                        df,
-                        feature_names,
-                        label_col=label_col,
-                        random_state=self.config.random_state,
-                    )
-                    if result is not None:
-                        regime_ranking, per_regime = result
-                        # Blend: 70% MDA + 30% regime importance (union boost)
-                        common = ranking.index.intersection(regime_ranking.index)
-                        if len(common) > 0:
-                            mda_norm = ranking.loc[common] / (ranking.loc[common].max() + 1e-9)
-                            reg_norm = regime_ranking.loc[common] / (
-                                regime_ranking.loc[common].max() + 1e-9
-                            )
-                            blended = 0.7 * mda_norm + 0.3 * reg_norm
-                            ranking = rank_by_importance(
-                                blended, noise_floor=IMPORTANCE_NOISE_FLOOR
-                            )
-                            info(
-                                f"  Regime-conditional: blended {len(per_regime)} regimes "
-                                f"into ranking ({len(common)} features)"
-                            )
-                else:
-                    logger.warning("  Regime selection: no label column found, skipped")
-            except Exception as e:
-                logger.warning(f"  Regime-conditional selection skipped: {e}")
+        # Step 1b: Timeframe budget (data.features.mtf_max_per_timeframe, None = off)
+        budget = self.config.mtf_max_per_timeframe
+        mtf_timeframes = self.config.mtf_timeframes if self.config.compute_mtf_features else []
+        if budget is not None and ranking is not None and mtf_timeframes:
+            budgeted = apply_timeframe_budget(
+                ranking, feature_names, list(mtf_timeframes), max_per_timeframe=budget
+            )
+            info(
+                f"  Timeframe budget: {len(feature_names)} -> {len(budgeted)} features "
+                f"(max {budget} per timeframe of {list(mtf_timeframes)})"
+            )
+            feature_names = budgeted
+            ranking = ranking.loc[ranking.index.isin(feature_names)]
 
         # Step 2: Low-variance cleanup, then greedy decorrelation in rank order
         contracts = [get_model_contract(m) for m in self.config.models]

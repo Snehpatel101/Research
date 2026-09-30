@@ -356,3 +356,39 @@ class TestResolveBarrierParamsParity:
             assert k_up == float(table["k_up"])
             assert k_down == float(table["k_down"])
             assert max_bars == int(table["max_bars"])
+
+
+# ---------------------------------------------------------------------------
+# 4. Feature-selection switches reach the selection of a real run
+# ---------------------------------------------------------------------------
+
+
+def _selected_columns(data_path: Path, output_dir: Path, budget: int | None) -> list[str]:
+    """Columns the trained logistic model sees, MTF on (15min + 60min) and ``budget``."""
+    cfg = _make_config(data_path, output_dir)
+    cfg.training.models = ["logistic"]
+    cfg.data.mtf.enabled = True
+    cfg.data.mtf.timeframes = ["15min", "60min"]
+    cfg.data.features.mtf_max_per_timeframe = budget
+    cfg.evaluation.run_backtest = False
+    result = MLFactory(cfg, verbose=0, enable_checkpoints=False).run()
+    assert result.success is True
+    assert result.training_result is not None
+    (model_result,) = result.training_result.model_results.values()
+    return list(model_result.trainer.feature_columns)
+
+
+def test_mtf_budget_from_experiment_config_changes_the_trained_features(
+    data_parquet: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """``data.features.mtf_max_per_timeframe`` caps every MTF timeframe's columns
+    in what the model is fitted on; without it more of them survive selection."""
+    budgeted = _selected_columns(data_parquet, tmp_path_factory.mktemp("budget"), 2)
+    unbudgeted = _selected_columns(data_parquet, tmp_path_factory.mktemp("no_budget"), None)
+
+    def per_tf(columns: list[str]) -> dict[str, int]:
+        return {s: sum(c.endswith(s) for c in columns) for s in ("_15m", "_1h")}
+
+    # At most 2 per timeframe (decorrelation may still drop budget survivors)
+    assert max(per_tf(budgeted).values()) <= 2, per_tf(budgeted)
+    assert max(per_tf(unbudgeted).values()) > 2, per_tf(unbudgeted)

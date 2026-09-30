@@ -121,10 +121,9 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   returned fewer probability columns, and argmax over them gave a column
   position instead of a class; every model now returns `n_classes` columns in
   class order (`full_class_probabilities`).
-- The standalone evaluators (`ml cv`, `ml walk-forward`, `ml cpcv-pbo`) and
-  regime-conditional selection ignored the run seed; they take `--seed` /
-  `random_seed` now. `random_seed` is bounded below 2**32 minus the offsets
-  derived seeds add.
+- The standalone evaluators (`ml cv`, `ml walk-forward`, `ml cpcv-pbo`)
+  ignored the run seed; they take `--seed` / `random_seed` now. `random_seed`
+  is bounded below 2**32 minus the offsets derived seeds add.
 - Tracking failures (tracking server down, quota) could fail a training run or
   leave a model unsaved; tracker calls in the Trainer are best-effort, models
   are saved before any metric is logged, and a child run always ends. The
@@ -145,8 +144,19 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
   wired from `labeling.atr_period`), the volatility regime, the regime ADX's
   true range and the ATR features (unchanged values). The first `atr_period`
   bars are labeled invalid (-99).
+- Feature-selection switches that never reached a run:
+  `data.features.selection_enabled: false` still ran MDA selection (now every
+  model trains on every feature, and a model whose contract caps the count
+  fails validation); the MTF timeframe budget matched `_15min`-style names
+  while the MTF generator writes `_15m` / `_1h`, so it never fired. The budget
+  is now `data.features.mtf_max_per_timeframe` (opt-in, default off = previous
+  results).
 
 ### Removed
+- Regime-conditional feature importance (`regime_selection.py`, the
+  `regime_conditional` flag and its 70/30 blend with MDA): unreachable from any
+  config, and it scored permutation importance in-sample (forest fitted and
+  permuted on the same rows, random subsample, no purged CV).
 - Dead serving/monitoring chain, aspirational config layer, phantom types and
   ~23k further lines of verified dead code.
 - 15 stale ad-hoc scripts in `scripts/` (one-off smoke/verification runs
